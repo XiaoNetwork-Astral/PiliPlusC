@@ -113,9 +113,18 @@ class _BackupPageState extends State<BackupPage> {
       final result = await showExportWarningDialog(
         context,
         title: isClipboard ? '登录信息不会被加密' : '登录信息未加密',
-        content: isClipboard
-            ? '检测到尝试在备份方式为剪贴板的情况下导出登录信息，这是非常危险的行为，可能会导致盗号乃至财产损失！建议不要通过剪贴板的形式导出登录信息，且切忌将登录信息分享给其他人！'
-            : '检测到尝试在未加密压缩包的情况下导出登录信息，这是非常危险的行为，可能会导致盗号乃至财产损失！建议先开启压缩包加密后再尝试导出登录信息，且一定要慎重保存备份文件，不要将备份文件分享给其他人！',
+        summary: isClipboard
+            ? '检测到尝试在备份方式为剪贴板的情况下导出登录信息，这是非常危险的行为，可能会导致盗号乃至财产损失！'
+            : '检测到尝试在未加密压缩包的情况下导出登录信息，这是非常危险的行为，可能会导致盗号乃至财产损失！',
+        points: isClipboard
+            ? const [
+                '建议不要通过剪贴板的形式导出登录信息',
+                '切忌将登录信息分享给其他人',
+              ]
+            : const [
+                '建议先开启压缩包加密后再尝试导出登录信息',
+                '一定要慎重保存备份文件，不要将备份文件分享给其他人',
+              ],
         countdown: isClipboard ? 10 : 5,
         showOpenEncryption: !isClipboard,
       );
@@ -325,20 +334,21 @@ class _BackupPageState extends State<BackupPage> {
     final theme = Theme.of(context);
     final showAppBar = widget.showAppBar;
     final padding = MediaQuery.viewPaddingOf(context);
+    final double leftInset = 16 + (showAppBar ? padding.left : 0.0);
+    final double rightInset = 16 + (showAppBar ? padding.right : 0.0);
     return SimpleScaffold(
       appBar: showAppBar ? AppBar(title: const Text('备份与恢复')) : null,
       body: ViewInsetsSafeArea(
         child: ListView(
-          padding: EdgeInsets.only(
-            top: 16,
-            left: 16 + (showAppBar ? padding.left : 0),
-            right: 16 + (showAppBar ? padding.right : 0),
-            bottom: padding.bottom + 100,
-          ),
+          padding: EdgeInsets.only(top: 16, bottom: padding.bottom + 100),
           children: [
-            _buildMethodCard(theme),
+            Padding(
+              padding: EdgeInsets.only(left: leftInset, right: rightInset),
+              child: _buildMethodCard(theme),
+            ),
             const SizedBox(height: 16),
-            for (final item in BackupItem.values) _buildItem(theme, item),
+            for (final item in BackupItem.values)
+              _buildItem(theme, item, leftInset, rightInset),
           ],
         ),
       ),
@@ -400,7 +410,12 @@ class _BackupPageState extends State<BackupPage> {
     );
   }
 
-  Widget _buildItem(ThemeData theme, BackupItem item) {
+  Widget _buildItem(
+    ThemeData theme,
+    BackupItem item,
+    double leftInset,
+    double rightInset,
+  ) {
     final supported = item.isSupportedBy(_method);
     final checked = _selected.contains(item);
     final disabledColor = theme.colorScheme.outline.withValues(alpha: 0.5);
@@ -413,7 +428,12 @@ class _BackupPageState extends State<BackupPage> {
     return InkWell(
       onTap: supported ? () => _toggleItem(item) : null,
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
+        padding: EdgeInsets.only(
+          top: 8,
+          bottom: 8,
+          left: leftInset,
+          right: rightInset,
+        ),
         child: Row(
           children: [
             Checkbox(

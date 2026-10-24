@@ -10,7 +10,8 @@ enum ExportWarningResult { cancel, confirm, openEncryption }
 Future<ExportWarningResult> showExportWarningDialog(
   BuildContext context, {
   required String title,
-  required String content,
+  required String summary,
+  required List<String> points,
   required int countdown,
   required bool showOpenEncryption,
 }) async {
@@ -19,7 +20,8 @@ Future<ExportWarningResult> showExportWarningDialog(
     barrierDismissible: false,
     builder: (context) => _ExportWarningDialog(
       title: title,
-      content: content,
+      summary: summary,
+      points: points,
       countdown: countdown,
       showOpenEncryption: showOpenEncryption,
     ),
@@ -31,13 +33,15 @@ class _ExportWarningDialog extends StatefulWidget {
   const _ExportWarningDialog({
     super.key,
     required this.title,
-    required this.content,
+    required this.summary,
+    required this.points,
     required this.countdown,
     required this.showOpenEncryption,
   });
 
   final String title;
-  final String content;
+  final String summary;
+  final List<String> points;
   final int countdown;
   final bool showOpenEncryption;
 
@@ -75,9 +79,36 @@ class _ExportWarningDialogState extends State<_ExportWarningDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return AppDialog(
       title: widget.title,
-      content: Text(widget.content),
+      content: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(widget.summary),
+          const SizedBox(height: 12),
+          for (var i = 0; i < widget.points.length; i++) ...[
+            if (i > 0) const SizedBox(height: 10),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.outline,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const SizedBox(width: 6, height: 6),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(child: Text(widget.points[i])),
+              ],
+            ),
+          ],
+        ],
+      ),
       actions: [
         AppDialogAction(
           label: () => '取消',
@@ -91,7 +122,8 @@ class _ExportWarningDialogState extends State<_ExportWarningDialog> {
                 Get.back(result: ExportWarningResult.openEncryption),
           ),
         AppDialogAction(
-          label: () => _seconds > 0 ? '仍然导出（$_seconds）' : '仍然导出',
+          label: () => _seconds > 0 ? '仍然导出 ($_seconds)' : '仍然导出',
+          sizingLabel: '仍然导出 (${widget.countdown})',
           style: AppDialogButtonStyle.danger,
           onPressed: _seconds > 0
               ? null

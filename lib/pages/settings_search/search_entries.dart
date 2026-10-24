@@ -35,8 +35,6 @@ class SettingsSearchEntry {
   bool matches(String value) {
     final query = value.toLowerCase();
     return title.toLowerCase().contains(query) ||
-        subtitle?.toLowerCase().contains(query) == true ||
-        category.toLowerCase().contains(query) ||
         keywords.any((keyword) => keyword.toLowerCase().contains(query));
   }
 }

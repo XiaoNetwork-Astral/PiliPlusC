@@ -92,22 +92,8 @@ class _SettingsSearchPageState
   }
 
   Widget _buildItem(BuildContext context, SettingsSearchEntry item) {
-    final theme = Theme.of(context);
-    final subtitle = item.subtitle;
     return ListTile(
       title: Text(item.title),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (subtitle != null) Text(subtitle),
-          Text(
-            '${item.category} ›',
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: theme.colorScheme.outline,
-            ),
-          ),
-        ],
-      ),
       onTap: () => _onTap(item),
     );
   }

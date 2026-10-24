@@ -1,3 +1,5 @@
+import 'package:PiliPlus/pages/backup/widgets/error_text_field.dart';
+import 'package:PiliPlus/pages/backup/widgets/smooth_visibility.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -21,6 +23,8 @@ class EncryptionSetting extends StatefulWidget {
 }
 
 class _EncryptionSettingState extends State<EncryptionSetting> {
+  static const _clearDelay = Duration(milliseconds: 300);
+
   bool _encrypt = false;
   bool _savedEncrypt = false;
   String _savedPassword = '';
@@ -64,10 +68,12 @@ class _EncryptionSettingState extends State<EncryptionSetting> {
       _hasSpecial;
 
   void _syncDirty() {
-    final dirty =
-        _encrypt != _savedEncrypt ||
-        _passwordCtr.text != _savedPassword ||
-        _confirmCtr.text != _savedPassword;
+    // 开启加密时只看输入框有没有改动，只拨开关而没输入密码不算有可保存的内容；
+    // 关闭加密时，只有已保存的是开启状态才有可保存的内容
+    final dirty = _encrypt
+        ? (_passwordCtr.text != _savedPassword ||
+              _confirmCtr.text != _savedPassword)
+        : _savedEncrypt;
     if (dirty == _dirty) return;
     _dirty = dirty;
     widget.onDirtyChanged(dirty);
@@ -80,12 +86,16 @@ class _EncryptionSettingState extends State<EncryptionSetting> {
       _confirmError = null;
       _criteriaVisible = false;
       _criteriaError = false;
-      if (!value) {
-        _passwordCtr.clear();
-        _confirmCtr.clear();
-      }
     });
     _syncDirty();
+    if (!value) {
+      // 等收起动画结束再清空密码，避免动画中输入框内容突然消失
+      Future.delayed(_clearDelay, () {
+        if (!mounted || _encrypt) return;
+        _passwordCtr.clear();
+        _confirmCtr.clear();
+      });
+    }
   }
 
   void _onPasswordChanged(String value) {
@@ -161,62 +171,47 @@ class _EncryptionSettingState extends State<EncryptionSetting> {
             Switch(value: _encrypt, onChanged: _onEncryptChanged),
           ],
         ),
-        AnimatedSize(
-          duration: const Duration(milliseconds: 220),
-          curve: Curves.easeInOut,
-          child: _encrypt
-              ? Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _passwordCtr,
-                      obscureText: true,
-                      onChanged: _onPasswordChanged,
-                      decoration: InputDecoration(
-                        labelText: '压缩包密码',
-                        border: const OutlineInputBorder(),
-                        errorText: _passwordError,
-                      ),
-                    ),
-                    AnimatedSize(
-                      duration: const Duration(milliseconds: 200),
-                      curve: Curves.easeInOut,
-                      child: _criteriaVisible
-                          ? Padding(
-                              padding: const EdgeInsets.only(top: 12),
-                              child: _buildCriteria(theme),
-                            )
-                          : const SizedBox(
-                              width: double.infinity,
-                              height: 0,
-                            ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _confirmCtr,
-                      obscureText: true,
-                      onChanged: _onConfirmChanged,
-                      decoration: InputDecoration(
-                        labelText: '确认密码',
-                        border: const OutlineInputBorder(),
-                        errorText: _confirmError,
-                      ),
-                    ),
-                  ],
-                )
-              : const SizedBox(width: double.infinity, height: 0),
+        SmoothVisibility(
+          visible: _encrypt,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const SizedBox(height: 12),
+              ErrorTextField(
+                controller: _passwordCtr,
+                label: '压缩包密码',
+                obscureText: true,
+                errorText: _passwordError,
+                onChanged: _onPasswordChanged,
+              ),
+              SmoothVisibility(
+                visible: _criteriaVisible,
+                child: _buildCriteria(theme),
+              ),
+              const SizedBox(height: 12),
+              ErrorTextField(
+                controller: _confirmCtr,
+                label: '确认密码',
+                obscureText: true,
+                errorText: _confirmError,
+                onChanged: _onConfirmChanged,
+              ),
+            ],
+          ),
         ),
-        if (_encrypt || _savedEncrypt) ...[
-          const SizedBox(height: 16),
-          Align(
-            alignment: Alignment.centerRight,
-            child: FilledButton(
-              onPressed: _dirty ? _save : null,
-              child: const Text('保存'),
+        SmoothVisibility(
+          visible: _encrypt || _savedEncrypt,
+          child: Padding(
+            padding: const EdgeInsets.only(top: 16),
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: FilledButton(
+                onPressed: _dirty ? _save : null,
+                child: const Text('保存'),
+              ),
             ),
           ),
-        ],
+        ),
       ],
     );
   }
@@ -229,38 +224,43 @@ class _EncryptionSettingState extends State<EncryptionSetting> {
       ('包含特殊字符', _hasSpecial),
     ];
     final errorColor = theme.colorScheme.error;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (final (label, met) in items)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 2),
-            child: Row(
-              children: [
-                if (met)
+    final defaultIconColor = theme.colorScheme.onSurfaceVariant;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final (label, met) in items)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                children: [
                   Icon(
-                    Icons.check,
-                    size: 16,
-                    color: theme.colorScheme.primary,
-                  )
-                else
-                  const SizedBox(width: 16),
-                const SizedBox(width: 6),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 13,
+                    met ? Icons.check_circle : Icons.radio_button_unchecked,
+                    size: 18,
                     color: met
                         ? theme.colorScheme.primary
                         : _criteriaError
                         ? errorColor
-                        : null,
+                        : defaultIconColor,
                   ),
-                ),
-              ],
+                  const SizedBox(width: 10),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: met
+                          ? theme.colorScheme.primary
+                          : _criteriaError
+                          ? errorColor
+                          : null,
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-      ],
+        ],
+      ),
     );
   }
 }

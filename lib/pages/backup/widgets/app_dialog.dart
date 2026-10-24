@@ -13,10 +13,14 @@ class AppDialogAction {
     required this.label,
     required this.onPressed,
     this.style = AppDialogButtonStyle.primary,
+    this.sizingLabel,
   });
 
   /// 按钮文字，倒计时按钮需要在重建时读取最新值
   final String Function() label;
+
+  /// 用于固定按钮宽度的最长文字，倒计时按钮用它避免宽度随数字变化
+  final String? sizingLabel;
 
   final VoidCallback? onPressed;
 
@@ -90,7 +94,7 @@ class AppDialogActions extends StatelessWidget {
     final textScale = MediaQuery.textScalerOf(context).scale(14) / 14;
     var neededWidth = 0.0;
     for (final action in actions) {
-      neededWidth += _measure(action.label(), textStyle) * textScale + 48;
+      neededWidth += _buttonWidth(action, textStyle, textScale);
     }
     neededWidth += (actions.length - 1) * 8;
     return LayoutBuilder(
@@ -122,19 +126,38 @@ class AppDialogActions extends StatelessWidget {
     );
   }
 
+  static const _tabularFigures = [FontFeature.tabularFigures()];
+
+  /// 按钮宽度，文字宽度加左右各 24 的内边距，带 [AppDialogAction.sizingLabel] 时按它算
+  double _buttonWidth(
+    AppDialogAction action,
+    TextStyle textStyle,
+    double textScale,
+  ) {
+    final text = action.sizingLabel ?? action.label();
+    return _measure(text, textStyle) * textScale + 48;
+  }
+
   Widget _buildButton(BuildContext context, AppDialogAction action) {
     final theme = Theme.of(context);
+    final child = Text(
+      action.label(),
+      style: action.sizingLabel == null
+          ? null
+          : const TextStyle(fontFeatures: _tabularFigures),
+    );
+    final Widget button;
     switch (action.style) {
       case AppDialogButtonStyle.neutral:
-        return TextButton(
+        button = TextButton(
           onPressed: action.onPressed,
           style: TextButton.styleFrom(
             foregroundColor: theme.colorScheme.outline,
           ),
-          child: Text(action.label()),
+          child: child,
         );
       case AppDialogButtonStyle.danger:
-        return FilledButton(
+        button = FilledButton(
           onPressed: action.onPressed,
           style: FilledButton.styleFrom(
             backgroundColor: theme.colorScheme.error,
@@ -146,14 +169,23 @@ class AppDialogActions extends StatelessWidget {
               alpha: 0.38,
             ),
           ),
-          child: Text(action.label()),
+          child: child,
         );
       case AppDialogButtonStyle.primary:
-        return FilledButton(
+        button = FilledButton(
           onPressed: action.onPressed,
-          child: Text(action.label()),
+          child: child,
         );
     }
+    if (action.sizingLabel == null) return button;
+    final textStyle = theme.textTheme.labelLarge ?? const TextStyle();
+    final textScale = MediaQuery.textScalerOf(context).scale(14) / 14;
+    return ConstrainedBox(
+      constraints: BoxConstraints(
+        minWidth: _buttonWidth(action, textStyle, textScale),
+      ),
+      child: button,
+    );
   }
 
   double _measure(String text, TextStyle style) {
@@ -201,13 +233,29 @@ Future<T?> showAppSelectionDialog<T>({
           InkWell(
             borderRadius: const BorderRadius.all(Radius.circular(12)),
             onTap: () => Get.back(result: option),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
-              child: Row(
-                children: [
-                  Expanded(child: Text(labelOf(option))),
-                  if (option == current) const Icon(Icons.check),
-                ],
+            child: SizedBox(
+              height: 52,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        labelOf(option),
+                        strutStyle: const StrutStyle(
+                          height: 1.4,
+                          forceStrutHeight: true,
+                        ),
+                      ),
+                    ),
+                    SizedBox(
+                      width: 24,
+                      child: option == current
+                          ? const Icon(Icons.check)
+                          : null,
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

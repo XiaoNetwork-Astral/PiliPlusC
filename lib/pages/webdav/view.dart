@@ -3,6 +3,7 @@ import 'package:PiliPlus/common/widgets/scaffold/simple_scaffold.dart';
 import 'package:PiliPlus/common/widgets/view_insets_safe_area.dart';
 import 'package:PiliPlus/pages/backup/widgets/backup_dialogs.dart';
 import 'package:PiliPlus/pages/backup/widgets/encryption_setting.dart';
+import 'package:PiliPlus/pages/backup/widgets/error_text_field.dart';
 import 'package:PiliPlus/pages/webdav/webdav.dart';
 import 'package:PiliPlus/utils/backup/backup.dart';
 import 'package:PiliPlus/utils/storage.dart';
@@ -57,16 +58,18 @@ class _WebDavSettingPageState extends State<WebDavSettingPage> {
     super.dispose();
   }
 
+  String? _validateUri(String uri) {
+    final trimmed = uri.trim();
+    if (trimmed.isEmpty) return '地址不能为空';
+    if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+      return '地址需以 http:// 或 https:// 开头';
+    }
+    return null;
+  }
+
   Future<void> _saveInfo() async {
     final uri = _uriCtr.text;
-    final trimmed = uri.trim();
-    String? error;
-    if (trimmed.isEmpty) {
-      error = '地址不能为空';
-    } else if (!trimmed.startsWith('http://') &&
-        !trimmed.startsWith('https://')) {
-      error = '地址需以 http:// 或 https:// 开头';
-    }
+    final error = _validateUri(uri);
     if (error != null) {
       setState(() => _uriError = error);
       return;
@@ -90,8 +93,9 @@ class _WebDavSettingPageState extends State<WebDavSettingPage> {
   }
 
   Future<void> _testConnection() async {
-    if (_uriCtr.text.trim().isEmpty) {
-      setState(() => _uriError = '地址不能为空');
+    final error = _validateUri(_uriCtr.text);
+    if (error != null) {
+      setState(() => _uriError = error);
       return;
     }
     setState(() {
@@ -117,7 +121,7 @@ class _WebDavSettingPageState extends State<WebDavSettingPage> {
       final result = await WebDav().init();
       message = result.first ? '连接成功' : '连接失败：${result.second}';
     } catch (e) {
-      message = '连接失败：$e';
+      message = '连接失败：${WebDav.describeError(e)}';
     } finally {
       await GStorage.setting.putAll(origin);
       if (mounted) {
@@ -169,15 +173,12 @@ class _WebDavSettingPageState extends State<WebDavSettingPage> {
             bottom: padding.bottom + 40,
           ),
           children: [
-            TextField(
+            ErrorTextField(
               controller: _uriCtr,
+              label: '地址',
               keyboardType: TextInputType.url,
+              errorText: _uriError,
               onChanged: (_) => setState(() => _uriError = null),
-              decoration: InputDecoration(
-                labelText: '地址',
-                border: const OutlineInputBorder(),
-                errorText: _uriError,
-              ),
             ),
             const SizedBox(height: 20),
             TextField(

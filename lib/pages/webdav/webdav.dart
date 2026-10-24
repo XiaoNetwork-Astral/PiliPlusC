@@ -5,6 +5,7 @@ import 'package:PiliPlus/common/constants.dart';
 import 'package:PiliPlus/common/widgets/pair.dart';
 import 'package:PiliPlus/utils/device_utils.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
+import 'package:dio/dio.dart';
 import 'package:webdav_client/webdav_client.dart' as webdav;
 
 typedef _WebDavConfig = ({
@@ -75,8 +76,37 @@ class WebDav {
 
       return Pair(first: true, second: null);
     } catch (e) {
-      return Pair(first: false, second: e.toString());
+      return Pair(first: false, second: describeError(e));
     }
+  }
+
+  /// 把连接异常翻译成针对具体字段的提示
+  static String describeError(Object e) {
+    if (e is DioException) {
+      final code = e.response?.statusCode;
+      if (code == 401 || code == 403) return '用户或密码错误';
+      if (code == 404) return '地址或路径不存在';
+      if (code != null) {
+        if (code >= 200 && code < 300) {
+          return '服务器响应异常，请确认地址是 WebDAV 服务';
+        }
+        return 'HTTP $code';
+      }
+      switch (e.type) {
+        case DioExceptionType.connectionTimeout:
+        case DioExceptionType.sendTimeout:
+        case DioExceptionType.receiveTimeout:
+        case DioExceptionType.connectionError:
+          return '无法连接到服务器，请检查地址与网络';
+        default:
+          break;
+      }
+    }
+    final text = e.toString();
+    if (text.contains('Unauthorized') || text.contains('Forbidden')) {
+      return '用户或密码错误';
+    }
+    return text;
   }
 
   Future<Uint8List?> _readOrNull(
