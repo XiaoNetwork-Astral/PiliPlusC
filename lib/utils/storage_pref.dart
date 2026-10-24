@@ -12,6 +12,7 @@ import 'package:PiliPlus/models/common/dynamic/up_panel_position.dart';
 import 'package:PiliPlus/models/common/follow_order_type.dart';
 import 'package:PiliPlus/models/common/media_control_button.dart';
 import 'package:PiliPlus/models/common/member/tab_type.dart';
+import 'package:PiliPlus/models/common/mine_tab_type.dart';
 import 'package:PiliPlus/models/common/msg/msg_unread_type.dart';
 import 'package:PiliPlus/models/common/nav_bar_config.dart';
 import 'package:PiliPlus/models/common/reply/reply_sort_type.dart';
@@ -20,15 +21,13 @@ import 'package:PiliPlus/models/common/sponsor_block/skip_type.dart';
 import 'package:PiliPlus/models/common/super_chat_type.dart';
 import 'package:PiliPlus/models/common/super_resolution_type.dart';
 import 'package:PiliPlus/models/common/theme/theme_type.dart';
-import 'package:PiliPlus/models/common/video/audio_quality.dart';
+import 'package:PiliPlus/models/common/video/base_quality.dart';
 import 'package:PiliPlus/models/common/video/cdn_type.dart';
-import 'package:PiliPlus/models/common/video/live_quality.dart';
 import 'package:PiliPlus/models/common/video/subtitle_pref_type.dart';
 import 'package:PiliPlus/models/common/video/video_decode_type.dart';
-import 'package:PiliPlus/models/common/video/video_quality.dart';
 import 'package:PiliPlus/models/user/danmaku_rule.dart';
 import 'package:PiliPlus/models/user/info.dart';
-import 'package:PiliPlus/pages/setting/pages/fullscreen_sc_size.dart'
+import 'package:PiliPlus/pages/setting/pages/fullscreen_sc.dart'
     show kFullScreenSCWidth;
 import 'package:PiliPlus/plugin/pl_player/models/audio_output_type.dart';
 import 'package:PiliPlus/plugin/pl_player/models/bottom_progress_behavior.dart';
@@ -569,6 +568,9 @@ abstract final class Pref {
     defaultValue: true,
   );
 
+  static bool get enableScrollVolume =>
+      _setting.get(SettingBoxKey.enableScrollVolume, defaultValue: true);
+
   static bool get enableSlideFS =>
       _setting.get(SettingBoxKey.enableSlideFS, defaultValue: true);
 
@@ -780,6 +782,9 @@ abstract final class Pref {
   static bool get useSideBar =>
       _setting.get(SettingBoxKey.useSideBar, defaultValue: false);
 
+  static bool get hideSideBarLabel =>
+      _setting.get(SettingBoxKey.hideSideBarLabel, defaultValue: false);
+
   static bool get dynamicsShowAllFollowedUp => _setting.get(
     SettingBoxKey.dynamicsShowAllFollowedUp,
     defaultValue: false,
@@ -901,6 +906,14 @@ abstract final class Pref {
   static double get bufferSec =>
       _setting.get(SettingBoxKey.bufferSec, defaultValue: 16.0);
 
+  /// 直播流前向缓冲区大小（MB），0 表示跟随 [bufferSize] 的两倍
+  static double get liveBufferSize =>
+      _setting.get(SettingBoxKey.liveBufferSize, defaultValue: 0.0);
+
+  /// 直播流缓冲时长上限（s），0 表示不限制
+  static double get liveBufferSec =>
+      _setting.get(SettingBoxKey.liveBufferSec, defaultValue: 0.0);
+
   static Map<String, String> initBuffer([double playbackSpeed = 1.0]) {
     final bufSec = Pref.bufferSec * playbackSpeed;
     final bufSiz = (Pref.bufferSize * 0x100000).toStringAsFixed(0);
@@ -914,11 +927,19 @@ abstract final class Pref {
   }
 
   static Map<String, String> initLiveBuffer() {
-    return {
+    final liveBufMb = liveBufferSize;
+    final effectiveSizeMb = liveBufMb > 0 ? liveBufMb : bufferSize * 2;
+    final buffer = {
       'cache': 'yes',
-      'demuxer-max-bytes': (Pref.bufferSize * 0x200000).toStringAsFixed(0),
+      'demuxer-max-bytes': (effectiveSizeMb * 0x100000).toStringAsFixed(0),
       'demuxer-max-back-bytes': '0',
     };
+    final sec = Pref.liveBufferSec;
+    if (sec > 0) {
+      buffer['cache-secs'] = sec.toStringAsFixed(3);
+      buffer['demuxer-hysteresis-secs'] = (sec / 1.5).toStringAsFixed(3);
+    }
+    return buffer;
   }
 
   static String get audioOutput => _setting.get(
@@ -1011,12 +1032,19 @@ abstract final class Pref {
       _setting.get(SettingBoxKey.silentDownImg, defaultValue: false);
 
   static String get buvid {
-    String? buvid = _localCache.get(LocalCacheKey.buvid);
-    if (buvid == null) {
-      buvid = LoginUtils.generateBuvid();
-      _localCache.put(LocalCacheKey.buvid, buvid);
+    String? value = _setting.get(SettingBoxKey.buvid);
+    if (value != null) return value;
+
+    value = _localCache.get(SettingBoxKey.buvid);
+    if (value != null) {
+      _setting.put(SettingBoxKey.buvid, value);
+      _localCache.delete(SettingBoxKey.buvid);
+    } else {
+      value = LoginUtils.generateBuvid();
+      GStorage.setting.put(SettingBoxKey.buvid, value);
     }
-    return buvid;
+
+    return value;
   }
 
   static bool get showMemberShop =>
@@ -1032,6 +1060,15 @@ abstract final class Pref {
     SettingBoxKey.fullScreenSCWidth,
     defaultValue: kFullScreenSCWidth,
   );
+
+  static bool get enableFullScreenSC =>
+      _setting.get(SettingBoxKey.enableFullScreenSC, defaultValue: true);
+
+  static double get fullScreenSCOpacity =>
+      _setting.get(SettingBoxKey.fullScreenSCOpacity, defaultValue: 1.0);
+
+  static double get fullScreenSCScale =>
+      _setting.get(SettingBoxKey.fullScreenSCScale, defaultValue: 1.0);
 
   static bool get minimizeOnExit =>
       _setting.get(SettingBoxKey.minimizeOnExit, defaultValue: true);
@@ -1103,9 +1140,6 @@ abstract final class Pref {
 
   static String? get imageSavePath => _setting.get(SettingBoxKey.imageSavePath);
 
-  static String? get saveScreenshotPath =>
-      _setting.get(SettingBoxKey.saveScreenshotPath);
-
   static String? get liveCdnUrl => _setting.get(SettingBoxKey.liveCdnUrl);
 
   static bool get showBatteryLevel => _setting.get(
@@ -1169,4 +1203,19 @@ abstract final class Pref {
     SettingBoxKey.enableLandscapeAutoFullscreen,
     defaultValue: false,
   );
+
+  static Set<MineTabType> get mineTabs =>
+      (_setting.get(SettingBoxKey.mineTabs) as List?)
+          ?.map<MineTabType>((index) => .values[index])
+          .toSet() ??
+      MineTabType.kDefault;
+
+  static bool get blockAtOnlyReply =>
+      _setting.get(SettingBoxKey.blockAtOnlyReply, defaultValue: false);
+
+  static int? get blockReplyAtCount =>
+      _setting.get(SettingBoxKey.blockReplyAtCount);
+
+  static bool get filterIntro =>
+      _setting.get(SettingBoxKey.filterIntro, defaultValue: false);
 }

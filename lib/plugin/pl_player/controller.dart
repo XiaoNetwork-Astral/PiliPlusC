@@ -35,11 +35,12 @@ import 'package:PiliPlus/utils/accounts.dart';
 import 'package:PiliPlus/utils/android/android_helper.dart';
 import 'package:PiliPlus/utils/android/bindings.g.dart';
 import 'package:PiliPlus/utils/asset_utils.dart';
+import 'package:PiliPlus/utils/desktop/window_controller.dart';
 import 'package:PiliPlus/utils/device_utils.dart';
 import 'package:PiliPlus/utils/duration_utils.dart';
 import 'package:PiliPlus/utils/extension/box_ext.dart';
+import 'package:PiliPlus/utils/extension/native_geometry_ext.dart';
 import 'package:PiliPlus/utils/extension/num_ext.dart';
-import 'package:PiliPlus/utils/extension/size_ext.dart';
 import 'package:PiliPlus/utils/feed_back.dart';
 import 'package:PiliPlus/utils/image_utils.dart';
 import 'package:PiliPlus/utils/ios/pip_helper.dart';
@@ -56,7 +57,7 @@ import 'package:canvas_danmaku/canvas_danmaku.dart';
 import 'package:easy_debounce/easy_throttle.dart';
 import 'package:flutter/foundation.dart' show clampDouble, kDebugMode;
 import 'package:flutter/services.dart'
-    show DeviceOrientation, HapticFeedback, KeyDownEvent, LogicalKeyboardKey;
+    show DeviceOrientation, HapticFeedback, KeyDownEvent;
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:flutter_volume_controller/flutter_volume_controller.dart';
 import 'package:get/get.dart';
@@ -65,13 +66,14 @@ import 'package:material_ui/material_ui.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:native_device_orientation/native_device_orientation.dart';
+import 'package:nativeapi/nativeapi.dart' as nativeapi show Size, Rectangle;
 import 'package:path/path.dart' as path;
 import 'package:screen_brightness_platform_interface/screen_brightness_platform_interface.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:window_manager/window_manager.dart';
 
 typedef PlayCallback = Future<void>? Function();
-typedef PlayOwner = ({String tag, Type type});
+typedef PlayOwner = ({String tag, Type? type});
 
 class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   Player? _videoPlayerController;
@@ -224,10 +226,14 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       (Platform.isAndroid && AndroidHelper.isPipMode) ||
       (PlatformUtils.isDesktop && isDesktopPip);
   late bool isDesktopPip = false;
-  late Rect _lastWindowBounds;
-  static Rect? _lastPipBounds;
+  late nativeapi.Rectangle _lastWindowBounds;
+  static nativeapi.Rectangle? _lastPipBounds;
 
-  Rect _adjustPipBounds(Rect lastRect, Size size, double aspectRatio) {
+  nativeapi.Rectangle _adjustPipBounds(
+    nativeapi.Rectangle lastRect,
+    nativeapi.Size size,
+    double aspectRatio,
+  ) {
     final lastSize = lastRect.size;
     final lastOrientation = lastSize.orientation;
     final orientation = size.orientation;
@@ -253,26 +259,24 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
           }
       }
 
-      return _lastPipBounds = Rect.fromLTWH(
-        lastRect.left,
-        lastRect.top,
-        width,
-        height,
+      return _lastPipBounds = nativeapi.Rectangle(
+        x: lastRect.x,
+        y: lastRect.y,
+        width: width,
+        height: height,
       );
     }
-    return _lastPipBounds = Rect.fromLTWH(
-      lastRect.left,
-      lastRect.top,
-      lastSize.width,
-      lastSize.width / aspectRatio,
+    return _lastPipBounds = nativeapi.Rectangle(
+      x: lastRect.x,
+      y: lastRect.y,
+      width: lastSize.width,
+      height: lastSize.width / aspectRatio,
     );
   }
 
-  bool updatePipBounds() {
+  bool updatePipBounds(Window window) {
     if (isDesktopPip) {
-      windowManager.getBounds().then((rect) {
-        if (isDesktopPip) _lastPipBounds = rect;
-      });
+      _lastPipBounds = window.bounds;
       return true;
     }
     return false;
@@ -280,38 +284,43 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
 
   late final showWindowTitleBar = Pref.showWindowTitleBar;
   late final RxBool isAlwaysOnTop = false.obs;
-  Future<void> setAlwaysOnTop(bool value) {
+  void setAlwaysOnTop(bool value, {Window? window}) {
+    window ??= WindowController.instance.window;
+    if (window == null) return;
+
     isAlwaysOnTop.value = value;
-    return windowManager.setAlwaysOnTop(value);
+    window.isAlwaysOnTop = value;
   }
 
-  Future<void> exitDesktopPip() {
+  void exitDesktopPip() {
+    final window = WindowController.instance.window;
+    if (window == null) return;
+
     isDesktopPip = false;
-    return Future.wait([
-      if (showWindowTitleBar)
-        windowManager.setTitleBarStyle(TitleBarStyle.normal),
-      windowManager.setMinimumSize(const Size(400, 700)),
-      windowManager.setBounds(_lastWindowBounds),
-      setAlwaysOnTop(false),
-      windowManager.setAspectRatio(0),
-    ]);
+    if (showWindowTitleBar) window.titleBarStyle = .normal;
+    window
+      ..minimumSize = DeviceUtils.desktopMinSize
+      ..bounds = _lastWindowBounds
+      ..aspectRatio = 0;
+    setAlwaysOnTop(false, window: window);
   }
 
-  Future<void> enterDesktopPip() async {
+  void enterDesktopPip() {
+    final window = WindowController.instance.window;
+    if (window == null) return;
+
     if (isFullScreen.value) return;
 
     isDesktopPip = true;
 
-    _lastWindowBounds = await windowManager.getBounds();
+    _lastWindowBounds = window.bounds;
 
-    if (showWindowTitleBar) {
-      windowManager.setTitleBarStyle(TitleBarStyle.hidden);
-    }
+    if (showWindowTitleBar) window.titleBarStyle = .hidden;
 
     const shortSide = 280.0;
     const minShortSide = 160.0;
-    final Size size;
-    final Size minimumSize;
+    final nativeapi.Size size;
+    final nativeapi.Size minimumSize;
     final state = videoPlayerController!.state;
     int width = state.width;
     int height = state.height;
@@ -319,23 +328,27 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     if (height == 0) height = this.height ?? 9;
     final aspectRatio = width / height;
     if (height > width) {
-      size = Size(shortSide, shortSide / aspectRatio);
-      minimumSize = Size(minShortSide, minShortSide / aspectRatio);
-    } else {
-      size = Size(shortSide * aspectRatio, shortSide);
-      minimumSize = Size(minShortSide * aspectRatio, minShortSide);
-    }
-
-    await windowManager.setMinimumSize(minimumSize);
-    setAlwaysOnTop(true);
-    if (_lastPipBounds != null) {
-      windowManager.setBounds(
-        _adjustPipBounds(_lastPipBounds!, size, aspectRatio),
+      size = nativeapi.Size(width: shortSide, height: shortSide / aspectRatio);
+      minimumSize = nativeapi.Size(
+        width: minShortSide,
+        height: minShortSide / aspectRatio,
       );
     } else {
-      windowManager.setSize(size);
+      size = nativeapi.Size(width: shortSide * aspectRatio, height: shortSide);
+      minimumSize = nativeapi.Size(
+        width: minShortSide * aspectRatio,
+        height: minShortSide,
+      );
     }
-    windowManager.setAspectRatio(width / height);
+
+    window.minimumSize = minimumSize;
+    setAlwaysOnTop(true, window: window);
+    if (_lastPipBounds != null) {
+      window.bounds = _adjustPipBounds(_lastPipBounds!, size, aspectRatio);
+    } else {
+      window.contentSize = size;
+    }
+    window.aspectRatio = aspectRatio;
   }
 
   void toggleDesktopPip() {
@@ -449,6 +462,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   late final darkVideoPage = Pref.darkVideoPage;
   late final enableSlideVolumeBrightness = Pref.enableSlideVolumeBrightness;
   late final enableSlideFS = Pref.enableSlideFS;
+  late final enableScrollVolume = Pref.enableScrollVolume;
   late final enableDragSubtitle = Pref.enableDragSubtitle;
   late final fastForBackwardDuration = Duration(
     seconds: Pref.fastForBackwardDuration,
@@ -690,9 +704,9 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
 
     if (Platform.isAndroid && autoPiP) {
       if (DeviceUtils.sdkInt < 31) {
-        AndroidHelper$ToDart.onUserLeaveHint = Runnable.implement(
-          $Runnable(run: _onUserLeaveHint),
-        );
+        final func = Runnable.implement($Runnable(run: _onUserLeaveHint));
+        AndroidHelper$ToDart.onUserLeaveHint = func;
+        func.release();
       } else {
         _isAutoEnterPip = true;
       }
@@ -924,6 +938,11 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
         hwdec: hwdec,
       ),
     );
+
+    if (Platform.isAndroid) {
+      // Avoid sizing the surface using mpv's idle window between media loads.
+      player.setProperty('force-window', 'no');
+    }
 
     player.setMediaHeader(userAgent: BrowserUa.pc, referer: HttpString.baseUrl);
 
@@ -1796,7 +1815,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
             orientation: orientation,
           );
         } else {
-          await enterDesktopFullScreen(inAppFullScreen: inAppFullScreen);
+          enterDesktopFullScreen(inAppFullScreen: inAppFullScreen);
         }
       } else {
         if (PlatformUtils.isMobile) {
@@ -1808,7 +1827,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
           }
           await resetScreenRotation();
         } else {
-          await exitDesktopFullScreen();
+          exitDesktopFullScreen();
         }
       }
     } finally {
@@ -1950,7 +1969,6 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       _clearPreview();
     }
     if (Platform.isAndroid) {
-      AndroidHelper$ToDart.onUserLeaveHint?.release();
       AndroidHelper$ToDart.onUserLeaveHint = null;
     } else if (Platform.isIOS) {
       IOSPipHelper.dispose();
@@ -1970,7 +1988,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     // dataStatus.close();
 
     if (PlatformUtils.isDesktop && isAlwaysOnTop.value) {
-      windowManager.setAlwaysOnTop(false);
+      WindowController.instance.window?.isAlwaysOnTop = false;
     }
 
     _removeListeners();
@@ -2041,77 +2059,82 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     videoShot = await VideoHttp.videoshot(bvid: bvid, cid: cid!);
   }
 
+  int _screenshotState = 0;
   Future<void> takeScreenshot() async {
+    if (_screenshotState > 0) return;
+    _screenshotState = 1;
     SmartDialog.showToast('截图中');
     final image = await videoPlayerController?.screenshot();
-    if (image == null) {
-      SmartDialog.showToast('截图失败');
-      return;
-    }
-
-    var saved = false;
-    Future<void> save() async {
-      if (saved) return;
-      saved = true;
-      Get.back(result: false);
-      final bytes = await image.toByteData(format: .png);
-      image.dispose();
-      if (bytes != null) {
-        final time = DurationUtils.formatDuration(
-          positionInMilliseconds / 1000,
-        ).replaceAll(':', '-');
-        ImageUtils.saveScreenShot(
-          bytes: bytes.buffer.asUint8List(),
-          fileName: 'screenshot_${cid}_$time',
-        );
-      } else {
-        SmartDialog.showToast('保存失败');
-      }
-    }
-
-    SmartDialog.showToast('点击弹窗或按 Enter 保存截图');
-    final dispose = await showDialog<bool>(
-      context: Get.context!,
-      builder: (context) => Focus(
-        autofocus: true,
-        onKeyEvent: (node, event) {
-          if (event is KeyDownEvent &&
-              (event.logicalKey == LogicalKeyboardKey.enter ||
-                  event.logicalKey == LogicalKeyboardKey.numpadEnter)) {
-            save();
-            return KeyEventResult.handled;
+    if (image != null) {
+      SmartDialog.showToast('点击弹窗或按 Enter 保存截图');
+      await showDialog(
+        context: Get.context!,
+        requestFocus: true,
+        builder: (context) {
+          Future<void> save() async {
+            if (_screenshotState > 1) return;
+            _screenshotState = 2;
+            final bytes = await image.toByteData(format: .png);
+            if (bytes != null) {
+              final time = DurationUtils.formatDuration(
+                positionInMilliseconds / 1000,
+              ).replaceAll(':', '-');
+              ImageUtils.saveByteImg(
+                bytes: bytes.buffer.asUint8List(),
+                fileName: 'screenshot_${cid}_$time',
+              );
+            } else {
+              SmartDialog.showToast('保存失败');
+            }
+            Get.back();
           }
-          return KeyEventResult.ignored;
-        },
-        child: GestureDetector(
-          onTap: save,
-          child: Align(
-            alignment: Alignment.centerRight,
-            child: Padding(
-              padding: const EdgeInsets.only(right: 12),
-              child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  maxWidth: min(MediaQuery.widthOf(context) / 3, 350),
-                ),
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    border: Border.all(
-                      width: 5,
-                      color: ColorScheme.of(context).surface,
+
+          return Focus(
+            autofocus: true,
+            onKeyEvent: (node, event) {
+              if (event is KeyDownEvent) {
+                final key = event.logicalKey;
+                if (key == .keyS || key == .enter || key == .numpadEnter) {
+                  save();
+                  return .handled;
+                }
+              }
+              return .ignored;
+            },
+            child: GestureDetector(
+              onTap: save,
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 12),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: min(MediaQuery.widthOf(context) / 3, 350),
                     ),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(5),
-                    child: RawImage(image: image),
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                          width: 5,
+                          color: ColorScheme.of(context).surface,
+                        ),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(5),
+                        child: RawImage(image: image),
+                      ),
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-        ),
-      ),
-    );
-    if (dispose ?? true) image.dispose();
+          );
+        },
+      );
+      image.dispose();
+    } else {
+      SmartDialog.showToast('截图失败');
+    }
+    _screenshotState = 0;
   }
 
   void onPopInvokedWithResult(bool didPop, Object? result) {

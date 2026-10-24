@@ -287,7 +287,7 @@ abstract final class DynamicsHttp {
         'id': ?id,
         'rid': ?rid,
         'type': ?type,
-        'features': Constants.dynFeatures,
+        'features': Constants.dynDetailFeatures,
         'gaia_source': 'Athena',
         'web_location': '333.1330',
         'x-bili-device-req-json':
@@ -389,7 +389,7 @@ abstract final class DynamicsHttp {
       Api.opusDetail,
       queryParameters: await WbiSign.makSign({
         'timezone_offset': '-480',
-        'features': 'htmlNewStyle',
+        'features': Constants.opusDetailFeatures,
         'id': opusId,
       }),
     );

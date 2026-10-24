@@ -17,9 +17,8 @@ import 'package:PiliPlus/http/live.dart';
 import 'package:PiliPlus/http/loading_state.dart';
 import 'package:PiliPlus/http/video.dart';
 import 'package:PiliPlus/models/common/super_resolution_type.dart';
-import 'package:PiliPlus/models/common/video/audio_quality.dart';
+import 'package:PiliPlus/models/common/video/base_quality.dart';
 import 'package:PiliPlus/models/common/video/video_decode_type.dart';
-import 'package:PiliPlus/models/common/video/video_quality.dart';
 import 'package:PiliPlus/models/video/play/url.dart';
 import 'package:PiliPlus/models_new/video/video_play_info/subtitle.dart';
 import 'package:PiliPlus/pages/common/common_intro_controller.dart';
@@ -42,7 +41,7 @@ import 'package:PiliPlus/services/shutdown_timer_service.dart'
     show shutdownTimerService, ShutdownPanel;
 import 'package:PiliPlus/utils/accounts.dart';
 import 'package:PiliPlus/utils/accounts/account.dart';
-import 'package:PiliPlus/utils/android/bindings.g.dart';
+import 'package:PiliPlus/utils/android/android_helper.dart';
 import 'package:PiliPlus/utils/connectivity_utils.dart';
 import 'package:PiliPlus/utils/extension/num_ext.dart';
 import 'package:PiliPlus/utils/extension/string_ext.dart';
@@ -1840,6 +1839,8 @@ class HeaderControlState extends State<HeaderControl>
                         ),
                       ),
                     ),
+                ],
+                if (plPlayerController.enableBlock)
                   Obx(
                     () => videoDetailCtr.segmentProgressList.isNotEmpty
                         ? SizedBox(
@@ -1858,7 +1859,6 @@ class HeaderControlState extends State<HeaderControl>
                           )
                         : const SizedBox.shrink(),
                   ),
-                ],
                 if (!isPortrait || isFullScreen || PlatformUtils.isDesktop) ...[
                   SizedBox(
                     width: btnWidth,
@@ -1924,8 +1924,8 @@ class HeaderControlState extends State<HeaderControl>
                     ),
                   ),
                 ),
-                if (Platform.isAndroid ||
-                    IOSPipHelper.isAvailable ||
+                if ((Platform.isAndroid && PiliAndroidHelper.isPipAvailable) ||
+                    (Platform.isIOS && IOSPipHelper.isAvailable) ||
                     (PlatformUtils.isDesktop && !isFullScreen))
                   SizedBox(
                     width: btnWidth,
@@ -1936,9 +1936,7 @@ class HeaderControlState extends State<HeaderControl>
                       onPressed: () {
                         if (PlatformUtils.isDesktop) {
                           plPlayerController.toggleDesktopPip();
-                          return;
-                        }
-                        if (Platform.isIOS || AndroidHelper.isPipAvailable) {
+                        } else {
                           plPlayerController.enterPip();
                         }
                       },
@@ -1999,26 +1997,6 @@ class HeaderControlState extends State<HeaderControl>
                     ),
                   ),
                 ),
-                if (introController case final UgcIntroController ugc)
-                  SizedBox(
-                    width: btnWidth,
-                    height: btnHeight,
-                    child: Obx(
-                      () => ActionItem(
-                        expand: false,
-                        icon: const Icon(
-                          FontAwesomeIcons.thumbsDown,
-                          color: Colors.white,
-                        ),
-                        selectIcon: const Icon(
-                          FontAwesomeIcons.solidThumbsDown,
-                        ),
-                        onTap: () => ugc.handleAction(ugc.actionDislikeVideo),
-                        selectStatus: ugc.hasDislike.value,
-                        semanticsLabel: '点踩',
-                      ),
-                    ),
-                  ),
                 SizedBox(
                   width: btnWidth,
                   height: btnHeight,
@@ -2057,6 +2035,17 @@ class HeaderControlState extends State<HeaderControl>
                       selectStatus: introController.hasFav.value,
                       semanticsLabel: '收藏',
                     ),
+                  ),
+                ),
+                SizedBox(
+                  width: btnWidth,
+                  height: btnHeight,
+                  child: ActionItem(
+                    expand: false,
+                    icon: const Icon(CustomIcons.download, color: Colors.white),
+                    onTap: () => videoDetailCtr.onDownload(context),
+                    text: '缓存',
+                    semanticsLabel: '缓存',
                   ),
                 ),
                 SizedBox(

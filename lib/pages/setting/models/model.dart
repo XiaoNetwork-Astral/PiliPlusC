@@ -367,7 +367,6 @@ SettingsModel getVideoFilterSelectModel({
 SettingsModel getSaveImgPathModel({
   required String title,
   required String imgPathKey,
-  required String screenshotPathKey,
   required String suffix,
   String defaultValue = 'Pictures/${Constants.appName}',
 }) {
@@ -392,10 +391,6 @@ SettingsModel getSaveImgPathModel({
         value = result;
         setState();
         GStorage.setting.put(imgPathKey, result);
-        GStorage.setting.put(
-          screenshotPathKey,
-          result == defaultValue ? result : '$result/screenshot',
-        );
       }
     },
   );
