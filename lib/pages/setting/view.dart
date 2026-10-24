@@ -5,17 +5,17 @@ import 'package:PiliPlus/common/widgets/view_safe_area.dart';
 import 'package:PiliPlus/http/login.dart';
 import 'package:PiliPlus/models/common/setting_type.dart';
 import 'package:PiliPlus/pages/about/view.dart';
+import 'package:PiliPlus/pages/backup/view.dart';
 import 'package:PiliPlus/pages/login/controller.dart';
 import 'package:PiliPlus/pages/setting/common_setting.dart';
 import 'package:PiliPlus/pages/setting/widgets/multi_select_dialog.dart';
-import 'package:PiliPlus/pages/webdav/view.dart';
+import 'package:PiliPlus/pages/settings_search/search_jump.dart';
 import 'package:PiliPlus/utils/accounts.dart';
 import 'package:PiliPlus/utils/accounts/account.dart';
 import 'package:PiliPlus/utils/extension/size_ext.dart';
 import 'package:PiliPlus/utils/utils.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
-import 'package:material_design_icons_flutter/material_design_icons_flutter.dart';
 import 'package:material_ui/material_ui.dart' hide ListTile;
 
 class _SettingsModel {
@@ -39,6 +39,8 @@ class SettingPage extends StatefulWidget {
 
 class _SettingPageState extends State<SettingPage> {
   late SettingType _type = .privacySetting;
+  String? _highlightTitle;
+  int _highlightRequest = 0;
   final RxBool _noAccount = Accounts.account.isEmpty.obs;
   late bool _isPortrait;
   late ThemeData theme;
@@ -90,8 +92,8 @@ class _SettingPageState extends State<SettingPage> {
       icon: Icon(Icons.extension_outlined),
     ),
     _SettingsModel(
-      type: .webdavSetting,
-      icon: Icon(MdiIcons.databaseCogOutline),
+      type: .backupSetting,
+      icon: Icon(Icons.settings_backup_restore_outlined),
     ),
     _SettingsModel(
       type: .about,
@@ -130,11 +132,14 @@ class _SettingPageState extends State<SettingPage> {
                   Expanded(
                     flex: 6,
                     child: switch (_type) {
-                      .webdavSetting => const WebDavSettingPage(
-                        showAppBar: false,
-                      ),
+                      .backupSetting => const BackupPage(showAppBar: false),
                       .about => const AboutPage(showAppBar: false),
-                      _ => CommonSetting(settingType: _type, showAppBar: false),
+                      _ => CommonSetting(
+                        settingType: _type,
+                        showAppBar: false,
+                        highlightTitle: _highlightTitle,
+                        highlightRequest: _highlightRequest,
+                      ),
                     },
                   ),
                 ],
@@ -153,15 +158,26 @@ class _SettingPageState extends State<SettingPage> {
     if (_isPortrait) {
       Get.to(
         () => switch (type) {
-          .webdavSetting => const WebDavSettingPage(),
+          .backupSetting => const BackupPage(),
           .about => const AboutPage(),
           _ => CommonSetting(settingType: type),
         },
       );
     } else {
       _type = type;
+      _highlightTitle = null;
       setState(() {});
     }
+  }
+
+  Future<void> _openSearch() async {
+    final result = await Get.toNamed('/settingsSearch');
+    if (!mounted || result is! SettingsSearchJump) return;
+    setState(() {
+      _type = result.type;
+      _highlightTitle = result.title;
+      _highlightRequest++;
+    });
   }
 
   Color? _getTileColor(ThemeData theme, SettingType type) {
@@ -310,7 +326,7 @@ class _SettingPageState extends State<SettingPage> {
       color: theme.colorScheme.onInverseSurface,
       borderRadius: const BorderRadius.all(Radius.circular(50)),
       child: InkWell(
-        onTap: () => Get.toNamed('/settingsSearch'),
+        onTap: _openSearch,
         borderRadius: const BorderRadius.all(Radius.circular(50)),
         child: const Padding(
           padding: EdgeInsets.symmetric(vertical: 8),

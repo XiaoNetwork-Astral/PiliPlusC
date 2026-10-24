@@ -213,6 +213,12 @@ abstract final class SettingBoxKey {
       webdavPassword = 'webdavPassword',
       webdavDirectory = 'webdavDirectory';
 
+  static const String archiveEncrypt = 'archiveEncrypt',
+      archivePassword = 'archivePassword',
+      webdavEncrypt = 'webdavEncrypt',
+      webdavArchivePassword = 'webdavArchivePassword',
+      lastBackupMethod = 'lastBackupMethod';
+
   static const String enableSponsorBlock = 'enableSponsorBlock',
       blockSettings = 'blockSettings',
       blockLimit = 'blockLimit',

@@ -673,6 +673,36 @@ abstract final class Pref {
   static String get webdavDirectory =>
       _setting.get(SettingBoxKey.webdavDirectory, defaultValue: '/');
 
+  static bool get archiveEncrypt =>
+      _setting.get(SettingBoxKey.archiveEncrypt, defaultValue: false);
+
+  static set archiveEncrypt(bool value) =>
+      _setting.put(SettingBoxKey.archiveEncrypt, value);
+
+  static String get archivePassword =>
+      _setting.get(SettingBoxKey.archivePassword, defaultValue: '');
+
+  static set archivePassword(String value) =>
+      _setting.put(SettingBoxKey.archivePassword, value);
+
+  static bool get webdavEncrypt =>
+      _setting.get(SettingBoxKey.webdavEncrypt, defaultValue: false);
+
+  static set webdavEncrypt(bool value) =>
+      _setting.put(SettingBoxKey.webdavEncrypt, value);
+
+  static String get webdavArchivePassword =>
+      _setting.get(SettingBoxKey.webdavArchivePassword, defaultValue: '');
+
+  static set webdavArchivePassword(String value) =>
+      _setting.put(SettingBoxKey.webdavArchivePassword, value);
+
+  static int get lastBackupMethod =>
+      _setting.get(SettingBoxKey.lastBackupMethod, defaultValue: 0);
+
+  static set lastBackupMethod(int value) =>
+      _setting.put(SettingBoxKey.lastBackupMethod, value);
+
   static bool get showPgcTimeline =>
       _setting.get(SettingBoxKey.showPgcTimeline, defaultValue: true);
 

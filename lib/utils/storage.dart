@@ -10,12 +10,20 @@ import 'package:PiliPlus/utils/accounts/account_type_adapter.dart';
 import 'package:PiliPlus/utils/accounts/cookie_jar_adapter.dart';
 import 'package:PiliPlus/utils/path_utils.dart';
 import 'package:PiliPlus/utils/set_int_adapter.dart';
+import 'package:PiliPlus/utils/storage_key.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
 import 'package:PiliPlus/utils/utils.dart';
 import 'package:hive_ce/hive.dart';
 import 'package:path/path.dart' as path;
 
 abstract final class GStorage {
+  /// 不允许写入备份的密码类设置
+  static const Set<String> _secretSettingKeys = {
+    SettingBoxKey.webdavPassword,
+    SettingBoxKey.archivePassword,
+    SettingBoxKey.webdavArchivePassword,
+  };
+
   static late final Box<UserInfoData> userInfo;
   static late final Box<dynamic> historyWord;
   static late final Box<dynamic> localCache;
@@ -78,8 +86,13 @@ abstract final class GStorage {
   }
 
   static String exportAllSettings() {
+    // 密码不进备份，换设备后需要重新输入
+    final settings = Map<String, dynamic>.from(setting.toMap());
+    for (final key in _secretSettingKeys) {
+      settings.remove(key);
+    }
     return Utils.jsonEncoder.convert({
-      setting.name: setting.toMap(),
+      setting.name: settings,
       video.name: video.toMap(),
     });
   }
@@ -90,10 +103,40 @@ abstract final class GStorage {
   static Future<List<void>> importAllJsonSettings(
     Map<String, dynamic> map,
   ) {
+    final videoData = map[video.name];
+    if (videoData is! Map) {
+      throw ArgumentError('设置数据格式不正确');
+    }
     return Future.wait([
-      setting.clear().then((_) => setting.putAll(map[setting.name])),
-      video.clear().then((_) => video.putAll(map[video.name])),
+      _importSettingBox(map[setting.name]),
+      video.clear().then((_) => video.putAll(videoData)),
     ]);
+  }
+
+  /// 导入设置时保留本机已有的密码，避免被旧备份里的空值覆盖
+  static Future<void> _importSettingBox(Object? value) async {
+    if (value is! Map) {
+      throw ArgumentError('设置数据格式不正确');
+    }
+    final data = <String, dynamic>{};
+    value.forEach((key, val) {
+      if (key is String) data[key] = val;
+    });
+
+    final secrets = <String, dynamic>{};
+    for (final key in _secretSettingKeys) {
+      final local = setting.get(key);
+      data.remove(key);
+      if (local != null) {
+        secrets[key] = local;
+      }
+    }
+
+    await setting.clear();
+    await setting.putAll(data);
+    if (secrets.isNotEmpty) {
+      await setting.putAll(secrets);
+    }
   }
 
   static void regAdapter() {

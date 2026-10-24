@@ -3,16 +3,11 @@ import 'package:PiliPlus/common/widgets/scaffold/simple_scaffold.dart';
 import 'package:PiliPlus/common/widgets/view_insets_safe_area.dart';
 import 'package:PiliPlus/common/widgets/view_sliver_safe_area.dart';
 import 'package:PiliPlus/pages/search/controller.dart' show DebounceStreamState;
-import 'package:PiliPlus/pages/setting/models/extra_settings.dart';
-import 'package:PiliPlus/pages/setting/models/model.dart';
-import 'package:PiliPlus/pages/setting/models/play_settings.dart';
-import 'package:PiliPlus/pages/setting/models/privacy_settings.dart';
-import 'package:PiliPlus/pages/setting/models/recommend_settings.dart';
-import 'package:PiliPlus/pages/setting/models/style_settings.dart';
-import 'package:PiliPlus/pages/setting/models/video_settings.dart';
-import 'package:PiliPlus/utils/grid.dart';
-import 'package:PiliPlus/utils/waterfall.dart';
-import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
+import 'package:PiliPlus/pages/setting/common_setting.dart';
+import 'package:PiliPlus/pages/settings_search/search_entries.dart';
+import 'package:PiliPlus/pages/settings_search/search_jump.dart';
+import 'package:PiliPlus/utils/extension/size_ext.dart';
+import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -26,29 +21,15 @@ class SettingsSearchPage extends StatefulWidget {
 class _SettingsSearchPageState
     extends DebounceStreamState<SettingsSearchPage, String> {
   final _textEditingController = TextEditingController();
-  final RxList<SettingsModel> _list = <SettingsModel>[].obs;
-  late final _settings = [
-    ...extraSettings,
-    ...privacySettings,
-    ...recommendSettings,
-    ...videoSettings,
-    ...playSettings,
-    ...styleSettings,
-  ];
+  final RxList<SettingsSearchEntry> _list = <SettingsSearchEntry>[].obs;
+  late final _settings = buildSettingsSearchEntries();
 
   @override
   void onValueChanged(String value) {
     if (value.isEmpty) {
       _list.clear();
     } else {
-      value = value.toLowerCase();
-      _list.value = _settings
-          .where(
-            (item) =>
-                item.effectiveTitle.toLowerCase().contains(value) ||
-                item.effectiveSubtitle?.toLowerCase().contains(value) == true,
-          )
-          .toList();
+      _list.value = _settings.where((item) => item.matches(value)).toList();
     }
   }
 
@@ -96,10 +77,9 @@ class _SettingsSearchPageState
               sliver: Obx(
                 () => _list.isEmpty
                     ? const HttpError()
-                    : SliverMasonryGrid(
-                        gridDelegate: gridDelegate,
+                    : SliverList(
                         delegate: SliverChildBuilderDelegate(
-                          (context, index) => _list[index].widget,
+                          (context, index) => _buildItem(context, _list[index]),
                           childCount: _list.length,
                         ),
                       ),
@@ -111,7 +91,49 @@ class _SettingsSearchPageState
     );
   }
 
-  late final gridDelegate = SliverSimpleGridDelegateWithMaxCrossAxisExtent_(
-    maxCrossAxisExtent: Grid.smallCardWidth * 2,
-  );
+  Widget _buildItem(BuildContext context, SettingsSearchEntry item) {
+    final theme = Theme.of(context);
+    final subtitle = item.subtitle;
+    return ListTile(
+      title: Text(item.title),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (subtitle != null) Text(subtitle),
+          Text(
+            '${item.category} ›',
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.outline,
+            ),
+          ),
+        ],
+      ),
+      onTap: () => _onTap(item),
+    );
+  }
+
+  void _onTap(SettingsSearchEntry item) {
+    final type = item.type;
+    if (!MediaQuery.sizeOf(context).isPortrait && type != null) {
+      Get.back(
+        result: SettingsSearchJump(type: type, title: item.title),
+      );
+      return;
+    }
+    final page = item.page;
+    if (page != null) {
+      Get.to(page);
+      return;
+    }
+    if (type != null) {
+      Get.to(
+        () => CommonSetting(
+          settingType: type,
+          highlightTitle: item.title,
+        ),
+      );
+      return;
+    }
+    SmartDialog.showToast('没有可打开的页面');
+  }
 }

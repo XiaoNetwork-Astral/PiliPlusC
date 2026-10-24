@@ -1,11 +1,10 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:PiliPlus/common/constants.dart';
 import 'package:PiliPlus/common/widgets/pair.dart';
 import 'package:PiliPlus/utils/device_utils.dart';
-import 'package:PiliPlus/utils/storage.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
-import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:webdav_client/webdav_client.dart' as webdav;
 
 typedef _WebDavConfig = ({
@@ -22,6 +21,14 @@ class WebDav {
   WebDav._internal();
   static final WebDav _instance = WebDav._internal();
   factory WebDav() => _instance;
+
+  /// 新的压缩包备份文件名
+  String get archiveFileName =>
+      'piliplus_backup_${DeviceUtils.platformName}.zip';
+
+  /// 旧版纯设置 JSON 文件名，恢复时兼容
+  String get legacyFileName =>
+      'piliplus_settings_${DeviceUtils.platformName}.json';
 
   _WebDavConfig _getConfig() {
     String directory = Pref.webdavDirectory;
@@ -72,49 +79,56 @@ class WebDav {
     }
   }
 
-  String _getFileName() {
-    return 'piliplus_settings_${DeviceUtils.platformName}.json';
-  }
-
-  Future<void> backup() async {
-    // Keep the payload bound to the same settings snapshot as the connection.
-    final config = _getConfig();
-    final data = GStorage.exportAllSettings();
-    final webdav.Client client;
+  Future<Uint8List?> _readOrNull(
+    webdav.Client client,
+    String path,
+  ) async {
     try {
-      client = await _connect(config);
-    } catch (e) {
-      SmartDialog.showToast('备份失败，请检查配置: $e');
-      return;
-    }
-    try {
-      final path = '${config.directory}/${_getFileName()}';
-      try {
-        await client.remove(path);
-      } catch (_) {}
-      await client.write(path, utf8.encode(data));
-      SmartDialog.showToast('备份成功');
-    } catch (e) {
-      SmartDialog.showToast('备份失败: $e');
-    }
-  }
-
-  Future<void> restore() async {
-    final config = _getConfig();
-    final webdav.Client client;
-    try {
-      client = await _connect(config);
-    } catch (e) {
-      SmartDialog.showToast('恢复失败，请检查配置: $e');
-      return;
-    }
-    try {
-      final path = '${config.directory}/${_getFileName()}';
       final data = await client.read(path);
-      await GStorage.importAllSettings(utf8.decode(data));
-      SmartDialog.showToast('恢复成功');
-    } catch (e) {
-      SmartDialog.showToast('恢复失败: $e');
+      return Uint8List.fromList(data);
+    } catch (_) {
+      return null;
     }
+  }
+
+  /// 服务器上是否存在备份，优先检查新压缩包，再回退旧 JSON
+  Future<bool> hasBackup() async {
+    final config = _getConfig();
+    final client = await _connect(config);
+    final archivePath = '${config.directory}/$archiveFileName';
+    if (await _readOrNull(client, archivePath) != null) {
+      return true;
+    }
+    final legacyPath = '${config.directory}/$legacyFileName';
+    return await _readOrNull(client, legacyPath) != null;
+  }
+
+  /// 上传压缩包备份
+  Future<void> uploadArchive(Uint8List bytes) async {
+    final config = _getConfig();
+    final client = await _connect(config);
+    final path = '${config.directory}/$archiveFileName';
+    try {
+      await client.remove(path);
+    } catch (_) {}
+    await client.write(path, bytes);
+  }
+
+  /// 下载新的压缩包备份，不存在时返回 null
+  Future<Uint8List?> downloadArchive() async {
+    final config = _getConfig();
+    final client = await _connect(config);
+    return _readOrNull(client, '${config.directory}/$archiveFileName');
+  }
+
+  /// 下载旧版纯设置 JSON，不存在时返回 null
+  Future<String?> downloadLegacySettings() async {
+    final config = _getConfig();
+    final client = await _connect(config);
+    final data = await _readOrNull(
+      client,
+      '${config.directory}/$legacyFileName',
+    );
+    return data == null ? null : utf8.decode(data);
   }
 }
