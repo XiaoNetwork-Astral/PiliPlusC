@@ -2,21 +2,12 @@
     <img width="200" height="200" src="assets/images/logo/logo.png">
 </div>
 
-
-
 <div align="center">
-    <h1>PiliPlusX</h1>
-<div align="center">
-
+    <h1>PiliPlusC</h1>
+    <p>使用 Flutter 开发的哔哩哔哩第三方客户端</p>
 
 中文 | [English](README.en.md)
 
-![GitHub repo size](https://img.shields.io/github/repo-size/cnctem/PiliPlusX) 
-![GitHub Repo stars](https://img.shields.io/github/stars/cnctem/PiliPlusX) 
-![GitHub all releases](https://img.shields.io/github/downloads/cnctem/PiliPlusX/total) 
-</div>
-    <p>使用Flutter开发的BiliBili第三方客户端</p>
-    
 <img src="assets/screenshots/510shots_so.png" width="32%" alt="home" />
 <img src="assets/screenshots/174shots_so.png" width="32%" alt="home" />
 <img src="assets/screenshots/850shots_so.png" width="32%" alt="home" />
@@ -25,206 +16,20 @@
 <br/>
 </div>
 
-
 <br/>
+
+PiliPlusC 基于 [PiliPlus](https://github.com/bggRGjQaUbCoE/PiliPlus) 和 PiliPlusX 继续开发，由 [idk](https://github.com/XiaoNetwork-Astral) 与 Claude（Anthropic 的 AI 助手）共同维护。名字里的 C 代表 Claude，表示这个项目是人和 AI 一起做的。
 
 ## 适配平台
 
-- [x] Android
-- [x] iOS
-- [x] Pad
-- [x] Windows
-- [x] Linux
-
-[![Packaging status](https://repology.org/badge/vertical-allrepos/piliplus.svg)](https://repology.org/project/piliplus/versions)
-
-## refactor
-
-- [ ] gRPC [wip]
-- [x] 用户界面
-- [x] 其他
-
-## feat
-
-- [x] 编辑动态
-- [x] DLNA 投屏
-- [x] 离线缓存/播放
-- [x] 移动端支持点击弹幕悬停，点赞、复制、举报 by [@My-Responsitories](https://github.com/My-Responsitories)
-- [x] 播放音频
-- [x] 跳过番剧片头/片尾
-- [x] 安卓端 `loudnorm` 适配 by [@My-Responsitories](https://github.com/My-Responsitories)
-- [x] Win/Mac 支持极验、短信登录 by [@My-Responsitories](https://github.com/My-Responsitories)
-- [x] 视频截取动图 by [@My-Responsitories](https://github.com/My-Responsitories)
-- [x] AI 原声翻译
-- [x] SuperChat
-- [x] 播放课堂视频
-- [x] 发起投票
-- [x] 发布动态/评论支持`富文本编辑`/`表情显示`/`@用户`
-- [x] 修改消息设置
-- [x] 修改聊天设置
-- [x] 展示折叠消息
-- [x] 查看用户图文
-- [x] 动态话题
-- [x] 直播分区
-- [x] 分享`视频`/`番剧`/`动态`/`专栏`/`直播`至消息
-- [x] 创建/修改/删除关注分组
-- [x] 移除粉丝
-- [x] 直播弹幕发送表情
-- [x] 收藏夹排序
-- [x] 稍后再看 ~~`未看`~~ / `未看完` / ~~`已看完`~~ 分类
-- [x] WebDAV 备份/恢复设置
-- [x] 保存评论/动态
-- [x] 高级弹幕 by [@My-Responsitories](https://github.com/My-Responsitories)
-- [x] 取消/置顶评论
-- [x] 记笔记
-- [x] 多账号支持 by [@My-Responsitories](https://github.com/My-Responsitories)
-- [x] 屏蔽带货动态/评论
-- [x] 互动视频
-- [x] 发评/动态反诈
-- [x] 高能进度条
-- [x] 滑动跳转预览视频缩略图
-- [x] Live Photo
-- [x] 复制/移动/排序收藏夹/稍后再看视频
-- [x] 超分辨率
-- [x] 合并弹幕
-- [x] 会员彩色弹幕
-- [x] 播放全部/继续播放/倒序播放
-- [x] Cookie登录
-- [x] 显示视频分段信息
-- [x] 调节字幕大小
-- [x] 调节全屏弹幕大小
-- [x] 收藏夹/稍后再看多选删除
-- [x] 搜索用户动态
-- [x] 直播弹幕
-- [x] 修改头像/用户名/签名/性别/生日
-- [x] 创建/编辑/删除收藏夹
-- [x] 评论楼中楼查看对话
-- [x] 评论楼中楼定位点击查看的评论
-- [x] 评论楼中楼按热度/时间排序
-- [x] 评论点踩
-- [x] 私信发图
-- [x] 投币动画
-- [x] 取消/追番，更新追番状态
-- [x] 取消/订阅合集
-- [x] SponsorBlock
-- [x] 显示视频完整合集
-- [x] 三连动画
-- [x] 番剧三连
-- [x] 带图评论
-- [x] 视频TAG
-- [x] 筛选搜索
-- [x] 转发动态
-- [x] 合集图片
-- [x] 删除/置顶/撤回私信
-- [x] 举报用户/评论/视频/动态
-- [x] 删除/发布/置顶文本/图片动态
-- [x] 其他
-
-## opt
-
-- [x] 专栏界面
-- [x] 私信界面
-- [x] 收藏面板
-- [x] PIP
-- [x] 视频封面
-- [x] 回复界面
-- [x] 系统通知
-- [x] 评论显示
-- [x] 亮度调节
-- [x] 视频播放
-- [x] 视频staff
-- [x] 防止bottomsheet遮挡全屏视频
-- [x] 其他
-
-## fix
-
-- [x] 番剧分集点赞/投币/收藏
-- [x] bugs
-
-<br/>
-
-## 功能
-
-- [x] 推荐视频列表(app端)
-- [x] 最热视频列表
-- [x] 热门直播
-- [x] 番剧列表
-- [x] 屏蔽黑名单内用户视频
-- [x] 无痕模式（播放视为未登录）
-- [x] 游客模式（推荐视为未登录）
-
-- [x] 用户相关
-  - [x] 粉丝、关注用户、拉黑用户查看
-  - [x] 用户主页查看
-  - [x] 关注/取关用户
-  - [x] 离线缓存
-  - [x] 稍后再看
-  - [x] 观看记录
-  - [x] 我的收藏
-  - [x] 站内私信
-  
-- [x] 动态相关
-  - [x] 全部、投稿、番剧分类查看
-  - [x] 动态评论查看
-  - [x] 动态评论回复功能
-
-- [x] 视频播放相关
-  - [x] 双击快进/快退
-  - [x] 双击播放/暂停
-  - [x] 垂直方向调节亮度/音量
-  - [x] 垂直方向上滑全屏、下滑退出全屏
-  - [x] 水平方向手势快进/快退
-  - [x] 全屏方向设置
-  - [x] 倍速选择/长按2倍速
-  - [x] 硬件加速（视机型而定）
-  - [x] 画质选择（高清画质未解锁）
-  - [x] 音质选择（视视频而定）
-  - [x] 解码格式选择（视视频而定）
-  - [x] 弹幕
-  - [x] 字幕
-  - [x] 记忆播放
-  - [x] 视频比例：高度/宽度适应、填充、包含等
-     
-- [x] 搜索相关
-  - [x] 热搜
-  - [x] 搜索历史
-  - [x] 默认搜索词
-  - [x] 投稿、番剧、直播间、用户搜索
-  - [x] 视频搜索排序、按时长筛选
-    
-- [x] 视频详情页相关
-  - [x] 视频选集(分p)切换
-  - [x] 点赞、投币、收藏/取消收藏
-  - [x] 相关视频查看
-  - [x] 评论用户身份标识
-  - [x] 评论(排序)查看、二楼评论查看
-  - [x] 主楼、二楼评论回复功能
-  - [x] 评论点赞
-  - [x] 评论笔记图片查看、保存
-
-- [x] 设置相关
-  - [x] 画质、音质、解码方式预设      
-  - [x] 图片质量设定
-  - [x] 主题模式：亮色/暗色/跟随系统
-  - [x] 震动反馈(可选)
-  - [x] 高帧率
-  - [x] 自动全屏
-  - [x] 横屏适配
-- [ ] 等等
-
-<br/>
-
-## 下载
-
-可以从 [Releases](https://github.com/bggRGjQaUbCoE/PiliPlus/releases) 下载，或克隆仓库拉取代码后在本地编译。
-
-<br/>
+Android / iOS / Pad / Windows / Linux
 
 ## 港澳台代理
 
-由于PiliPlusX使用了web接口,所以不能直接使用哔哩漫游的公共服务器
+由于本项目使用了 web 接口，所以不能直接使用哔哩漫游的公共服务器。
 
-搭建方法: 直接反向代理api.bilibili.com或添加下面几个路由的支持:
+搭建方法：直接反向代理 `api.bilibili.com`，或添加下面几个路由的支持：
+
 ```text
 /x/web-interface/view
 /x/web-interface/wbi/search/type
@@ -236,26 +41,41 @@
 /pgc/view/web/season
 ```
 
-可用的公共服务器:
+可用的公共服务器：
 
-注意:由于请求代理服务器会携带cookie，所以请使用可信任的代理服务器或不登录账号进行使用
+注意：由于请求代理服务器会携带 cookie，所以请使用可信任的代理服务器，或不登录账号进行使用。
 
-|提供者|服务器|捐赠|
-|------|------|:----:|
-|gucooing|https://blblapi.alsl.xyz||
+|提供者|服务器|
+|------|------|
+|gucooing|https://blblapi.alsl.xyz|
+
+## 下载
+
+可以从 [Releases](https://github.com/XiaoNetwork-Astral/PiliPlusC/releases) 下载，或克隆仓库拉取代码后在本地编译。
+
+## 功能
+
+- **播放**：推荐、热门、番剧、直播；弹幕（含高级弹幕、合并弹幕、会员彩色弹幕）、字幕、倍速、手势调节亮度音量与进度、记忆播放；硬件加速、超分辨率、画中画、DLNA 投屏；离线缓存与播放；SponsorBlock、跳过番剧片头片尾
+- **内容与互动**：动态（发布、编辑、转发、话题、分组）；评论（楼中楼、点赞点踩、带图、置顶）；私信；三连与投币动画；收藏夹与稍后再看的管理；搜索与筛选
+- **账号**：多账号；Cookie 登录；Win/Mac 支持极验和短信登录；无痕模式与游客模式；黑名单
+- **备份与恢复**：支持 WebDAV、压缩包和剪贴板三种方式，可选择备份的项目，压缩包可用密码加密；登录信息属于敏感信息，导出时有明确提示
+- **设置**：设置项可搜索，点击结果会跳转到对应位置并闪烁高亮
+- **本分支特色**：港澳台内容适配、弹幕字体、桌面端快捷键、剪贴板搜索、动态分组筛选
 
 ## 声明
 
-此项目（PiliPlusX）是个人为了兴趣而开发，仅用于学习和测试，请于下载后24小时内删除。
-所用API皆从官方网站收集，不提供任何破解内容。
-在此致敬原作者：[guozhigq/pilipala](https://github.com/guozhigq/pilipala)
-在此致敬上游作者：[orz12/PiliPalaX](https://github.com/orz12/PiliPalaX)
-本仓库做了更激进的修改，感谢原作者的开源精神。
+此项目（PiliPlusC）是个人为了兴趣而开发，仅用于学习和测试，请于下载后 24 小时内删除。
+所用 API 皆从官方网站收集，不提供任何破解内容。
 
-感谢使用
+由 [idk](https://github.com/XiaoNetwork-Astral) 与 Claude（Anthropic）共同维护。
 
+在此致敬：
+- 原作者：[guozhigq/pilipala](https://github.com/guozhigq/pilipala)
+- 上游作者：[bggRGjQaUbCoE/PiliPlus](https://github.com/bggRGjQaUbCoE/PiliPlus)、[orz12/PiliPalaX](https://github.com/orz12/PiliPalaX)
 
-<br/>
+本仓库做了更激进的修改，感谢各位作者的开源精神。
+
+感谢使用。
 
 ## 致谢
 
@@ -264,17 +84,3 @@
 - [media-kit](https://github.com/media-kit/media-kit)
 - [dio](https://pub.dev/packages/dio)
 - 等等
-
-<br/>
-<br/>
-<br/>
-
-## Star History
-
-<a href="https://star-history.dera.page/#cnctem/PiliPlusX&Date">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://star-history.dera.page/svg?repos=cnctem/PiliPlusX&type=Date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://star-history.dera.page/svg?repos=cnctem/PiliPlusX&type=Date" />
-   <img alt="Star History Chart" src="https://star-history.dera.page/svg?repos=cnctem/PiliPlusX&type=Date" />
- </picture>
-</a>

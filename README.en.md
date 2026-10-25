@@ -1,45 +1,42 @@
 <div align="center">
-    <img width="200" height="200" src="assets/images/logo/logo.png" alt="PiliPlus logo">
-    <h1>PiliPlus</h1>
-</div>
-
-<div align="center">
+    <img width="200" height="200" src="assets/images/logo/logo.png" alt="PiliPlusC logo">
+    <h1>PiliPlusC</h1>
+    <p>A third-party Bilibili client built with Flutter</p>
 
 [中文](README.md) | English
 
-![GitHub repo size](https://img.shields.io/github/repo-size/bggRGjQaUbCoE/PiliPlus)
-![GitHub Repo stars](https://img.shields.io/github/stars/bggRGjQaUbCoE/PiliPlus)
-![GitHub all releases](https://img.shields.io/github/downloads/bggRGjQaUbCoE/PiliPlus/total)
-
-</div>
-
-<div align="center">
-    <p>A third-party Bilibili client built with Flutter</p>
-
-<img src="assets/screenshots/510shots_so.png" width="32%" alt="PiliPlus mobile screenshot" />
-<img src="assets/screenshots/174shots_so.png" width="32%" alt="PiliPlus mobile screenshot" />
-<img src="assets/screenshots/850shots_so.png" width="32%" alt="PiliPlus mobile screenshot" />
+<img src="assets/screenshots/510shots_so.png" width="32%" alt="PiliPlusC mobile screenshot" />
+<img src="assets/screenshots/174shots_so.png" width="32%" alt="PiliPlusC mobile screenshot" />
+<img src="assets/screenshots/850shots_so.png" width="32%" alt="PiliPlusC mobile screenshot" />
 <br/>
-<img src="assets/screenshots/main_screen.png" width="96%" alt="PiliPlus desktop screenshot" />
+<img src="assets/screenshots/main_screen.png" width="96%" alt="PiliPlusC desktop screenshot" />
 <br/>
 </div>
 
 <br/>
+
+PiliPlusC continues the work of [PiliPlus](https://github.com/bggRGjQaUbCoE/PiliPlus) and PiliPlusX. It is maintained by [idk](https://github.com/XiaoNetwork-Astral) together with Claude, an AI assistant made by Anthropic. The C in the name stands for Claude, to show that the project is built by a person and an AI together.
+
+## Platforms
+
+Android / iOS / Pad / Windows / Linux
 
 ## Download
 
-Download a build from [Releases](https://github.com/bggRGjQaUbCoE/PiliPlus/releases), or clone the repository and build it locally.
+Download a build from [Releases](https://github.com/XiaoNetwork-Astral/PiliPlusC/releases), or clone the repository and build it locally.
 
 ## Disclaimer
 
-PiliPlus is a personal project developed for educational purposes, intended only for learning and testing. Please delete it within 24 hours of downloading.
+PiliPlusC is a personal project developed for educational purposes, intended only for learning and testing. Please delete it within 24 hours of downloading.
 All APIs used were collected from the official website. This project does not provide any cracked content.
 
+Maintained by [idk](https://github.com/XiaoNetwork-Astral) and Claude (Anthropic).
+
 Credit to the original project: [guozhigq/pilipala](https://github.com/guozhigq/pilipala).
-Credit to the upstream project: [orz12/PiliPalaX](https://github.com/orz12/PiliPalaX).
+Credit to the upstream projects: [bggRGjQaUbCoE/PiliPlus](https://github.com/bggRGjQaUbCoE/PiliPlus) and [orz12/PiliPalaX](https://github.com/orz12/PiliPalaX).
 This repository makes more extensive changes. Thank you to the original authors for sharing their work as open source.
 
-Thank you for using PiliPlus.
+Thank you for using PiliPlusC.
 
 ## Acknowledgements
 
@@ -48,13 +45,3 @@ Thank you for using PiliPlus.
 - [media-kit](https://github.com/media-kit/media-kit)
 - [dio](https://pub.dev/packages/dio)
 - And others
-
-## Star History
-
-<a href="https://star-history.dera.page/#bggRGjQaUbCoE/PiliPlus&Date">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://star-history.dera.page/svg?repos=bggRGjQaUbCoE/PiliPlus&type=Date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://star-history.dera.page/svg?repos=bggRGjQaUbCoE/PiliPlus&type=Date" />
-   <img alt="Star History Chart" src="https://star-history.dera.page/svg?repos=bggRGjQaUbCoE/PiliPlus&type=Date" />
- </picture>
-</a>
