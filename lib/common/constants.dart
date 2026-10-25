@@ -1,5 +1,5 @@
 abstract final class Constants {
-  static const appName = 'PiliPlusX';
+  static const appName = 'PiliPlusC';
   static const sourceCodeUrl = 'https://github.com/XiaoNetwork-Astral/PiliPlusC';
   static const upstreamCodeUrl = 'https://github.com/bggRGjQaUbCoE/PiliPlus';
 

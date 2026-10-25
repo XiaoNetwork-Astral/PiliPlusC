@@ -1,5 +1,5 @@
--keep class com.example.piliplusx.AndroidHelper { public *; }
--keep class com.example.piliplusx.AndroidHelper$ToDart { public *; }
+-keep class me.idk.piliplusc.AndroidHelper { public *; }
+-keep class me.idk.piliplusc.AndroidHelper$ToDart { public *; }
 -dontwarn javax.annotation.Nullable
 -dontwarn org.conscrypt.Conscrypt
 -dontwarn org.conscrypt.OpenSSLProvider

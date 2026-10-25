@@ -1,4 +1,4 @@
-package com.example.piliplusx
+package me.idk.piliplusc
 
 import android.annotation.SuppressLint
 import android.content.Context

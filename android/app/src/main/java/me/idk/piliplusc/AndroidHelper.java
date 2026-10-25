@@ -1,4 +1,4 @@
-package com.example.piliplusx;
+package me.idk.piliplusc;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
@@ -41,7 +41,7 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Map;
 
-import static com.example.piliplusx.MediaHelper.getRemoteAction;
+import static me.idk.piliplusc.MediaHelper.getRemoteAction;
 
 public final class AndroidHelper {
     public static final boolean isFoldable;

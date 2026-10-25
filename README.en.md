@@ -15,7 +15,7 @@
 
 <br/>
 
-PiliPlusC continues the work of [PiliPlus](https://github.com/bggRGjQaUbCoE/PiliPlus) and PiliPlusX. It is maintained by [idk](https://github.com/XiaoNetwork-Astral) together with Claude, an AI assistant made by Anthropic. The C in the name stands for Claude, to show that the project is built by a person and an AI together.
+PiliPlusC continues the work of [PiliPlus](https://github.com/bggRGjQaUbCoE/PiliPlus) and PiliPlusX. It is maintained by idk together with Claude, an AI assistant made by Anthropic. The C in the name stands for Claude, to show that the project is built by a person and an AI together.
 
 ## Platforms
 
@@ -30,7 +30,7 @@ Download a build from [Releases](https://github.com/XiaoNetwork-Astral/PiliPlusC
 PiliPlusC is a personal project developed for educational purposes, intended only for learning and testing. Please delete it within 24 hours of downloading.
 All APIs used were collected from the official website. This project does not provide any cracked content.
 
-Maintained by [idk](https://github.com/XiaoNetwork-Astral) and Claude (Anthropic).
+Maintained by idk and Claude (Anthropic).
 
 Credit to the original project: [guozhigq/pilipala](https://github.com/guozhigq/pilipala).
 Credit to the upstream projects: [bggRGjQaUbCoE/PiliPlus](https://github.com/bggRGjQaUbCoE/PiliPlus) and [orz12/PiliPalaX](https://github.com/orz12/PiliPalaX).

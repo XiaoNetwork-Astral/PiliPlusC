@@ -185,10 +185,10 @@ final class $Runnable$Type$ extends jni$_.JType<Runnable> {
   String get signature => r'Ljava/lang/Runnable;';
 }
 
-/// from: `com.example.piliplusx.AndroidHelper`
+/// from: `me.idk.piliplusc.AndroidHelper`
 extension type AndroidHelper._(jni$_.JObject _$this) implements jni$_.JObject {
   static final _class = jni$_.JClass.forName(
-    r'com/example/piliplusx/AndroidHelper',
+    r'me/idk/piliplusc/AndroidHelper',
   );
 
   /// The type which includes information such as the signature of this class.
@@ -850,14 +850,14 @@ final class $AndroidHelper$Type$ extends jni$_.JType<AndroidHelper> {
 
   @jni$_.internal
   @core$_.override
-  String get signature => r'Lcom/example/piliplusx/AndroidHelper;';
+  String get signature => r'Lme/idk/piliplusc/AndroidHelper;';
 }
 
-/// from: `com.example.piliplusx.AndroidHelper$ToDart`
+/// from: `me.idk.piliplusc.AndroidHelper$ToDart`
 extension type AndroidHelper$ToDart._(jni$_.JObject _$this)
     implements jni$_.JObject {
   static final _class = jni$_.JClass.forName(
-    r'com/example/piliplusx/AndroidHelper$ToDart',
+    r'me/idk/piliplusc/AndroidHelper$ToDart',
   );
 
   /// The type which includes information such as the signature of this class.
@@ -902,5 +902,5 @@ final class $AndroidHelper$ToDart$Type$
 
   @jni$_.internal
   @core$_.override
-  String get signature => r'Lcom/example/piliplusx/AndroidHelper$ToDart;';
+  String get signature => r'Lme/idk/piliplusc/AndroidHelper$ToDart;';
 }

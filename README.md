@@ -18,7 +18,7 @@
 
 <br/>
 
-PiliPlusC 基于 [PiliPlus](https://github.com/bggRGjQaUbCoE/PiliPlus) 和 PiliPlusX 继续开发，由 [idk](https://github.com/XiaoNetwork-Astral) 与 Claude（Anthropic 的 AI 助手）共同维护。名字里的 C 代表 Claude，表示这个项目是人和 AI 一起做的。
+PiliPlusC 基于 [PiliPlus](https://github.com/bggRGjQaUbCoE/PiliPlus) 和 PiliPlusX 继续开发，由 idk 与 Claude（Anthropic 的 AI 助手）共同维护。名字里的 C 代表 Claude，表示这个项目是人和 AI 一起做的。
 
 ## 适配平台
 
@@ -67,7 +67,7 @@ Android / iOS / Pad / Windows / Linux
 此项目（PiliPlusC）是个人为了兴趣而开发，仅用于学习和测试，请于下载后 24 小时内删除。
 所用 API 皆从官方网站收集，不提供任何破解内容。
 
-由 [idk](https://github.com/XiaoNetwork-Astral) 与 Claude（Anthropic）共同维护。
+由 idk 与 Claude（Anthropic）共同维护。
 
 在此致敬：
 - 原作者：[guozhigq/pilipala](https://github.com/guozhigq/pilipala)

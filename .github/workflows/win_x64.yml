@@ -52,14 +52,14 @@ jobs:
 
       - name: Prepare Upload
         run: |
-          mkdir -p Release/PiliPlusX-Win
-          mkdir -p PiliPlusX-Win-Setup
-          mv build/windows/x64/runner/Release/* Release/PiliPlusX-Win/
-          mv dist/**/*.exe PiliPlusX-Win-Setup/PiliPlusX_windows_${{ inputs.tag }}_x64_setup.exe
+          mkdir -p Release/PiliPlusC-Win
+          mkdir -p PiliPlusC-Win-Setup
+          mv build/windows/x64/runner/Release/* Release/PiliPlusC-Win/
+          mv dist/**/*.exe PiliPlusC-Win-Setup/PiliPlusC_windows_${{ inputs.tag }}_x64_setup.exe
 
       - name: Compress
         run: |
-          Compress-Archive -Path "Release/PiliPlusX-Win" -DestinationPath "PiliPlusX_windows_${{ inputs.tag }}_x64_portable.zip"
+          Compress-Archive -Path "Release/PiliPlusC-Win" -DestinationPath "PiliPlusC_windows_${{ inputs.tag }}_x64_portable.zip"
         shell: pwsh
 
       - name: Release
@@ -71,19 +71,19 @@ jobs:
           draft: true
           prerelease: true
           files: |
-            PiliPlusX_windows_*.zip
-            PiliPlusX-Win-Setup/PiliPlusX_windows_*.exe
+            PiliPlusC_windows_*.zip
+            PiliPlusC-Win-Setup/PiliPlusC_windows_*.exe
 
       - name: Upload windows file release
         uses: actions/upload-artifact@v7
         with:
           archive: false
           name: Windows-file-x64-release
-          path: PiliPlusX_windows_*.zip
+          path: PiliPlusC_windows_*.zip
 
       - name: Upload windows setup release
         uses: actions/upload-artifact@v7
         with:
           archive: false
           name: Windows-setup-x64-release
-          path: PiliPlusX-Win-Setup/PiliPlusX_windows_*.exe
+          path: PiliPlusC-Win-Setup/PiliPlusC_windows_*.exe

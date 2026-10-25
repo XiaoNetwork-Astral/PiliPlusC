@@ -141,7 +141,7 @@ abstract final class DebugExport {
       final text = const JsonEncoder.withIndent('  ').convert(data);
       SmartDialog.dismiss();
       final saved = await _saveFile(
-        fileName: 'piliplusx_dm_sub_${bvid}_$cid.json',
+        fileName: 'piliplusc_dm_sub_${bvid}_$cid.json',
         bytes: utf8.encode(text),
       );
       if (!saved) return;

@@ -42,11 +42,11 @@ jobs:
       - name: Prepare Upload
         run: |
           npm install --global create-dmg
-          create-dmg build/macos/Build/Products/Release/PiliPlusX.app || true
+          create-dmg build/macos/Build/Products/Release/PiliPlusC.app || true
         continue-on-error: true
 
       - name: Rename DMG
-        run: mv PiliPlusX*.dmg PiliPlusX_macos_${{ inputs.tag }}.dmg
+        run: mv PiliPlusC*.dmg PiliPlusC_macos_${{ inputs.tag }}.dmg
 
       - name: Release
         if: ${{ inputs.tag != '' && !contains(inputs.tag, 'test') }}
@@ -57,11 +57,11 @@ jobs:
           draft: true
           prerelease: true
           files: |
-            PiliPlusX_macos_${{ inputs.tag }}.dmg
+            PiliPlusC_macos_${{ inputs.tag }}.dmg
 
       - name: Upload macos release
         uses: actions/upload-artifact@v7
         with:
           archive: false
           name: macOS-release
-          path: PiliPlusX_macos_*.dmg
+          path: PiliPlusC_macos_*.dmg
