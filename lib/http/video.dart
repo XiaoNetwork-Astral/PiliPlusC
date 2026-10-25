@@ -918,6 +918,22 @@ abstract final class VideoHttp {
     return null;
   }
 
+  static Future<List<Map<String, dynamic>>?> getSubtitleItems(
+    String subtitleUrl,
+  ) async {
+    final url = subtitleUrl.startsWith('http')
+        ? subtitleUrl
+        : 'https:$subtitleUrl';
+    final res = await Request().get(url);
+    if (res.data?['body'] case final List list) {
+      return list
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList();
+    }
+    return null;
+  }
+
   // 视频排行
   static Future<LoadingState<List<HotVideoItemModel>>> getRankVideoList(
     int rid,
