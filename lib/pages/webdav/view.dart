@@ -162,23 +162,7 @@ class _WebDavSettingPageState extends State<WebDavSettingPage> {
               subtitle: _directory.isEmpty ? null : _directory,
               onTap: _editDirectory,
             ),
-            CfTile(
-              icon: Icons.wifi_tethering,
-              title: '测试连接',
-              trailing: _testing
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Text(
-                      '测试',
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                    ),
-              onTap: _testing ? null : _testConnection,
-            ),
+            CfTestButton(testing: _testing, onPressed: _testConnection),
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
               child: EncryptionSetting(

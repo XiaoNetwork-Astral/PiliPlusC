@@ -107,3 +107,35 @@ class CfHint extends StatelessWidget {
     );
   }
 }
+
+/// 靠右的椭圆形「测试连接」按钮，测试中显示转圈并不可点
+class CfTestButton extends StatelessWidget {
+  const CfTestButton({
+    super.key,
+    required this.testing,
+    required this.onPressed,
+  });
+
+  final bool testing;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      child: Align(
+        alignment: Alignment.centerRight,
+        child: FilledButton.tonal(
+          onPressed: testing ? null : onPressed,
+          child: testing
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('测试连接'),
+        ),
+      ),
+    );
+  }
+}
