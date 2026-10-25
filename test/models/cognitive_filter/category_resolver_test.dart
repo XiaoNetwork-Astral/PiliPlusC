@@ -5,31 +5,41 @@ import 'package:PiliPlus/models/cognitive_filter/filter_surface.dart';
 import 'package:PiliPlus/models/cognitive_filter/filter_tier.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+/// 内置类别的出厂阈值（等于基础档），按评测重新拟合
+const _factoryThresholds = <String, double>{
+  'attack': 0.70,
+  'discrim': 0.60,
+  'bait': 0.70,
+  'mock': 0.85,
+  'vulgar': 0.80,
+  'promo': 0.75,
+};
+
 /// 规格要求的三档映射，逐项手写以便对照
 const _expectedTierSettings = <FilterTier, Map<String, (bool, double)>>{
   FilterTier.basic: {
     'attack': (true, 0.70),
-    'discrim': (true, 0.70),
+    'discrim': (true, 0.60),
     'bait': (false, 0.70),
-    'mock': (false, 0.70),
-    'vulgar': (true, 0.70),
-    'promo': (true, 0.70),
+    'mock': (false, 0.85),
+    'vulgar': (true, 0.80),
+    'promo': (true, 0.75),
   },
   FilterTier.balanced: {
-    'attack': (true, 0.60),
-    'discrim': (true, 0.60),
-    'bait': (true, 0.60),
-    'mock': (true, 0.80),
-    'vulgar': (true, 0.60),
-    'promo': (true, 0.60),
+    'attack': (true, 0.65),
+    'discrim': (true, 0.50),
+    'bait': (true, 0.70),
+    'mock': (true, 0.85),
+    'vulgar': (true, 0.70),
+    'promo': (true, 0.50),
   },
   FilterTier.strict: {
     'attack': (true, 0.50),
-    'discrim': (true, 0.50),
-    'bait': (true, 0.50),
-    'mock': (true, 0.60),
-    'vulgar': (true, 0.50),
-    'promo': (true, 0.50),
+    'discrim': (true, 0.40),
+    'bait': (true, 0.55),
+    'mock': (true, 0.80),
+    'vulgar': (true, 0.55),
+    'promo': (true, 0.40),
   },
 };
 
@@ -118,9 +128,9 @@ void main() {
         overrides: const <String, dynamic>{},
         custom: const [],
       );
-      expect(_byId(categories, 'attack').threshold, 0.60);
+      expect(_byId(categories, 'attack').threshold, 0.65);
       expect(_byId(categories, 'mock').enabled, isTrue);
-      expect(_byId(categories, 'mock').threshold, 0.80);
+      expect(_byId(categories, 'mock').threshold, 0.85);
     });
 
     test('非专业模式忽略覆盖和自定义类别', () {
@@ -169,7 +179,7 @@ void main() {
       expect(mock.surfaces, {FilterSurface.danmaku});
       // 覆盖里没有 name，沿用出厂值
       expect(mock.name, _builtin('mock').name);
-      expect(mock.threshold, FilterCategory.defaultThreshold);
+      expect(mock.threshold, _builtin('mock').threshold);
 
       // 严格档下 bait 应开启，但专业模式只看出厂值
       expect(_byId(categories, 'bait').enabled, isFalse);
@@ -196,7 +206,7 @@ void main() {
       );
       expect(
         _byId(categories, 'vulgar').threshold,
-        FilterCategory.defaultThreshold,
+        _builtin('vulgar').threshold,
       );
       expect(_byId(categories, 'vulgar').question, _builtin('vulgar').question);
     });
@@ -218,7 +228,7 @@ void main() {
       );
       final attack = _byId(categories, 'attack');
       expect(attack.enabled, isTrue);
-      expect(attack.threshold, FilterCategory.defaultThreshold);
+      expect(attack.threshold, _builtin('attack').threshold);
       expect(attack.surfaces, FilterSurface.values.toSet());
       expect(attack.question, _builtin('attack').question);
     });
@@ -333,7 +343,7 @@ void main() {
       for (final category in builtinCategories) {
         expect(category.builtin, isTrue);
         expect(category.surfaces, FilterSurface.values.toSet());
-        expect(category.threshold, FilterCategory.defaultThreshold);
+        expect(category.threshold, _factoryThresholds[category.id]);
         expect(category.question, isNotEmpty);
         expect(category.question.startsWith('只判断'), isFalse);
         expect(category.trueCriteria, isNotEmpty);
