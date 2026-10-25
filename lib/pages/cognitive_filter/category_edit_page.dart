@@ -114,11 +114,7 @@ class _CategoryEditPageState extends State<CategoryEditPage> {
     } else {
       current['falseCriteria'] = _falseCriteria;
     }
-    if (_sameThreshold(_threshold, factory.threshold)) {
-      current.remove('threshold');
-    } else {
-      current['threshold'] = _threshold;
-    }
+    current.remove('threshold');
     if (_sameSurfaces(_surfaces, factory.surfaces)) {
       current.remove('surfaces');
     } else {
@@ -258,13 +254,9 @@ class _CategoryEditPageState extends State<CategoryEditPage> {
       _question = factory.question;
       _trueCriteria = factory.trueCriteria;
       _falseCriteria = factory.falseCriteria;
-      _threshold = factory.threshold.clamp(0.30, 0.95).toDouble();
       _surfaces = Set<FilterSurface>.of(factory.surfaces);
     });
   }
-
-  bool _sameThreshold(double value, double other) =>
-      (value - other).abs() < 0.0001;
 
   bool _sameSurfaces(Set<FilterSurface> value, Set<FilterSurface> other) =>
       value.length == other.length && value.containsAll(other);
@@ -306,12 +298,13 @@ class _CategoryEditPageState extends State<CategoryEditPage> {
               subtitleMaxLines: 2,
               onTap: _editFalseCriteria,
             ),
-            CfTile(
-              icon: Icons.tune,
-              title: '屏蔽阈值',
-              subtitle: _threshold.toStringAsFixed(2),
-              onTap: _editThreshold,
-            ),
+            if (!_builtin)
+              CfTile(
+                icon: Icons.tune,
+                title: '屏蔽阈值',
+                subtitle: _threshold.toStringAsFixed(2),
+                onTap: _editThreshold,
+              ),
             CfTile(
               icon: Icons.apps,
               title: '应用于',

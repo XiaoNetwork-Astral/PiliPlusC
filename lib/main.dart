@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:PiliPlus/build_config.dart';
@@ -16,6 +17,7 @@ import 'package:PiliPlus/services/download/download_service.dart';
 import 'package:PiliPlus/services/logger.dart';
 import 'package:PiliPlus/services/service_locator.dart';
 import 'package:PiliPlus/utils/cache_manager.dart';
+import 'package:PiliPlus/utils/cognitive_filter/ai/ai_runtime.dart';
 import 'package:PiliPlus/utils/cognitive_filter/rule_store.dart';
 import 'package:PiliPlus/utils/danmaku_font.dart';
 import 'package:PiliPlus/utils/date_utils.dart';
@@ -127,6 +129,12 @@ void main() async {
     RuleMigration.runIfNeeded();
   } catch (e) {
     if (kDebugMode) debugPrint('rule migration error: $e');
+  }
+  try {
+    // 不阻塞启动，失败时保持未激活
+    unawaited(AiFilterRuntime.instance.init());
+  } catch (e) {
+    if (kDebugMode) debugPrint('ai filter init error: $e');
   }
   await DanmakuFont.init();
   ScaledWidgetsFlutterBinding.instance.scaleFactor = Pref.uiScale;

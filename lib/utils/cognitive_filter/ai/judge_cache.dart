@@ -27,11 +27,14 @@ class MemoryJudgeCacheStore implements JudgeCacheStore {
   }
 }
 
-/// 一次缓存查询的结果，缺失的部分为 null
+/// 一次缓存查询的结果，缺失的部分为 null / 空
 class CacheHit {
-  const CacheHit({required this.gate, required this.scores});
+  const CacheHit({required this.options, required this.scores});
 
-  final double? gate;
+  /// 八个固定选项的概率；没有可用内容时为 null
+  final Map<String, double>? options;
+
+  /// 通过指纹校验的自定义类别概率，键为类别 id
   final Map<String, double> scores;
 }
 
@@ -45,18 +48,24 @@ class _ScoreEntry {
 class _CacheEntry {
   _CacheEntry({
     required this.ts,
-    required this.scores,
-    this.gate,
-    this.gateFp,
-  });
+    Map<String, double>? options,
+    Map<String, _ScoreEntry>? scores,
+  }) : options = options ?? <String, double>{},
+       scores = scores ?? <String, _ScoreEntry>{};
 
   int ts;
-  double? gate;
-  String? gateFp;
+
+  /// 选项名（正常/攻击/…）到概率，与当前启用了哪些类别、阈值无关
+  final Map<String, double> options;
+
+  /// 自定义类别 id 到带指纹的概率
   final Map<String, _ScoreEntry> scores;
 }
 
 /// 判定分数缓存：容量与过期时间可调，按 LRU 淘汰，读取命中会刷新顺序
+///
+/// 选项概率不依赖用户启用的类别与阈值，因此改开关后仍可复用；自定义类别
+/// 的答案按类别指纹单独校验。落盘版本变化时整份丢弃重建。
 class JudgeCache {
   JudgeCache({
     required JudgeCacheStore store,
@@ -66,7 +75,8 @@ class JudgeCache {
   }) : _store = store,
        _now = now ?? DateTime.now;
 
-  static const int _version = 1;
+  /// 选项概率格式与旧版（门控 + 逐类别）不同，升到 2 并丢弃旧数据
+  static const int _version = 2;
 
   final JudgeCacheStore _store;
   final int capacity;
@@ -81,25 +91,24 @@ class JudgeCache {
   /// 是否有尚未写入 store 的改动
   bool get dirty => _dirty;
 
-  /// 读取 store；解析失败当作空缓存
+  /// 读取 store；解析失败或版本不匹配当作空缓存
   Future<void> load() async {
     try {
       final raw = await _store.read();
       if (raw == null || raw.trim().isEmpty) {
-        _entries.clear();
-        _dirty = false;
+        _clear();
         return;
       }
       final decoded = jsonDecode(raw);
-      if (decoded is! Map) {
-        _entries.clear();
-        _dirty = false;
+      if (decoded is! Map || decoded['version'] != _version) {
+        _clear();
         return;
       }
-      // 兼容带 version/entries 外壳与直接以文字为键两种格式
-      final rawEntries = decoded['entries'] is Map
-          ? decoded['entries'] as Map
-          : decoded;
+      final rawEntries = decoded['entries'];
+      if (rawEntries is! Map) {
+        _clear();
+        return;
+      }
       final loaded = <String, _CacheEntry>{};
       rawEntries.forEach((key, value) {
         if (key is! String) {
@@ -116,15 +125,14 @@ class JudgeCache {
       _pruneExpired();
       _dirty = false;
     } catch (_) {
-      _entries.clear();
-      _dirty = false;
+      _clear();
     }
   }
 
-  /// 查缓存，只返回指纹仍匹配的部分；没有可用内容时返回 null
+  /// 查缓存，只返回指纹仍匹配的自定义类别；没有可用内容时返回 null
   CacheHit? lookup(
     String key, {
-    required List<FilterCategory> categories,
+    required List<FilterCategory> customCategories,
   }) {
     final entry = _entries[key];
     if (entry == null) {
@@ -135,48 +143,45 @@ class JudgeCache {
       return null;
     }
 
-    final gateFp = gateFingerprint(categories);
-    final gate = entry.gate != null && entry.gateFp == gateFp
-        ? entry.gate
-        : null;
+    final options = entry.options.isEmpty
+        ? null
+        : Map<String, double>.from(entry.options);
     final scores = <String, double>{};
-    for (final category in categories) {
+    for (final category in customCategories) {
       final score = entry.scores[category.id];
       if (score != null && score.fp == categoryFingerprint(category)) {
         scores[category.id] = score.score;
       }
     }
-    if (gate == null && scores.isEmpty) {
+    if (options == null && scores.isEmpty) {
       _entries.remove(key);
       return null;
     }
     _touch(key);
-    return CacheHit(gate: gate, scores: scores);
+    return CacheHit(options: options, scores: scores);
   }
 
-  /// 写入总问题分数
-  void putGate(
-    String key,
-    double score,
-    List<FilterCategory> categories,
-  ) {
-    final entry = _entries.remove(key) ??
-        _CacheEntry(ts: 0, scores: <String, _ScoreEntry>{});
+  /// 写入八个选项的概率，保留已有的自定义类别答案
+  void putOptions(String key, Map<String, double> options) {
+    final entry = _entries.remove(key) ?? _CacheEntry(ts: 0);
     entry.ts = _now().millisecondsSinceEpoch;
-    entry.gate = _clamp(score);
-    entry.gateFp = gateFingerprint(categories);
+    entry.options
+      ..clear()
+      ..addAll(<String, double>{
+        for (final item in options.entries)
+          if (item.value.isFinite) item.key: _clamp(item.value),
+      });
     _entries[key] = entry;
     _dirty = true;
   }
 
-  /// 写入逐类别分数，只保存传入类别里存在的项
-  void putScores(
+  /// 写入自定义类别答案，只保存传入类别里存在的项
+  void putCustomScores(
     String key,
     Map<String, double> scores,
     List<FilterCategory> categories,
   ) {
-    final entry = _entries.remove(key) ??
-        _CacheEntry(ts: 0, scores: <String, _ScoreEntry>{});
+    final entry = _entries.remove(key) ?? _CacheEntry(ts: 0);
     entry.ts = _now().millisecondsSinceEpoch;
     for (final category in categories) {
       final score = scores[category.id];
@@ -212,24 +217,14 @@ class JudgeCache {
     _dirty = false;
   }
 
-  /// 类别指纹：name + question + trueCriteria + falseCriteria 的 FNV-1a
+  /// 自定义类别指纹：name + question + trueCriteria + falseCriteria 的 FNV-1a
   static String categoryFingerprint(FilterCategory category) {
     return _hex(
       _fnv1a(
-        category.name +
-            category.question +
-            category.trueCriteria +
-            category.falseCriteria,
+        '${category.name}${category.question}'
+        '${category.trueCriteria}${category.falseCriteria}',
       ),
     );
-  }
-
-  /// 总问题指纹：当前启用类别指纹排序后拼接再哈希
-  static String gateFingerprint(List<FilterCategory> categories) {
-    final fingerprints = <String>[
-      for (final category in categories) categoryFingerprint(category),
-    ]..sort();
-    return _hex(_fnv1a(fingerprints.join()));
   }
 
   void _touch(String key) {
@@ -243,6 +238,11 @@ class JudgeCache {
     _entries.removeWhere((_, entry) => _isExpired(entry));
   }
 
+  void _clear() {
+    _entries.clear();
+    _dirty = false;
+  }
+
   bool _isExpired(_CacheEntry entry) {
     final age = _now().millisecondsSinceEpoch - entry.ts;
     return age >= ttl.inMilliseconds;
@@ -251,8 +251,10 @@ class JudgeCache {
   Map<String, dynamic> _encodeEntry(_CacheEntry entry) {
     return <String, dynamic>{
       'ts': entry.ts,
-      if (entry.gate != null) 'gate': _round2(entry.gate!),
-      if (entry.gateFp != null) 'gateFp': entry.gateFp,
+      'options': <String, dynamic>{
+        for (final item in entry.options.entries)
+          item.key: _round2(item.value),
+      },
       'scores': <String, dynamic>{
         for (final item in entry.scores.entries)
           item.key: <dynamic>[_round2(item.value.score), item.value.fp],
@@ -268,16 +270,20 @@ class JudgeCache {
     if (ts is! num) {
       return null;
     }
-    final rawGate = value['gate'];
-    double? gate;
-    if (rawGate is num) {
-      final number = rawGate.toDouble();
-      if (number.isFinite) {
-        gate = number.clamp(0.0, 1.0).toDouble();
-      }
+    final options = <String, double>{};
+    final rawOptions = value['options'];
+    if (rawOptions is Map) {
+      rawOptions.forEach((key, item) {
+        if (key is! String || item is! num) {
+          return;
+        }
+        final number = item.toDouble();
+        if (!number.isFinite) {
+          return;
+        }
+        options[key] = number.clamp(0.0, 1.0).toDouble();
+      });
     }
-    final rawGateFp = value['gateFp'];
-    final gateFp = rawGateFp is String ? rawGateFp : null;
     final scores = <String, _ScoreEntry>{};
     final rawScores = value['scores'];
     if (rawScores is Map) {
@@ -300,12 +306,7 @@ class JudgeCache {
         );
       });
     }
-    return _CacheEntry(
-      ts: ts.toInt(),
-      gate: gate,
-      gateFp: gateFp,
-      scores: scores,
-    );
+    return _CacheEntry(ts: ts.toInt(), options: options, scores: scores);
   }
 
   static double _clamp(double value) {

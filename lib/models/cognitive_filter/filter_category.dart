@@ -2,7 +2,8 @@ import 'package:PiliPlus/models/cognitive_filter/filter_surface.dart';
 
 /// AI 屏蔽的一个类别
 ///
-/// 每个类别对应一道是非题，模型给出「是」的概率达到 [threshold] 时屏蔽；
+/// 内置类别对应选择题里的一个选项，启用类别的概率之和达到共用的总阈值时屏蔽；
+/// 自定义类别对应一道是非题，「是」的概率达到自己的 [threshold] 时屏蔽。
 /// [question] 不含「只判断【弹幕】这一条：」前缀，该前缀在发请求时按适用面拼接。
 class FilterCategory {
   const FilterCategory({
@@ -18,7 +19,7 @@ class FilterCategory {
     required this.builtin,
   });
 
-  /// 缺省阈值，与出厂「基础」档一致
+  /// 自定义类别的缺省阈值
   static const double defaultThreshold = 0.70;
 
   /// 固定不变的标识，存储里的 id 永不改动

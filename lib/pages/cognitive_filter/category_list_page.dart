@@ -21,11 +21,24 @@ class CategoryRulesPage extends StatefulWidget {
 
 class _CategoryRulesPageState extends State<CategoryRulesPage> {
   late List<FilterCategory> _categories;
+  late double _threshold;
 
   @override
   void initState() {
     super.initState();
     _categories = CognitiveFilterConfig.effectiveCategories;
+    _threshold = Pref.cfProThreshold;
+  }
+
+  /// 敏感度 0 到 100，阈值越低越敏感
+  int get _sensitivityPercent => ((0.95 - _threshold) / 0.65 * 100).round();
+
+  void _onSensitivityChanged(double value) {
+    setState(() => _threshold = 1.25 - value);
+  }
+
+  void _onSensitivityChangeEnd(double value) {
+    Pref.cfProThreshold = 1.25 - value;
   }
 
   void _reload() {
@@ -84,6 +97,26 @@ class _CategoryRulesPageState extends State<CategoryRulesPage> {
         child: ListView(
           padding: EdgeInsets.only(bottom: bottomPadding),
           children: [
+            CfTile(
+              icon: Icons.tune,
+              title: '敏感度',
+              trailing: Text(
+                '$_sensitivityPercent%',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Slider(
+                min: 0.30,
+                max: 0.95,
+                divisions: 13,
+                value: (1.25 - _threshold).clamp(0.30, 0.95).toDouble(),
+                label: '$_sensitivityPercent%',
+                onChanged: _onSensitivityChanged,
+                onChangeEnd: _onSensitivityChangeEnd,
+              ),
+            ),
             for (final category in _categories)
               CfTile(
                 title: category.name,

@@ -8,6 +8,7 @@ abstract final class CognitiveFilterConfig {
   static List<FilterCategory> get effectiveCategories => resolveCategories(
     proMode: Pref.cfFilterProMode,
     tier: Pref.cfFilterTier,
+    proThreshold: Pref.cfProThreshold,
     overrides: Pref.cfCategoryOverrides,
     custom: Pref.cfCustomCategories,
   );
@@ -19,6 +20,7 @@ abstract final class CognitiveFilterConfig {
     if (Pref.cfFilterProMode) return;
     if (Pref.cfCategoryOverrides.isEmpty) {
       Pref.cfCategoryOverrides = overridesFromTier(Pref.cfFilterTier);
+      Pref.cfProThreshold = Pref.cfFilterTier.threshold;
     }
     Pref.cfFilterProMode = true;
   }

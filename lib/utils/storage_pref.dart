@@ -1320,6 +1320,69 @@ abstract final class Pref {
   static set cfApiKey(String value) =>
       _setting.put(SettingBoxKey.cfApiKey, value);
 
+  /// 每日 AI 用量上限（美元），0 表示不限制
+  static double get cfAiDailyCapUsd {
+    final value = _setting.get(
+      SettingBoxKey.cfAiDailyCapUsd,
+      defaultValue: 1.0,
+    );
+    if (value is num) {
+      final cap = value.toDouble();
+      if (cap.isFinite) return cap < 0 ? 0.0 : cap;
+    }
+    return 1.0;
+  }
+
+  static set cfAiDailyCapUsd(double value) => _setting.put(
+    SettingBoxKey.cfAiDailyCapUsd,
+    value.isFinite && value > 0 ? value : 0.0,
+  );
+
+  /// 用量统计所属的本地日期，格式 yyyy-MM-dd
+  static String get cfAiUsageDay =>
+      _setting.get(SettingBoxKey.cfAiUsageDay, defaultValue: '');
+
+  static set cfAiUsageDay(String value) =>
+      _setting.put(SettingBoxKey.cfAiUsageDay, value);
+
+  static int get cfAiUsageInputTokens =>
+      _usageInt(SettingBoxKey.cfAiUsageInputTokens);
+
+  static set cfAiUsageInputTokens(int value) =>
+      _setting.put(SettingBoxKey.cfAiUsageInputTokens, _nonNegative(value));
+
+  static int get cfAiUsageOutputTokens =>
+      _usageInt(SettingBoxKey.cfAiUsageOutputTokens);
+
+  static set cfAiUsageOutputTokens(int value) =>
+      _setting.put(SettingBoxKey.cfAiUsageOutputTokens, _nonNegative(value));
+
+  static int get cfAiUsageRequests =>
+      _usageInt(SettingBoxKey.cfAiUsageRequests);
+
+  static set cfAiUsageRequests(int value) =>
+      _setting.put(SettingBoxKey.cfAiUsageRequests, _nonNegative(value));
+
+  static int get cfAiUsageItems => _usageInt(SettingBoxKey.cfAiUsageItems);
+
+  static set cfAiUsageItems(int value) =>
+      _setting.put(SettingBoxKey.cfAiUsageItems, _nonNegative(value));
+
+  /// 专业模式的总阈值，数值越小越敏感；没设过时取当前档位的阈值
+  static double get cfProThreshold {
+    final value = _setting.get(SettingBoxKey.cfProThreshold);
+    if (value is num) {
+      final threshold = value.toDouble();
+      if (threshold.isFinite) return threshold.clamp(0.30, 0.95).toDouble();
+    }
+    return cfFilterTier.threshold;
+  }
+
+  static set cfProThreshold(double value) => _setting.put(
+    SettingBoxKey.cfProThreshold,
+    value.clamp(0.30, 0.95).toDouble(),
+  );
+
   static Map<String, dynamic> get cfCategoryOverrides {
     final raw = _setting.get(SettingBoxKey.cfCategoryOverrides);
     if (raw is! String || raw.isEmpty) return const <String, dynamic>{};
@@ -1408,4 +1471,15 @@ abstract final class Pref {
 
   static set cfRuleMigrationDone(bool value) =>
       _setting.put(SettingBoxKey.cfRuleMigrationDone, value);
+
+  static int _usageInt(String key) {
+    final value = _setting.get(key, defaultValue: 0);
+    if (value is num) {
+      final number = value.toDouble();
+      if (number.isFinite) return _nonNegative(number.toInt());
+    }
+    return 0;
+  }
+
+  static int _nonNegative(int value) => value < 0 ? 0 : value;
 }

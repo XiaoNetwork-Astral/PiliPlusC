@@ -25,6 +25,15 @@ abstract final class GStorage {
     SettingBoxKey.cfApiKey,
   };
 
+  /// 只属于本机的用量计数，不写入备份，导入时保留本机原值
+  static const Set<String> _deviceLocalSettingKeys = {
+    SettingBoxKey.cfAiUsageDay,
+    SettingBoxKey.cfAiUsageInputTokens,
+    SettingBoxKey.cfAiUsageOutputTokens,
+    SettingBoxKey.cfAiUsageRequests,
+    SettingBoxKey.cfAiUsageItems,
+  };
+
   static late final Box<UserInfoData> userInfo;
   static late final Box<dynamic> historyWord;
   static late final Box<dynamic> localCache;
@@ -87,9 +96,12 @@ abstract final class GStorage {
   }
 
   static String exportAllSettings() {
-    // 密码不进备份，换设备后需要重新输入
+    // 密码不进备份，换设备后需要重新输入；用量计数只属于本机
     final settings = Map<String, dynamic>.from(setting.toMap());
     for (final key in _secretSettingKeys) {
+      settings.remove(key);
+    }
+    for (final key in _deviceLocalSettingKeys) {
       settings.remove(key);
     }
     return Utils.jsonEncoder.convert({
@@ -114,7 +126,7 @@ abstract final class GStorage {
     ]);
   }
 
-  /// 导入设置时保留本机已有的密码，避免被旧备份里的空值覆盖
+  /// 导入设置时保留本机已有的密码与用量，避免被旧备份里的值覆盖
   static Future<void> _importSettingBox(Object? value) async {
     if (value is! Map) {
       throw ArgumentError('设置数据格式不正确');
@@ -133,10 +145,22 @@ abstract final class GStorage {
       }
     }
 
+    final deviceLocal = <String, dynamic>{};
+    for (final key in _deviceLocalSettingKeys) {
+      final local = setting.get(key);
+      data.remove(key);
+      if (local != null) {
+        deviceLocal[key] = local;
+      }
+    }
+
     await setting.clear();
     await setting.putAll(data);
     if (secrets.isNotEmpty) {
       await setting.putAll(secrets);
+    }
+    if (deviceLocal.isNotEmpty) {
+      await setting.putAll(deviceLocal);
     }
   }
 

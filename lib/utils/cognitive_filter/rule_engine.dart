@@ -1,5 +1,8 @@
+import 'package:PiliPlus/models/cognitive_filter/filter_rule.dart';
+import 'package:PiliPlus/models/cognitive_filter/filter_surface.dart';
 import 'package:PiliPlus/models/cognitive_filter/rule_scope.dart';
 import 'package:PiliPlus/models/cognitive_filter/rule_set.dart';
+import 'package:PiliPlus/utils/cognitive_filter/ai/ai_runtime.dart';
 import 'package:PiliPlus/utils/cognitive_filter/rule_store.dart';
 import 'package:PiliPlus/utils/global_data.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
@@ -47,28 +50,22 @@ class RuleEngine {
     rules: RuleStore.instance.rules,
   );
 
-  /// 文本是否命中关键词或正则
+  /// 文本是否命中关键词或正则，命中时记一条规则屏蔽
   bool matchText(RuleScope scope, String text) {
-    final enabled = Pref.cfRuleFilterEnabled;
-    if (!enabled || text.isEmpty) return false;
-    _ensureCache();
-    return _textOf(scope).matchesText(text, enabled: enabled);
+    if (text.isEmpty) return false;
+    return snapshot(scope).matchText(text);
   }
 
   /// 某个范围内该 UID 是否被屏蔽，被禁用或被收窄的 UID 返回 false
-  bool userBlocked(RuleScope scope, int mid) {
-    final enabled = Pref.cfRuleFilterEnabled;
-    if (!enabled || mid <= 0) return false;
-    _ensureCache();
-    return _usersOf(scope).blocksMid(mid, enabled: enabled);
+  bool userBlocked(RuleScope scope, int mid, {String? text}) {
+    if (mid <= 0) return false;
+    return snapshot(scope).userBlocked(mid, text: text);
   }
 
   /// 弹幕发送者哈希是否被屏蔽，包含 UID 派生哈希与只有哈希的规则
-  bool danmakuHashBlocked(String midHash) {
-    final enabled = Pref.cfRuleFilterEnabled;
-    if (!enabled || midHash.isEmpty) return false;
-    _ensureCache();
-    return _usersOf(RuleScope.danmaku).blocksHash(midHash, enabled: enabled);
+  bool danmakuHashBlocked(String midHash, {String? text}) {
+    if (midHash.isEmpty) return false;
+    return snapshot(RuleScope.danmaku).hashBlocked(midHash, text: text);
   }
 
   /// 取某个范围当前规则的快照，适合在循环里反复判断
@@ -77,25 +74,73 @@ class RuleEngine {
   RuleSnapshot snapshot(RuleScope scope) {
     if (!Pref.cfRuleFilterEnabled) return RuleSnapshot.off;
     _ensureCache();
-    return RuleSnapshot._(_textOf(scope), _usersOf(scope));
+    return RuleSnapshot._(scope, _textOf(scope), _usersOf(scope));
   }
 }
 
 /// 某个范围规则的只读快照，见 [RuleEngine.snapshot]
+///
+/// 命中时自动写入屏蔽历史，同一内容的重复命中由记录入口去重与限速。
 class RuleSnapshot {
-  const RuleSnapshot._(this._text, this._users);
+  const RuleSnapshot._(this._scope, this._text, this._users);
 
   /// 不屏蔽任何内容的快照，用于总开关关闭时
-  static const RuleSnapshot off = RuleSnapshot._(null, null);
+  static const RuleSnapshot off = RuleSnapshot._(null, null, null);
 
+  final RuleScope? _scope;
   final RuleSet? _text;
   final UserRuleSet? _users;
 
-  bool matchText(String text) =>
-      text.isNotEmpty && (_text?.matchesText(text) ?? false);
+  bool matchText(String text) {
+    if (text.isEmpty) return false;
+    final rule = _text?.firstMatch(text);
+    if (rule == null) return false;
+    _record(rule, text);
+    return true;
+  }
 
-  bool userBlocked(int mid) => mid > 0 && (_users?.blocksMid(mid) ?? false);
+  /// [text] 是命中的内容，拿不到时记录 UID
+  bool userBlocked(int mid, {String? text}) {
+    if (mid <= 0) return false;
+    final rule = _users?.ruleOfMid(mid);
+    if (rule == null) return false;
+    _record(rule, text == null || text.isEmpty ? mid.toString() : text);
+    return true;
+  }
 
-  bool hashBlocked(String midHash) =>
-      midHash.isNotEmpty && (_users?.blocksHash(midHash) ?? false);
+  /// [text] 是命中的弹幕内容，拿不到时记录固定说明
+  bool hashBlocked(String midHash, {String? text}) {
+    if (midHash.isEmpty) return false;
+    final rule = _users?.ruleOfHash(midHash);
+    if (rule == null) return false;
+    _record(rule, text == null || text.isEmpty ? 'B 站弹幕用户' : text);
+    return true;
+  }
+
+  void _record(FilterRule rule, String text) {
+    final surface = _surfaceOf(_scope);
+    if (surface == null) return;
+    AiFilterRuntime.instance.recordRuleBlock(
+      surface: surface,
+      text: text,
+      ruleType: rule.type.label,
+      content: rule.isHashOnly
+          ? 'B 站弹幕用户${_hashPrefix(rule.midHash!)}'
+          : rule.content,
+      ruleId: rule.id,
+    );
+  }
 }
+
+/// 规则范围到屏蔽历史适用面的映射，私信不记录
+FilterSurface? _surfaceOf(RuleScope? scope) => switch (scope) {
+  RuleScope.danmaku => FilterSurface.danmaku,
+  RuleScope.reply => FilterSurface.reply,
+  RuleScope.dynamic => FilterSurface.dynamic,
+  RuleScope.video || RuleScope.zone => FilterSurface.video,
+  RuleScope.live => FilterSurface.live,
+  _ => null,
+};
+
+String _hashPrefix(String hash) =>
+    hash.length <= 8 ? hash : hash.substring(0, 8);

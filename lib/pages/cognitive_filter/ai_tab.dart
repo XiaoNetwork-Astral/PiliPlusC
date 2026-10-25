@@ -1,6 +1,9 @@
+import 'package:PiliPlus/common/widgets/dialog/text_input_dialog.dart';
 import 'package:PiliPlus/pages/cognitive_filter/category_list_page.dart';
+import 'package:PiliPlus/pages/cognitive_filter/judge_trial_dialog.dart';
 import 'package:PiliPlus/pages/cognitive_filter/provider_page.dart';
 import 'package:PiliPlus/pages/cognitive_filter/widgets.dart';
+import 'package:PiliPlus/utils/cognitive_filter/ai/ai_runtime.dart';
 import 'package:PiliPlus/utils/storage.dart';
 import 'package:PiliPlus/utils/storage_key.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
@@ -88,6 +91,34 @@ class _AiFilterTabState extends State<AiFilterTab> {
     setState(() {});
   }
 
+  Future<void> _editDailyCap() async {
+    final cap = Pref.cfAiDailyCapUsd;
+    final result = await showTextInputDialog(
+      context: context,
+      title: '每日用量上限',
+      initialValue: cap > 0 ? _formatUsd(cap) : '0',
+      hintText: '0 表示不限制',
+      suffixText: '美元',
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      validator: (value) {
+        final number = double.tryParse(value);
+        if (number == null || !number.isFinite || number < 0) {
+          return '请输入不小于 0 的数字';
+        }
+        return null;
+      },
+    );
+    if (result == null) return;
+    Pref.cfAiDailyCapUsd = double.parse(result);
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  String _formatUsd(double value) {
+    final text = value.toStringAsFixed(3);
+    return text.replaceFirst(RegExp(r'\.?0+$'), '');
+  }
+
   Future<void> _openCategories() async {
     await Get.to(() => const CategoryRulesPage());
     if (!mounted) return;
@@ -113,13 +144,31 @@ class _AiFilterTabState extends State<AiFilterTab> {
           title: 'AI 提供商',
           onTap: _openProvider,
         ),
-        if (widget.proMode)
+        CfTile(
+          icon: Icons.savings_outlined,
+          title: '每日用量上限',
+          subtitle: '今日已用 \$${AiFilterRuntime.instance.usdToday.toStringAsFixed(3)}',
+          trailing: Text(
+            Pref.cfAiDailyCapUsd > 0
+                ? '\$${_formatUsd(Pref.cfAiDailyCapUsd)}'
+                : '不限制',
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
+          onTap: _editDailyCap,
+        ),
+        if (widget.proMode) ...[
           CfTile(
             icon: Icons.category_outlined,
             title: '类别规则',
             subtitle: '调整每个类别的开关、阈值与适用面',
             onTap: _openCategories,
           ),
+          CfTile(
+            icon: Icons.science_outlined,
+            title: '试判定',
+            onTap: () => showJudgeTrialDialog(context),
+          ),
+        ],
       ],
     );
   }

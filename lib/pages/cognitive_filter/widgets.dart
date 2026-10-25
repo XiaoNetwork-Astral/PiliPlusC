@@ -12,6 +12,8 @@ class CfTile extends StatelessWidget {
     this.onTap,
     this.enabled = true,
     this.subtitleMaxLines,
+    this.titleMaxLines,
+    this.subtitleWidget,
   });
 
   final String title;
@@ -26,6 +28,12 @@ class CfTile extends StatelessWidget {
   /// 副标题最多显示的行数，超出以省略号截断
   final int? subtitleMaxLines;
 
+  /// 标题最多显示的行数，超出以省略号截断
+  final int? titleMaxLines;
+
+  /// 自定义副标题，设置后忽略 [subtitle]
+  final Widget? subtitleWidget;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -35,20 +43,26 @@ class CfTile extends StatelessWidget {
       leading: icon == null ? null : Icon(icon),
       title: Text(
         title,
+        maxLines: titleMaxLines,
+        overflow: titleMaxLines == null ? null : TextOverflow.ellipsis,
         style: theme.textTheme.titleMedium!.copyWith(
           color: enabled ? null : theme.colorScheme.outline,
         ),
       ),
-      subtitle: subtitle == null
-          ? null
-          : Text(
-              subtitle!,
-              maxLines: subtitleMaxLines,
-              overflow: subtitleMaxLines == null ? null : TextOverflow.ellipsis,
-              style: theme.textTheme.labelMedium!.copyWith(
-                color: theme.colorScheme.outline,
-              ),
-            ),
+      subtitle:
+          subtitleWidget ??
+          (subtitle == null
+              ? null
+              : Text(
+                  subtitle!,
+                  maxLines: subtitleMaxLines,
+                  overflow: subtitleMaxLines == null
+                      ? null
+                      : TextOverflow.ellipsis,
+                  style: theme.textTheme.labelMedium!.copyWith(
+                    color: theme.colorScheme.outline,
+                  ),
+                )),
       trailing: trailing,
     );
   }
@@ -139,3 +153,36 @@ class CfTestButton extends StatelessWidget {
     );
   }
 }
+
+/// 小标签，用来标出来源、适用面、类别、分数这类短信息
+class CfBadge extends StatelessWidget {
+  const CfBadge(this.text, {super.key, this.tone = CfBadgeTone.neutral});
+
+  final String text;
+  final CfBadgeTone tone;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final (background, foreground) = switch (tone) {
+      .primary => (scheme.primaryContainer, scheme.onPrimaryContainer),
+      .secondary => (scheme.secondaryContainer, scheme.onSecondaryContainer),
+      .neutral => (scheme.surfaceContainerHighest, scheme.onSurfaceVariant),
+    };
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        child: Text(
+          text,
+          style: TextStyle(fontSize: 12, height: 1.3, color: foreground),
+        ),
+      ),
+    );
+  }
+}
+
+enum CfBadgeTone { primary, secondary, neutral }

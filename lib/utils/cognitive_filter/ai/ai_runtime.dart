@@ -1,0 +1,409 @@
+import 'dart:async';
+import 'dart:io';
+
+import 'package:PiliPlus/models/cognitive_filter/config.dart';
+import 'package:PiliPlus/models/cognitive_filter/filter_category.dart';
+import 'package:PiliPlus/models/cognitive_filter/filter_surface.dart';
+import 'package:PiliPlus/utils/cognitive_filter/ai/daily_budget.dart';
+import 'package:PiliPlus/utils/cognitive_filter/ai/judge_cache.dart';
+import 'package:PiliPlus/utils/cognitive_filter/ai/judge_history.dart';
+import 'package:PiliPlus/utils/cognitive_filter/ai/judge_service.dart';
+import 'package:PiliPlus/utils/cognitive_filter/jev_client.dart';
+import 'package:PiliPlus/utils/path_utils.dart';
+import 'package:PiliPlus/utils/storage_pref.dart';
+import 'package:path/path.dart' as path;
+
+/// 简单文本文件读写，所有异常都吞掉
+class FileTextStore {
+  FileTextStore(this.path);
+
+  final String path;
+
+  /// 读文件；文件不存在或读取失败返回 null
+  Future<String?> read() async {
+    try {
+      final file = File(path);
+      if (!file.existsSync()) {
+        return null;
+      }
+      return await file.readAsString();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// 先写临时文件再替换，避免写到一半损坏原文件
+  Future<void> write(String text) async {
+    try {
+      final file = File(path);
+      await file.parent.create(recursive: true);
+      final tmp = File('$path.tmp');
+      await tmp.writeAsString(text, flush: true);
+      await tmp.rename(path);
+    } catch (_) {
+      // 落盘失败时保留原文件，下次再试
+    }
+  }
+}
+
+/// 用文件实现判定缓存存储
+class FileJudgeCacheStore implements JudgeCacheStore {
+  FileJudgeCacheStore(String path) : _file = FileTextStore(path);
+
+  final FileTextStore _file;
+
+  @override
+  Future<String?> read() => _file.read();
+
+  @override
+  Future<void> write(String json) => _file.write(json);
+}
+
+/// 认知滤网 AI 屏蔽的运行时接线
+class AiFilterRuntime {
+  AiFilterRuntime._();
+
+  static final AiFilterRuntime instance = AiFilterRuntime._();
+
+  static const String _dirName = 'cognitive_filter';
+  static const String _cacheFileName = 'judge_cache.json';
+  static const String _historyFileName = 'judge_history.json';
+  static const Duration _flushDelay = Duration(seconds: 5);
+  static const int _ruleDedupWindow = 300;
+  static const int _ruleRateLimit = 20;
+  static const Duration _ruleRateWindow = Duration(seconds: 1);
+
+  JudgeService? _service;
+  JudgeCache? _cache;
+  JudgeHistory? _history;
+  FileTextStore? _historyStore;
+  DailyUsageBudget? _budget;
+  Timer? _flushTimer;
+  Future<void>? _initFuture;
+
+  /// 各适用面最近一秒内的规则屏蔽时间，用于限速
+  final Map<FilterSurface, List<DateTime>> _ruleBlockTimes = {};
+
+  /// 初始化缓存、历史与判定服务；可重复调用，失败时保持未激活
+  Future<void> init() => _initFuture ??= _doInit();
+
+  Future<void> _doInit() async {
+    try {
+      final dir = path.join(appSupportDirPath, _dirName);
+      final directory = Directory(dir);
+      if (!directory.existsSync()) {
+        await directory.create(recursive: true);
+      }
+
+      final cache = JudgeCache(
+        store: FileJudgeCacheStore(path.join(dir, _cacheFileName)),
+      );
+      await cache.load();
+
+      final historyStore = FileTextStore(path.join(dir, _historyFileName));
+      final history = JudgeHistory();
+      history.loadJson(await historyStore.read() ?? '');
+
+      final budget = DailyUsageBudget(
+        capUsd: () => Pref.cfAiDailyCapUsd,
+        now: DateTime.now,
+        load: _loadUsage,
+        save: _saveUsage,
+      );
+      final service = JudgeService(
+        transport: _transport,
+        model: Pref.cfApiModel,
+        cache: cache,
+        budget: budget,
+      );
+
+      _cache = cache;
+      _history = history;
+      _historyStore = historyStore;
+      _budget = budget;
+      _service = service;
+    } catch (_) {
+      _service = null;
+      _cache = null;
+      _history = null;
+      _historyStore = null;
+      _budget = null;
+    }
+  }
+
+  /// 每次请求都重新读取接口设置，用户改完立即生效
+  Future<Map<String, dynamic>> _transport(Map<String, dynamic> body) {
+    final transport = JevClient.makeTransport(
+      endpoint: Pref.cfApiBaseUrl,
+      apiKey: Pref.cfApiKey,
+      model: Pref.cfApiModel,
+      timeout: Duration(seconds: Pref.cfApiTimeout),
+    );
+    return transport(body);
+  }
+
+  /// 开关、Key 与至少一个启用类别都满足时才算激活
+  bool get active {
+    if (_service == null) {
+      return false;
+    }
+    if (!Pref.cfAiFilterEnabled) {
+      return false;
+    }
+    if (Pref.cfApiKey.trim().isEmpty) {
+      return false;
+    }
+    return _enabledCategories().isNotEmpty;
+  }
+
+  /// 该适用面是否处于激活状态
+  bool isActiveFor(FilterSurface surface) {
+    if (!active) {
+      return false;
+    }
+    return _enabledCategories().any(
+      (category) => category.surfaces.contains(surface),
+    );
+  }
+
+  /// 判定一批内容；未激活时返回 null，内部异常同样返回 null
+  Future<JudgeResult?> judge({
+    required FilterSurface surface,
+    required List<JudgeItem> items,
+    String title = '',
+    String context = '',
+    String? contextKey,
+    bool recordHistory = true,
+  }) async {
+    try {
+      if (!isActiveFor(surface)) {
+        return null;
+      }
+      final service = _service;
+      if (service == null) {
+        return null;
+      }
+      final result = await service.judge(
+        surface: surface,
+        items: items,
+        categories: _enabledCategories(),
+        title: title,
+        context: context,
+        contextKey: contextKey,
+      );
+
+      final texts = <String, String>{
+        for (final item in items) item.id: item.text,
+      };
+      final history = recordHistory ? _history : null;
+      if (history != null) {
+        final time = DateTime.now();
+        result.verdicts.forEach((id, verdict) {
+          if (!verdict.blocked) {
+            return;
+          }
+          history.add(
+            JudgeHistoryEntry(
+              time: time,
+              surface: surface.label,
+              text: texts[id] ?? '',
+              categoryId: verdict.categoryId,
+              score: verdict.score,
+              source: verdict.source.name,
+              label: _categoryName(verdict.categoryId),
+            ),
+          );
+        });
+      }
+
+      final budget = _budget;
+      if (budget != null) {
+        var aiCount = 0;
+        for (final verdict in result.verdicts.values) {
+          if (verdict.source == JudgeSource.ai) {
+            aiCount++;
+          }
+        }
+        budget.addItems(aiCount);
+      }
+
+      _scheduleFlush();
+      return result;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// 试判定一段文字，不写入屏蔽历史；未启用或请求失败返回 null
+  Future<JudgeVerdict?> trial({
+    required FilterSurface surface,
+    required String text,
+    String context = '',
+  }) async {
+    const id = 'trial';
+    final result = await judge(
+      surface: surface,
+      items: [JudgeItem(id: id, text: text)],
+      context: context,
+      recordHistory: false,
+    );
+    return result?.verdicts[id];
+  }
+
+  /// 记一条规则屏蔽；[ruleType] 是规则类型名，[content] 是命中的规则内容
+  ///
+  /// 最近 300 条里同一（适用面、文字、规则 id）只记一次；同一适用面
+  /// 每秒最多记 20 条，避免弹幕批量拉取时刷屏。
+  void recordRuleBlock({
+    required FilterSurface surface,
+    required String text,
+    required String ruleType,
+    required String content,
+    String? ruleId,
+  }) {
+    final history = _history;
+    if (history == null) {
+      return;
+    }
+    final now = DateTime.now();
+    final times = _ruleBlockTimes[surface] ??= <DateTime>[];
+    times.removeWhere((time) => now.difference(time) >= _ruleRateWindow);
+    if (times.length >= _ruleRateLimit) {
+      return;
+    }
+    final entryText = _truncateRuleText(text);
+    var checked = 0;
+    for (final entry in history.entries) {
+      if (checked++ >= _ruleDedupWindow) {
+        break;
+      }
+      if (entry.isRule &&
+          entry.surface == surface.label &&
+          entry.text == entryText &&
+          entry.ruleId == ruleId) {
+        return;
+      }
+    }
+    times.add(now);
+    history.add(
+      JudgeHistoryEntry(
+        time: now,
+        surface: surface.label,
+        text: text,
+        score: 1,
+        source: JudgeHistoryEntry.rule,
+        kind: JudgeHistoryEntry.rule,
+        label: content,
+        ruleType: ruleType,
+        ruleId: ruleId,
+      ),
+    );
+    _scheduleFlush();
+  }
+
+  static String _truncateRuleText(String text) {
+    final runes = text.runes.toList(growable: false);
+    if (runes.length <= JudgeHistoryEntry.maxTextLength) {
+      return text;
+    }
+    return String.fromCharCodes(runes.take(JudgeHistoryEntry.maxTextLength));
+  }
+
+  String _categoryName(String? id) {
+    if (id == null) {
+      return '';
+    }
+    for (final category in CognitiveFilterConfig.effectiveCategories) {
+      if (category.id == id) {
+        return category.name;
+      }
+    }
+    return '';
+  }
+
+  /// 最近的历史记录，最新在前
+  List<JudgeHistoryEntry> get history =>
+      _history?.entries ?? const <JudgeHistoryEntry>[];
+
+  void clearHistory() {
+    _history?.clear();
+    _scheduleFlush();
+  }
+
+  DailyUsage get usageToday => _budget?.today ?? const DailyUsage();
+
+  double get usdToday => _budget?.usdToday ?? 0;
+
+  bool get breakerOpen => _service?.breakerOpen ?? false;
+
+  void resetBreaker() {
+    _service?.resetBreaker();
+  }
+
+  /// 立即把缓存与历史写到磁盘，供退出或暂停时调用
+  Future<void> flush() async {
+    _flushTimer?.cancel();
+    _flushTimer = null;
+    try {
+      final cache = _cache;
+      if (cache != null && cache.dirty) {
+        await cache.flush();
+      }
+    } catch (_) {
+      // 缓存落盘失败下次再试
+    }
+    try {
+      final history = _history;
+      final store = _historyStore;
+      if (history != null && store != null && history.dirty) {
+        await store.write(history.toJson());
+        history.markClean();
+      }
+    } catch (_) {
+      // 历史落盘失败下次再试
+    }
+  }
+
+  void _scheduleFlush() {
+    if (_flushTimer?.isActive ?? false) {
+      return;
+    }
+    final dirty = (_cache?.dirty ?? false) || (_history?.dirty ?? false);
+    if (!dirty) {
+      return;
+    }
+    _flushTimer = Timer(_flushDelay, () {
+      _flushTimer = null;
+      unawaited(flush());
+    });
+  }
+
+  List<FilterCategory> _enabledCategories() {
+    try {
+      return <FilterCategory>[
+        for (final category in CognitiveFilterConfig.effectiveCategories)
+          if (category.enabled) category,
+      ];
+    } catch (_) {
+      return const <FilterCategory>[];
+    }
+  }
+
+  DailyUsage _loadUsage() {
+    return DailyUsage(
+      day: Pref.cfAiUsageDay,
+      inputTokens: Pref.cfAiUsageInputTokens,
+      outputTokens: Pref.cfAiUsageOutputTokens,
+      requests: Pref.cfAiUsageRequests,
+      items: Pref.cfAiUsageItems,
+    );
+  }
+
+  void _saveUsage(DailyUsage usage) {
+    Pref.cfAiUsageDay = usage.day;
+    Pref.cfAiUsageInputTokens = usage.inputTokens;
+    Pref.cfAiUsageOutputTokens = usage.outputTokens;
+    Pref.cfAiUsageRequests = usage.requests;
+    Pref.cfAiUsageItems = usage.items;
+  }
+}

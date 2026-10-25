@@ -3,9 +3,11 @@ import 'package:PiliPlus/common/widgets/view_safe_area.dart';
 import 'package:PiliPlus/models/cognitive_filter/config.dart';
 import 'package:PiliPlus/models/cognitive_filter/filter_tier.dart';
 import 'package:PiliPlus/pages/cognitive_filter/ai_tab.dart';
+import 'package:PiliPlus/pages/cognitive_filter/judge_history_page.dart';
 import 'package:PiliPlus/pages/cognitive_filter/rule_tab.dart';
 import 'package:PiliPlus/pages/cognitive_filter/widgets.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
+import 'package:get/get.dart';
 import 'package:material_ui/material_ui.dart';
 
 /// 认知滤网首页
@@ -99,6 +101,14 @@ class _CognitiveFilterPageState extends State<CognitiveFilterPage>
                 onChanged: _setProMode,
               ),
             ),
+            if (_proMode)
+              SliverToBoxAdapter(
+                child: CfTile(
+                  icon: Icons.history,
+                  title: '屏蔽历史',
+                  onTap: () => Get.to(() => const JudgeHistoryPage()),
+                ),
+              ),
             SliverPersistentHeader(
               pinned: true,
               delegate: _TabBarHeaderDelegate(

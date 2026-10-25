@@ -6,10 +6,12 @@ import 'package:PiliPlus/models/cognitive_filter/filter_tier.dart';
 /// 按当前模式解析出实际生效的类别列表
 ///
 /// 非专业模式只用档位决定内置类别的开关与阈值，题面与适用面用出厂值；
-/// 专业模式以出厂值为底，叠加 [overrides] 里用户改过的字段，再追加自定义类别。
+/// 专业模式以出厂值为底，叠加 [overrides] 里用户改过的字段，内置类别统一用
+/// [proThreshold]（总敏感度），再追加自定义类别（各自保留自己的阈值）。
 List<FilterCategory> resolveCategories({
   required bool proMode,
   required FilterTier tier,
+  required double proThreshold,
   required Map<String, dynamic> overrides,
   required List<FilterCategory> custom,
 }) {
@@ -26,7 +28,10 @@ List<FilterCategory> resolveCategories({
 
   return [
     for (final category in builtinCategories)
-      _applyOverride(category, overrides[category.id]),
+      _applyOverride(
+        category,
+        overrides[category.id],
+      ).copyWith(threshold: proThreshold),
     ...custom,
   ];
 }
@@ -39,14 +44,13 @@ List<FilterCategory> activeCategoriesFor(
     .where((category) => category.enabled && category.surfaces.contains(surface))
     .toList();
 
-/// 从档位复制出覆盖，只包含 enabled 与 threshold 两个字段
+/// 从档位复制出覆盖，只包含 enabled 字段（阈值是全局的，不放进覆盖）
 ///
 /// 供第一次开启专业模式时使用，避免切换瞬间屏蔽行为突变
 Map<String, dynamic> overridesFromTier(FilterTier tier) => {
   for (final entry in tier.builtinSettings.entries)
     entry.key: <String, dynamic>{
       'enabled': entry.value.enabled,
-      'threshold': entry.value.threshold,
     },
 };
 
@@ -57,15 +61,6 @@ FilterCategory _applyOverride(FilterCategory category, Object? raw) {
   final enabled = raw['enabled'];
   if (enabled is bool) {
     result = result.copyWith(enabled: enabled);
-  }
-
-  final threshold = switch (raw['threshold']) {
-    num number => number.toDouble(),
-    String text => double.tryParse(text),
-    _ => null,
-  };
-  if (threshold != null && threshold.isFinite) {
-    result = result.copyWith(threshold: threshold.clamp(0.0, 1.0).toDouble());
   }
 
   final surfaces = raw['surfaces'];

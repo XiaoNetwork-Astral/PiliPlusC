@@ -6,7 +6,6 @@ import 'package:PiliPlus/utils/cognitive_filter/ai/jev_request.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/judge_cache.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/judge_text.dart';
 import 'package:PiliPlus/utils/cognitive_filter/jev_client.dart';
-import 'package:PiliPlus/utils/cognitive_filter/local_rules.dart';
 
 /// 发一次请求并返回解码后的响应 Map，失败抛 [JevException]
 typedef JevTransport =
@@ -32,11 +31,9 @@ class UnlimitedJudgeBudget implements JudgeBudget {
 
 /// 判定结果的来源
 enum JudgeSource {
-  rule,
   cache,
   ai,
   skippedShort,
-  skippedGate,
   failed,
   skippedBreaker,
   skippedBudget,
@@ -50,20 +47,22 @@ class JudgeVerdict {
     required this.score,
     required this.source,
     this.categoryId,
+    this.scores = const <String, double>{},
   });
 
   final bool blocked;
   final String? categoryId;
   final double score;
   final JudgeSource source;
+
+  /// 八个固定选项的概率，键见 [JevRequest.optionNames]；跳过的条目为空
+  final Map<String, double> scores;
 }
 
 /// 一次判定的统计
 class JudgeStats {
   int requests = 0;
   int cacheHits = 0;
-  int ruleHits = 0;
-  int gateSkipped = 0;
   int inputTokens = 0;
   int outputTokens = 0;
   int failedRequests = 0;
@@ -104,38 +103,34 @@ class _BatchResult<T> {
   final bool failed;
 }
 
-/// 认知滤网 AI 判定服务：规则 → 短文本 → 去重缓存 → 门控 → 逐类别 → 阈值
+/// 认知滤网 AI 判定服务：短文本 → 去重缓存 → 单级选择题 → 阈值
+///
+/// 每条内容只发一道八选一选择题，屏蔽得分 S 是启用的内置类别对应选项概率
+/// 之和，S 达到内置类别共用的阈值 T 即屏蔽；自定义类别是同一次请求里的
+/// 额外 noul 题，按各自的阈值判断。
 class JudgeService {
   JudgeService({
     required this.transport,
     required this.model,
     required this.cache,
     required this.budget,
-    this.gateThreshold = 0.5,
-    this.gateBatch = 80,
-    this.categoryBatch = 20,
+    this.categoryBatch = 80,
     this.maxConcurrency = 3,
     this.breakerFailures = 3,
     this.breakerCooldown = const Duration(seconds: 60),
     DateTime Function()? now,
   }) : _now = now ?? DateTime.now,
        _semaphore = _Semaphore(maxConcurrency),
-       assert(gateThreshold >= 0 && gateThreshold <= 1),
-       assert(gateBatch > 0),
        assert(categoryBatch > 0),
        assert(maxConcurrency > 0),
        assert(breakerFailures > 0);
 
   static const Duration _authCooldown = Duration(minutes: 10);
-  static const int _gateLimit = 80;
-  static const int _categoryTextLimit = 20;
 
   final JevTransport transport;
   final String model;
   final JudgeCache cache;
   final JudgeBudget budget;
-  final double gateThreshold;
-  final int gateBatch;
   final int categoryBatch;
   final int maxConcurrency;
   final int breakerFailures;
@@ -228,17 +223,21 @@ class JudgeService {
       return;
     }
 
+    final builtins = <FilterCategory>[
+      for (final category in enabled)
+        if (category.builtin &&
+            JevRequest.builtinOptionNames.containsKey(category.id))
+          category,
+    ];
+    final customs = <FilterCategory>[
+      for (final category in enabled)
+        if (!category.builtin ||
+            !JevRequest.builtinOptionNames.containsKey(category.id))
+          category,
+    ];
+
     final work = <String, _WorkItem>{};
     for (final item in items) {
-      if (LocalRules.verdict(item.text).blocked) {
-        verdicts[item.id] = const JudgeVerdict(
-          blocked: true,
-          score: 1,
-          source: JudgeSource.rule,
-        );
-        stats.ruleHits++;
-        continue;
-      }
       if (isTooShortToJudge(item.text)) {
         verdicts[item.id] = const JudgeVerdict(
           blocked: false,
@@ -256,61 +255,38 @@ class JudgeService {
       }
     }
 
-    final gateStage = <_WorkItem>[];
-    final categoryStage = <_WorkItem>[];
+    final pending = <_WorkItem>[];
     for (final item in work.values) {
-      final hit = cache.lookup(item.key, categories: enabled);
-      if (hit != null) {
-        final gate = hit.gate;
-        if (gate != null && gate < gateThreshold) {
-          _assign(
-            verdicts,
-            item.ids,
-            JudgeVerdict(
-              blocked: false,
-              score: gate,
-              source: JudgeSource.cache,
-            ),
-          );
-          stats.cacheHits++;
-          continue;
-        }
-        final complete =
-            gate != null &&
-            gate >= gateThreshold &&
-            enabled.every((category) => hit.scores.containsKey(category.id));
-        if (complete) {
-          _assign(
-            verdicts,
-            item.ids,
-            _fromScores(hit.scores, enabled, JudgeSource.cache),
-          );
-          stats.cacheHits++;
-          continue;
-        }
-        if (gate != null && gate >= gateThreshold) {
-          categoryStage.add(item);
-          continue;
-        }
+      final hit = cache.lookup(
+        item.key,
+        customCategories: customs,
+      );
+      final options = hit?.options;
+      final customScores = hit?.scores ?? const <String, double>{};
+      if (options != null &&
+          JevRequest.optionNames.every(options.containsKey) &&
+          customs.every((category) => customScores.containsKey(category.id))) {
+        _assign(
+          verdicts,
+          item.ids,
+          _fromScores(
+            options,
+            customScores,
+            builtins,
+            customs,
+            JudgeSource.cache,
+          ),
+        );
+        stats.cacheHits++;
+      } else {
+        pending.add(item);
       }
-      gateStage.add(item);
     }
 
-    await _runGateBatches(
-      items: gateStage,
-      enabled: enabled,
-      surface: surface,
-      title: title,
-      context: context,
-      contextKey: contextKey,
-      stats: stats,
-      verdicts: verdicts,
-      categoryStage: categoryStage,
-    );
-
-    await _runCategoryBatches(
-      items: categoryStage,
-      enabled: enabled,
+    await _runBatches(
+      items: pending,
+      builtins: builtins,
+      customs: customs,
       surface: surface,
       title: title,
       context: context,
@@ -320,87 +296,10 @@ class JudgeService {
     );
   }
 
-  Future<void> _runGateBatches({
+  Future<void> _runBatches({
     required List<_WorkItem> items,
-    required List<FilterCategory> enabled,
-    required FilterSurface surface,
-    required String title,
-    required String context,
-    required String? contextKey,
-    required JudgeStats stats,
-    required Map<String, JudgeVerdict> verdicts,
-    required List<_WorkItem> categoryStage,
-  }) async {
-    final size = gateBatch > _gateLimit ? _gateLimit : gateBatch;
-    final batches = _chunk(items, size < 1 ? 1 : size);
-    final results = await Future.wait(<Future<_BatchResult<List<double>>>>[
-      for (final batch in batches)
-        _attempt<List<double>>(
-          stats: stats,
-          buildBody: () => JevRequest.buildGateRequest(
-            model: model,
-            surface: surface,
-            texts: <String>[for (final item in batch) item.key],
-            categories: enabled,
-            title: title,
-            context: context,
-            contextKey: contextKey,
-          ),
-          parse: (response) =>
-              JevRequest.parseGateScores(response, batch.length),
-        ),
-    ]);
-
-    for (var index = 0; index < batches.length; index++) {
-      final batch = batches[index];
-      final result = results[index];
-      if (result.failed) {
-        _assignAll(
-          verdicts,
-          batch,
-          const JudgeVerdict(
-            blocked: false,
-            score: 0,
-            source: JudgeSource.failed,
-          ),
-        );
-        continue;
-      }
-      final skip = result.source;
-      if (skip != null) {
-        _assignAll(
-          verdicts,
-          batch,
-          JudgeVerdict(blocked: false, score: 0, source: skip),
-        );
-        continue;
-      }
-      final scores = result.value!;
-      for (var i = 0; i < batch.length; i++) {
-        final item = batch[i];
-        final score = scores[i];
-        cache.putGate(item.key, score, enabled);
-        if (score < gateThreshold) {
-          stats.gateSkipped++;
-          _assign(
-            verdicts,
-            item.ids,
-            JudgeVerdict(
-              blocked: false,
-              score: score,
-              source: JudgeSource.skippedGate,
-            ),
-          );
-        } else {
-          categoryStage.add(item);
-        }
-      }
-    }
-  }
-
-  Future<void> _runCategoryBatches({
-    required List<_WorkItem> items,
-    required List<FilterCategory> enabled,
+    required List<FilterCategory> builtins,
+    required List<FilterCategory> customs,
     required FilterSurface surface,
     required String title,
     required String context,
@@ -411,26 +310,25 @@ class JudgeService {
     if (items.isEmpty) {
       return;
     }
-    final size = _categoryBatchSize(enabled.length);
-    final batches = _chunk(items, size);
+    final batches = _chunk(items, _batchSize(customs.length));
     final results = await Future.wait(
-      <Future<_BatchResult<List<Map<String, double>>>>>[
+      <Future<_BatchResult<List<JevItemScores>>>>[
         for (final batch in batches)
-          _attempt<List<Map<String, double>>>(
+          _attempt<List<JevItemScores>>(
             stats: stats,
-            buildBody: () => JevRequest.buildCategoryRequest(
+            buildBody: () => JevRequest.buildRequest(
               model: model,
               surface: surface,
               texts: <String>[for (final item in batch) item.key],
-              categories: enabled,
+              customCategories: customs,
               title: title,
               context: context,
               contextKey: contextKey,
             ),
-            parse: (response) => JevRequest.parseCategoryScores(
+            parse: (response) => JevRequest.parseResponse(
               response,
               batch.length,
-              enabled,
+              customCategories: customs,
             ),
           ),
       ],
@@ -463,11 +361,21 @@ class JudgeService {
       final scores = result.value!;
       for (var i = 0; i < batch.length; i++) {
         final item = batch[i];
-        cache.putScores(item.key, scores[i], enabled);
+        final score = scores[i];
+        cache.putOptions(item.key, score.options);
+        if (customs.isNotEmpty) {
+          cache.putCustomScores(item.key, score.custom, customs);
+        }
         _assign(
           verdicts,
           item.ids,
-          _fromScores(scores[i], enabled, JudgeSource.ai),
+          _fromScores(
+            score.options,
+            score.custom,
+            builtins,
+            customs,
+            JudgeSource.ai,
+          ),
         );
       }
     }
@@ -547,50 +455,94 @@ class JudgeService {
     return number.toInt();
   }
 
+  /// 选项概率与实际启用的内置/自定义类别合成判定
   JudgeVerdict _fromScores(
-    Map<String, double> scores,
-    List<FilterCategory> enabled,
+    Map<String, double> options,
+    Map<String, double> customScores,
+    List<FilterCategory> builtins,
+    List<FilterCategory> customs,
     JudgeSource source,
   ) {
-    FilterCategory? best;
-    var bestRatio = -1.0;
-    var bestScore = 0.0;
-    var maxScore = 0.0;
-    for (final category in enabled) {
-      final score = scores[category.id] ?? 0;
-      if (score > maxScore) {
-        maxScore = score;
+    var sum = 0.0;
+    FilterCategory? topBuiltin;
+    var topBuiltinProb = -1.0;
+    var threshold = 0.0;
+    for (var i = 0; i < builtins.length; i++) {
+      final category = builtins[i];
+      final probability =
+          options[JevRequest.builtinOptionNames[category.id]] ?? 0.0;
+      sum += probability;
+      if (probability > topBuiltinProb) {
+        topBuiltinProb = probability;
+        topBuiltin = category;
       }
-      if (score < category.threshold) {
-        continue;
-      }
-      final ratio = category.threshold <= 0
-          ? double.infinity
-          : score / category.threshold;
-      if (best == null || ratio > bestRatio) {
-        best = category;
-        bestRatio = ratio;
-        bestScore = score;
+      final value = category.threshold;
+      if (i == 0 || value > threshold) {
+        threshold = value;
       }
     }
-    if (best != null) {
+    final builtinBlocked = builtins.isNotEmpty && sum >= threshold;
+
+    FilterCategory? topCustom;
+    var topCustomProb = -1.0;
+    FilterCategory? blockedCustom;
+    var blockedCustomProb = -1.0;
+    for (final category in customs) {
+      final probability = customScores[category.id] ?? 0.0;
+      if (probability > topCustomProb) {
+        topCustomProb = probability;
+        topCustom = category;
+      }
+      if (probability >= category.threshold &&
+          probability > blockedCustomProb) {
+        blockedCustomProb = probability;
+        blockedCustom = category;
+      }
+    }
+
+    final scores = Map<String, double>.from(options);
+    if (builtinBlocked) {
       return JudgeVerdict(
         blocked: true,
-        categoryId: best.id,
-        score: bestScore,
+        categoryId: topBuiltin?.id,
+        score: sum,
         source: source,
+        scores: scores,
       );
     }
-    return JudgeVerdict(blocked: false, score: maxScore, source: source);
+    if (blockedCustom != null) {
+      return JudgeVerdict(
+        blocked: true,
+        categoryId: blockedCustom.id,
+        score: blockedCustomProb,
+        source: source,
+        scores: scores,
+      );
+    }
+    if (builtins.isNotEmpty) {
+      return JudgeVerdict(
+        blocked: false,
+        categoryId: topBuiltin?.id,
+        score: sum,
+        source: source,
+        scores: scores,
+      );
+    }
+    return JudgeVerdict(
+      blocked: false,
+      categoryId: topCustom?.id,
+      score: topCustomProb < 0 ? 0.0 : topCustomProb,
+      source: source,
+      scores: scores,
+    );
   }
 
-  int _categoryBatchSize(int categoryCount) {
-    var size = categoryBatch > _categoryTextLimit
-        ? _categoryTextLimit
-        : categoryBatch;
-    final maxByQuestions = categoryCount > 0
-        ? JevRequest.maxQuestions ~/ categoryCount
-        : size;
+  int _batchSize(int customCount) {
+    final perText = 1 + customCount;
+    final maxByQuestions = perText <= 0
+        ? JevRequest.maxQuestions
+        : JevRequest.maxQuestions ~/ perText;
+    var size = categoryBatch;
     if (size > maxByQuestions) {
       size = maxByQuestions;
     }

@@ -35,24 +35,9 @@ void main() {
   );
 
   group('指纹', () {
-    test('类别指纹是稳定的 FNV-1a 8 位十六进制', () {
+    test('自定义类别指纹是稳定的 FNV-1a 8 位十六进制', () {
       expect(JudgeCache.categoryFingerprint(categoryA), 'c589b2a2');
       expect(JudgeCache.categoryFingerprint(categoryB), '47ab4e46');
-    });
-
-    test('总问题指纹与类别顺序无关', () {
-      expect(
-        JudgeCache.gateFingerprint(<FilterCategory>[categoryA, categoryB]),
-        '795f82f2',
-      );
-      expect(
-        JudgeCache.gateFingerprint(<FilterCategory>[categoryB, categoryA]),
-        '795f82f2',
-      );
-      expect(
-        JudgeCache.gateFingerprint(<FilterCategory>[categoryA]),
-        '1f7794dd',
-      );
     });
 
     test('题面变化后指纹变化', () {
@@ -61,45 +46,57 @@ void main() {
         JudgeCache.categoryFingerprint(changed),
         isNot(JudgeCache.categoryFingerprint(categoryA)),
       );
-      expect(
-        JudgeCache.gateFingerprint(<FilterCategory>[changed]),
-        isNot(JudgeCache.gateFingerprint(<FilterCategory>[categoryA])),
-      );
     });
   });
 
   group('读写与 LRU', () {
-    test('putGate / putScores 后 lookup 返回对应值并置 dirty', () {
+    test('putOptions / putCustomScores 后 lookup 返回对应值并置 dirty', () {
       final cache = JudgeCache(store: MemoryJudgeCacheStore());
-      cache.putGate('k', 0.9, <FilterCategory>[categoryA]);
-      cache.putScores('k', <String, double>{'a': 0.8}, <FilterCategory>[
+      cache.putOptions('k', <String, double>{'正常': 0.9, '攻击': 0.1});
+      cache.putCustomScores('k', <String, double>{'a': 0.8}, <FilterCategory>[
         categoryA,
       ]);
       expect(cache.dirty, isTrue);
-      final hit = cache.lookup('k', categories: <FilterCategory>[categoryA]);
+      final hit = cache.lookup('k', customCategories: <FilterCategory>[
+        categoryA,
+      ]);
       expect(hit, isNotNull);
-      expect(hit!.gate, 0.9);
+      expect(hit!.options, <String, double>{'正常': 0.9, '攻击': 0.1});
       expect(hit.scores, <String, double>{'a': 0.8});
+    });
+
+    test('选项概率不依赖启用了哪些类别', () {
+      final cache = JudgeCache(store: MemoryJudgeCacheStore());
+      cache.putOptions('k', <String, double>{'正常': 0.9, '攻击': 0.1});
+      final hit = cache.lookup('k', customCategories: <FilterCategory>[
+        categoryB,
+      ]);
+      expect(hit!.options, <String, double>{'正常': 0.9, '攻击': 0.1});
+      expect(hit.scores, isEmpty);
     });
 
     test('分数序列化保留两位小数', () async {
       final store = MemoryJudgeCacheStore();
       final cache = JudgeCache(store: store);
-      cache.putGate('k', 0.836, <FilterCategory>[categoryA]);
-      cache.putScores('k', <String, double>{'a': 0.126}, <FilterCategory>[
+      cache.putOptions('k', <String, double>{'攻击': 0.126});
+      cache.putCustomScores('k', <String, double>{'a': 0.126}, <FilterCategory>[
         categoryA,
       ]);
       // 内存里保留原始精度，写盘时才取两位小数
       expect(
-        cache.lookup('k', categories: <FilterCategory>[categoryA])!.gate,
-        0.836,
+        cache.lookup('k', customCategories: <FilterCategory>[categoryA])!
+            .options!['攻击'],
+        0.126,
       );
       await cache.flush();
 
       final loaded = JudgeCache(store: store);
       await loaded.load();
-      final hit = loaded.lookup('k', categories: <FilterCategory>[categoryA]);
-      expect(hit!.gate, 0.84);
+      final hit = loaded.lookup(
+        'k',
+        customCategories: <FilterCategory>[categoryA],
+      );
+      expect(hit!.options!['攻击'], 0.13);
       expect(hit.scores['a'], 0.13);
     });
 
@@ -108,25 +105,25 @@ void main() {
         store: MemoryJudgeCacheStore(),
         capacity: 2,
       );
-      cache.putGate('a', 0.5, <FilterCategory>[categoryA]);
-      cache.putGate('b', 0.6, <FilterCategory>[categoryA]);
+      cache.putOptions('a', <String, double>{'正常': 0.5});
+      cache.putOptions('b', <String, double>{'正常': 0.6});
       // 读取 a 刷新顺序，a 变成最新，b 是最旧
       expect(
-        cache.lookup('a', categories: <FilterCategory>[categoryA]),
+        cache.lookup('a', customCategories: const <FilterCategory>[]),
         isNotNull,
       );
-      cache.putGate('c', 0.7, <FilterCategory>[categoryA]);
+      cache.putOptions('c', <String, double>{'正常': 0.7});
       await cache.flush();
       expect(
-        cache.lookup('b', categories: <FilterCategory>[categoryA]),
+        cache.lookup('b', customCategories: const <FilterCategory>[]),
         isNull,
       );
       expect(
-        cache.lookup('a', categories: <FilterCategory>[categoryA]),
+        cache.lookup('a', customCategories: const <FilterCategory>[]),
         isNotNull,
       );
       expect(
-        cache.lookup('c', categories: <FilterCategory>[categoryA]),
+        cache.lookup('c', customCategories: const <FilterCategory>[]),
         isNotNull,
       );
     });
@@ -138,7 +135,7 @@ void main() {
         capacity: 2,
       );
       for (var i = 0; i < 5; i++) {
-        cache.putGate('k$i', 0.5, <FilterCategory>[categoryA]);
+        cache.putOptions('k$i', <String, double>{'正常': 0.5});
       }
       await cache.flush();
       final loaded = JudgeCache(
@@ -147,15 +144,15 @@ void main() {
       );
       await loaded.load();
       expect(
-        loaded.lookup('k3', categories: <FilterCategory>[categoryA]),
+        loaded.lookup('k3', customCategories: const <FilterCategory>[]),
         isNotNull,
       );
       expect(
-        loaded.lookup('k4', categories: <FilterCategory>[categoryA]),
+        loaded.lookup('k4', customCategories: const <FilterCategory>[]),
         isNotNull,
       );
       expect(
-        loaded.lookup('k0', categories: <FilterCategory>[categoryA]),
+        loaded.lookup('k0', customCategories: const <FilterCategory>[]),
         isNull,
       );
     });
@@ -170,12 +167,12 @@ void main() {
         ttl: const Duration(days: 7),
         now: () => now,
       );
-      cache.putGate('old', 0.5, <FilterCategory>[categoryA]);
-      cache.putGate('new', 0.5, <FilterCategory>[categoryA]);
+      cache.putOptions('old', <String, double>{'正常': 0.5});
+      cache.putOptions('new', <String, double>{'正常': 0.5});
       now = now.add(const Duration(days: 8));
-      cache.putGate('new', 0.6, <FilterCategory>[categoryA]);
+      cache.putOptions('new', <String, double>{'正常': 0.6});
       expect(
-        cache.lookup('old', categories: <FilterCategory>[categoryA]),
+        cache.lookup('old', customCategories: const <FilterCategory>[]),
         isNull,
       );
       await cache.flush();
@@ -187,10 +184,10 @@ void main() {
   });
 
   group('指纹失效', () {
-    test('类别题面变化后只丢弃该类别与总问题分数', () {
+    test('自定义类别题面变化后只丢弃该类别分数', () {
       final cache = JudgeCache(store: MemoryJudgeCacheStore());
-      cache.putGate('k', 0.9, <FilterCategory>[categoryA, categoryB]);
-      cache.putScores(
+      cache.putOptions('k', <String, double>{'正常': 0.9});
+      cache.putCustomScores(
         'k',
         <String, double>{'a': 0.8, 'b': 0.7},
         <FilterCategory>[categoryA, categoryB],
@@ -203,84 +200,117 @@ void main() {
       );
       final hit = cache.lookup(
         'k',
-        categories: <FilterCategory>[categoryA, changedB],
+        customCategories: <FilterCategory>[categoryA, changedB],
       );
       expect(hit, isNotNull);
-      expect(hit!.gate, isNull);
+      expect(hit!.options, <String, double>{'正常': 0.9});
       expect(hit.scores, <String, double>{'a': 0.8});
     });
 
-    test('启用类别集合变化后总问题分数失效', () {
+    test('选项与自定义分数都不可用时返回 null', () {
       final cache = JudgeCache(store: MemoryJudgeCacheStore());
-      cache.putGate('k', 0.9, <FilterCategory>[categoryA, categoryB]);
-      cache.putScores(
-        'k',
-        <String, double>{'a': 0.8, 'b': 0.7},
-        <FilterCategory>[categoryA, categoryB],
-      );
-      final hit = cache.lookup('k', categories: <FilterCategory>[categoryA]);
-      expect(hit, isNotNull);
-      expect(hit!.gate, isNull);
-      expect(hit.scores, <String, double>{'a': 0.8});
-    });
-
-    test('完全失效时返回 null', () {
-      final cache = JudgeCache(store: MemoryJudgeCacheStore());
-      cache.putGate('k', 0.9, <FilterCategory>[categoryA]);
+      cache.putCustomScores('k', <String, double>{'a': 0.8}, <FilterCategory>[
+        categoryA,
+      ]);
       final changed = _category('a', question: '换了题面？');
-      expect(cache.lookup('k', categories: <FilterCategory>[changed]), isNull);
+      expect(cache.lookup('k', customCategories: <FilterCategory>[changed]), isNull);
     });
   });
 
   group('序列化', () {
-    test('flush / load 往返保留 gate 与分数', () async {
+    test('flush / load 往返保留选项与自定义分数', () async {
       final store = MemoryJudgeCacheStore();
       final cache = JudgeCache(store: store);
-      cache.putGate('k', 0.9, <FilterCategory>[categoryA]);
-      cache.putScores('k', <String, double>{'a': 0.8}, <FilterCategory>[
+      cache.putOptions('k', <String, double>{'正常': 0.7, '攻击': 0.2});
+      cache.putCustomScores('k', <String, double>{'a': 0.8}, <FilterCategory>[
         categoryA,
       ]);
       await cache.flush();
       expect(cache.dirty, isFalse);
 
       final decoded = jsonDecode(store.value!) as Map<String, dynamic>;
-      expect(decoded['version'], 1);
+      expect(decoded['version'], 2);
       final entry = (decoded['entries'] as Map<String, dynamic>)['k']
           as Map<String, dynamic>;
-      expect(entry['gate'], 0.9);
-      expect(entry['gateFp'], JudgeCache.gateFingerprint([categoryA]));
+      expect(entry['options'], <String, dynamic>{'正常': 0.7, '攻击': 0.2});
       expect(entry['scores'], <String, dynamic>{
         'a': <dynamic>[0.8, JudgeCache.categoryFingerprint(categoryA)],
       });
 
       final loaded = JudgeCache(store: store);
       await loaded.load();
-      final hit = loaded.lookup('k', categories: <FilterCategory>[categoryA]);
-      expect(hit!.gate, 0.9);
+      final hit = loaded.lookup(
+        'k',
+        customCategories: <FilterCategory>[categoryA],
+      );
+      expect(hit!.options, <String, double>{'正常': 0.7, '攻击': 0.2});
       expect(hit.scores, <String, double>{'a': 0.8});
     });
 
-    test('解析失败当作空缓存', () async {
-      final store = MemoryJudgeCacheStore('{not json');
+    test('旧版本缓存直接丢弃重建', () async {
+      final store = MemoryJudgeCacheStore(
+        jsonEncode(<String, dynamic>{
+          'version': 1,
+          'entries': <String, dynamic>{
+            'k': <String, dynamic>{
+              'ts': DateTime(2026).millisecondsSinceEpoch,
+              'gate': 0.9,
+              'gateFp': 'deadbeef',
+              'scores': <String, dynamic>{
+                'a': <dynamic>[0.8, JudgeCache.categoryFingerprint(categoryA)],
+              },
+            },
+          },
+        }),
+      );
       final cache = JudgeCache(store: store);
       await cache.load();
+      expect(cache.dirty, isFalse);
       expect(
-        cache.lookup('k', categories: <FilterCategory>[categoryA]),
+        cache.lookup('k', customCategories: <FilterCategory>[categoryA]),
         isNull,
       );
-      cache.putGate('k', 0.5, <FilterCategory>[categoryA]);
+      cache.putOptions('k', <String, double>{'正常': 0.5});
       expect(cache.dirty, isTrue);
     });
 
-    test('只保存传入类别里存在的分数', () {
+    test('没有版本号或结构不符时当作空缓存', () async {
+      for (final raw in <String>[
+        '{"entries":{"k":{"ts":1,"options":{"正常":1}}}}',
+        '{"version":2,"entries":[]}',
+        '{not json',
+      ]) {
+        final cache = JudgeCache(store: MemoryJudgeCacheStore(raw));
+        await cache.load();
+        expect(
+          cache.lookup('k', customCategories: const <FilterCategory>[]),
+          isNull,
+        );
+      }
+    });
+
+    test('只保存传入类别里存在的自定义分数', () {
       final cache = JudgeCache(store: MemoryJudgeCacheStore());
-      cache.putScores(
+      cache.putCustomScores(
         'k',
         <String, double>{'a': 0.8, 'unknown': 0.9},
         <FilterCategory>[categoryA],
       );
-      final hit = cache.lookup('k', categories: <FilterCategory>[categoryA]);
+      final hit = cache.lookup('k', customCategories: <FilterCategory>[
+        categoryA,
+      ]);
       expect(hit!.scores, <String, double>{'a': 0.8});
+    });
+
+    test('非有限选项概率不写入缓存', () {
+      final cache = JudgeCache(store: MemoryJudgeCacheStore());
+      cache.putOptions('k', <String, double>{
+        '正常': 0.5,
+        '攻击': double.nan,
+        '嘲讽': double.infinity,
+      });
+      final hit = cache.lookup('k', customCategories: const <FilterCategory>[]);
+      expect(hit!.options, <String, double>{'正常': 0.5});
     });
 
     test('没有写入时 flush 仍是空对象且 dirty 为 false', () async {
@@ -289,6 +319,7 @@ void main() {
       expect(cache.dirty, isFalse);
       await cache.flush();
       final decoded = jsonDecode(store.value!) as Map<String, dynamic>;
+      expect(decoded['version'], 2);
       expect(decoded['entries'], isEmpty);
       expect(cache.dirty, isFalse);
     });
