@@ -297,7 +297,10 @@ abstract final class SettingBoxKey {
       cfApiKey = 'cfApiKey',
       cfCategoryOverrides = 'cfCategoryOverrides',
       cfCustomCategories = 'cfCustomCategories',
-      cfAiPrivacyAccepted = 'cfAiPrivacyAccepted';
+      cfAiPrivacyAccepted = 'cfAiPrivacyAccepted',
+      cfRuleList = 'cfRuleList',
+      cfRuleUserExtras = 'cfRuleUserExtras',
+      cfRuleMigrationDone = 'cfRuleMigrationDone';
 }
 
 abstract final class LocalCacheKey {

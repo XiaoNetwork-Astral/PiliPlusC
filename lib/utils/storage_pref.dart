@@ -6,7 +6,9 @@ import 'package:PiliPlus/common/widgets/gesture/horizontal_drag_gesture_recogniz
 import 'package:PiliPlus/common/widgets/pair.dart';
 import 'package:PiliPlus/http/constants.dart';
 import 'package:PiliPlus/models/cognitive_filter/filter_category.dart';
+import 'package:PiliPlus/models/cognitive_filter/filter_rule.dart';
 import 'package:PiliPlus/models/cognitive_filter/filter_tier.dart';
+import 'package:PiliPlus/models/cognitive_filter/user_rule_extra.dart';
 import 'package:PiliPlus/models/common/bar_hide_type.dart';
 import 'package:PiliPlus/models/common/danmaku/danmaku_font_sync_mode.dart';
 import 'package:PiliPlus/models/common/dynamic/dynamic_badge_mode.dart';
@@ -1353,4 +1355,57 @@ abstract final class Pref {
     SettingBoxKey.cfCustomCategories,
     jsonEncode([for (final category in value) category.toJson()]),
   );
+
+  /// 非 UID 规则列表；UID 规则由 blackMids 派生
+  static List<FilterRule> get cfRuleList {
+    final raw = _setting.get(SettingBoxKey.cfRuleList);
+    if (raw is! String || raw.isEmpty) return const <FilterRule>[];
+    try {
+      return FilterRule.listFromJson(jsonDecode(raw));
+    } catch (_) {
+      return const <FilterRule>[];
+    }
+  }
+
+  static set cfRuleList(List<FilterRule> value) => _setting.put(
+    SettingBoxKey.cfRuleList,
+    jsonEncode([for (final rule in value) rule.toJson()]),
+  );
+
+  /// UID 规则被禁用或收窄范围时的附加信息
+  static Map<int, UserRuleExtra> get cfRuleUserExtras {
+    final raw = _setting.get(SettingBoxKey.cfRuleUserExtras);
+    if (raw is! String || raw.isEmpty) {
+      return const <int, UserRuleExtra>{};
+    }
+    try {
+      final json = jsonDecode(raw);
+      if (json is! Map) return const <int, UserRuleExtra>{};
+      final result = <int, UserRuleExtra>{};
+      json.forEach((key, value) {
+        final mid = int.tryParse('$key');
+        if (mid != null && mid > 0) {
+          result[mid] = UserRuleExtra.fromJson(value);
+        }
+      });
+      return result;
+    } catch (_) {
+      return const <int, UserRuleExtra>{};
+    }
+  }
+
+  static set cfRuleUserExtras(Map<int, UserRuleExtra> value) =>
+      _setting.put(
+        SettingBoxKey.cfRuleUserExtras,
+        jsonEncode({
+          for (final entry in value.entries)
+            '${entry.key}': entry.value.toJson(),
+        }),
+      );
+
+  static bool get cfRuleMigrationDone =>
+      _setting.get(SettingBoxKey.cfRuleMigrationDone, defaultValue: false);
+
+  static set cfRuleMigrationDone(bool value) =>
+      _setting.put(SettingBoxKey.cfRuleMigrationDone, value);
 }
