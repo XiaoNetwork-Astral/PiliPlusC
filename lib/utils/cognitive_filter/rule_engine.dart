@@ -78,4 +78,35 @@ class RuleEngine {
     _ensureCache();
     return _usersOf(RuleScope.danmaku).blocksHash(midHash, enabled: enabled);
   }
+
+  /// 取某个范围当前规则的快照，适合在循环里反复判断
+  ///
+  /// 总开关与编译结果只在取快照时读取一次；总开关关闭时返回的快照不屏蔽任何内容。
+  RuleSnapshot snapshot(RuleScope scope) {
+    if (!Pref.cfRuleFilterEnabled) return RuleSnapshot.off;
+    _ensureCache();
+    return RuleSnapshot._(_textOf(scope), _usersOf(scope));
+  }
+}
+
+/// 某个范围规则的只读快照，见 [RuleEngine.snapshot]
+class RuleSnapshot {
+  const RuleSnapshot._(this._text, this._users);
+
+  /// 不屏蔽任何内容的快照，用于总开关关闭时
+  static const RuleSnapshot off = RuleSnapshot._(null, null);
+
+  final RuleSet? _text;
+  final UserRuleSet? _users;
+
+  bool matchText(String text) =>
+      text.isNotEmpty && (_text?.matchesText(text) ?? false);
+
+  bool matchZone(String zoneName) =>
+      zoneName.isNotEmpty && (_text?.matchesZone(zoneName) ?? false);
+
+  bool userBlocked(int mid) => mid > 0 && (_users?.blocksMid(mid) ?? false);
+
+  bool hashBlocked(String midHash) =>
+      midHash.isNotEmpty && (_users?.blocksHash(midHash) ?? false);
 }
