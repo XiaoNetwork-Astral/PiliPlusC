@@ -27,11 +27,15 @@ import 'package:PiliPlus/models_new/dynamic/dyn_topic_top/top_details.dart';
 import 'package:PiliPlus/models_new/dynamic/dyn_topic_top/topic_item.dart';
 import 'package:PiliPlus/models_new/followee_votes/vote.dart';
 import 'package:PiliPlus/utils/accounts.dart';
+import 'package:PiliPlus/utils/global_data.dart';
 import 'package:PiliPlus/utils/utils.dart';
 import 'package:PiliPlus/utils/wbi_sign.dart';
 import 'package:dio/dio.dart';
 
 abstract final class DynamicsHttp {
+  // 连续自动翻页上限：整页被过滤后最多补拉 5 页，之后由用户下拉刷新
+  static const int _maxAutoLoadPages = 5;
+
   @pragma('vm:notify-debugger-on-exception')
   static Future<LoadingState<DynamicsDataModel>> followDynamic({
     int? hostMid,
@@ -39,6 +43,7 @@ abstract final class DynamicsHttp {
     Set<int>? tempBannedList,
     Set<int>? followMids,
     DynamicsTabType type = .all,
+    int depth = 0,
   }) async {
     if (followMids != null && followMids.isEmpty) {
       return Success(DynamicsDataModel.empty());
@@ -57,19 +62,29 @@ abstract final class DynamicsHttp {
           type: type,
           tempBannedList: tempBannedList,
         );
+        // 本地黑名单只过滤顶层作者（不递归转发原文）；UP 页是主动查看，不过滤
+        if (type != .up) {
+          data.items?.removeWhere(
+            (item) => GlobalData().blackMids.contains(
+              item.modules.moduleAuthor?.mid,
+            ),
+          );
+          if (data.items?.isEmpty ?? true) data.loadNext = data.hasMore;
+        }
         if (followMids != null) {
           data.items?.removeWhere(
             (item) => !followMids.contains(item.modules.moduleAuthor?.mid),
           );
           if (data.items?.isEmpty ?? true) data.loadNext = data.hasMore;
         }
-        if (data.loadNext == true) {
+        if (data.loadNext == true && depth < _maxAutoLoadPages) {
           return await followDynamic(
             type: type,
             offset: data.offset,
             hostMid: hostMid,
             tempBannedList: tempBannedList,
             followMids: followMids,
+            depth: depth + 1,
           );
         }
         return Success(data);
