@@ -22,6 +22,7 @@ abstract final class GStorage {
     SettingBoxKey.webdavPassword,
     SettingBoxKey.archivePassword,
     SettingBoxKey.webdavArchivePassword,
+    SettingBoxKey.cfApiKey,
   };
 
   static late final Box<UserInfoData> userInfo;

@@ -4,6 +4,7 @@ import 'package:PiliPlus/utils/backup/backup_method.dart';
 enum BackupItem {
   setting('设置', '所有可导出的设置项'),
   account('登录信息', '已登录账户的 cookie 信息等，属于敏感信息，慎重选择'),
+  filterKey('AI 屏蔽密钥', 'AI 屏蔽接口的 API Key，属于敏感信息，慎重选择'),
   blacklist('黑名单', '已屏蔽的用户'),
   reply('历史评论', '已登录账户的评论（仅本机）'),
   search('搜索记录', '已登录账户的搜索历史（仅本机）'),
@@ -29,7 +30,8 @@ enum BackupItem {
   static const String unsupportedTip = '目前选择的备份方式不支持备份此项目';
 
   /// 是否属于敏感信息
-  bool get sensitive => this == BackupItem.account;
+  bool get sensitive =>
+      this == BackupItem.account || this == BackupItem.filterKey;
 
   /// 当前备份方式是否支持该项
   bool isSupportedBy(BackupMethod method) =>

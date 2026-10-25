@@ -323,6 +323,8 @@ abstract final class BackupService {
         return _formatBytes(bytesOf(item) ?? 0);
       case BackupItem.account:
         return '${countOf(item) ?? 0} 个';
+      case BackupItem.filterKey:
+        return (countOf(item) ?? 0) > 0 ? '已填写' : '未填写';
       case BackupItem.blacklist:
         return '${countOf(item) ?? 0} 个';
       case BackupItem.reply:
@@ -342,6 +344,8 @@ abstract final class BackupService {
         return utf8.encode(GStorage.exportAllSettings()).length;
       case BackupItem.account:
         return utf8.encode(jsonEncode(Accounts.account.toMap())).length;
+      case BackupItem.filterKey:
+        return utf8.encode(Pref.cfApiKey).length;
       case BackupItem.blacklist:
         return null;
       case BackupItem.reply:
@@ -362,6 +366,8 @@ abstract final class BackupService {
         return null;
       case BackupItem.account:
         return Accounts.account.length;
+      case BackupItem.filterKey:
+        return Pref.cfApiKey.isEmpty ? 0 : 1;
       case BackupItem.blacklist:
         return Pref.blackMids.length;
       case BackupItem.reply:
@@ -526,6 +532,9 @@ abstract final class BackupService {
             break;
           case BackupItem.account:
             await ConfigArchive.applyAccount(entry.value);
+            break;
+          case BackupItem.filterKey:
+            ConfigArchive.applyFilterKey(entry.value);
             break;
           case BackupItem.blacklist:
             ConfigArchive.applyBlacklist(entry.value);

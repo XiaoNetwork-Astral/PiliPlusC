@@ -285,6 +285,19 @@ abstract final class SettingBoxKey {
       saveReply = 'saveReply',
       appFont = 'appFont',
       customAppFont = 'customAppFont';
+
+  /// 认知滤网
+  static const String cfRuleFilterEnabled = 'cfRuleFilterEnabled',
+      cfAiFilterEnabled = 'cfAiFilterEnabled',
+      cfFilterTier = 'cfFilterTier',
+      cfFilterProMode = 'cfFilterProMode',
+      cfApiBaseUrl = 'cfApiBaseUrl',
+      cfApiModel = 'cfApiModel',
+      cfApiTimeout = 'cfApiTimeout',
+      cfApiKey = 'cfApiKey',
+      cfCategoryOverrides = 'cfCategoryOverrides',
+      cfCustomCategories = 'cfCustomCategories',
+      cfAiPrivacyAccepted = 'cfAiPrivacyAccepted';
 }
 
 abstract final class LocalCacheKey {

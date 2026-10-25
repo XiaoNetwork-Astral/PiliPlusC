@@ -54,6 +54,7 @@ abstract final class ConfigArchive {
   static const String metaFileName = 'meta.json';
   static const String settingFileName = 'setting.json';
   static const String accountFileName = 'account.json';
+  static const String filterKeyFileName = 'filter_key.json';
   static const String blacklistFileName = 'blacklist.json';
   static const String replyFileName = 'reply.json';
   static const String searchFileName = 'search.json';
@@ -93,6 +94,11 @@ abstract final class ConfigArchive {
     if (want(BackupItem.account)) {
       zip.add(ArchiveFile.string(accountFileName, _exportAccount()));
       files.add(accountFileName);
+    }
+
+    if (want(BackupItem.filterKey) && Pref.cfApiKey.isNotEmpty) {
+      zip.add(ArchiveFile.string(filterKeyFileName, _exportFilterKey()));
+      files.add(filterKeyFileName);
     }
 
     if (want(BackupItem.blacklist)) {
@@ -196,6 +202,11 @@ abstract final class ConfigArchive {
     await applyItem(BackupItem.setting, settingFileName, applySetting);
     await applyItem(BackupItem.account, accountFileName, applyAccount);
     await applyItem(
+      BackupItem.filterKey,
+      filterKeyFileName,
+      (data) async => applyFilterKey(data),
+    );
+    await applyItem(
       BackupItem.blacklist,
       blacklistFileName,
       (data) async => applyBlacklist(data),
@@ -248,6 +259,9 @@ abstract final class ConfigArchive {
         return jsonDecode(GStorage.exportAllSettings());
       case BackupItem.account:
         return jsonDecode(_exportAccount());
+      case BackupItem.filterKey:
+        final key = Pref.cfApiKey;
+        return key.isEmpty ? null : key;
       case BackupItem.blacklist:
         return Pref.blackMids.toList();
       case BackupItem.reply:
@@ -276,6 +290,14 @@ abstract final class ConfigArchive {
       throw const BackupException('登录信息格式不正确');
     }
     await Accounts.importJsonAccount(data);
+  }
+
+  /// 写入 AI 屏蔽密钥
+  static void applyFilterKey(Object? data) {
+    if (data is! String) {
+      throw const BackupException('AI 屏蔽密钥格式不正确');
+    }
+    Pref.cfApiKey = data;
   }
 
   /// 写入黑名单
@@ -309,6 +331,8 @@ abstract final class ConfigArchive {
         return BackupItem.setting;
       case accountFileName:
         return BackupItem.account;
+      case filterKeyFileName:
+        return BackupItem.filterKey;
       case blacklistFileName:
         return BackupItem.blacklist;
       case replyFileName:
@@ -468,6 +492,8 @@ abstract final class ConfigArchive {
   }
 
   static String _exportAccount() => jsonEncode(Accounts.account.toMap());
+
+  static String _exportFilterKey() => jsonEncode(Pref.cfApiKey);
 
   static String _exportBlacklist() => jsonEncode(Pref.blackMids.toList());
 

@@ -1,9 +1,12 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:PiliPlus/common/widgets/gesture/horizontal_drag_gesture_recognizer.dart'
     show deviceTouchSlop;
 import 'package:PiliPlus/common/widgets/pair.dart';
 import 'package:PiliPlus/http/constants.dart';
+import 'package:PiliPlus/models/cognitive_filter/filter_category.dart';
+import 'package:PiliPlus/models/cognitive_filter/filter_tier.dart';
 import 'package:PiliPlus/models/common/bar_hide_type.dart';
 import 'package:PiliPlus/models/common/danmaku/danmaku_font_sync_mode.dart';
 import 'package:PiliPlus/models/common/dynamic/dynamic_badge_mode.dart';
@@ -1248,4 +1251,106 @@ abstract final class Pref {
 
   static bool get filterIntro =>
       _setting.get(SettingBoxKey.filterIntro, defaultValue: false);
+
+  static bool get cfRuleFilterEnabled =>
+      _setting.get(SettingBoxKey.cfRuleFilterEnabled, defaultValue: true);
+
+  static set cfRuleFilterEnabled(bool value) =>
+      _setting.put(SettingBoxKey.cfRuleFilterEnabled, value);
+
+  static bool get cfAiFilterEnabled =>
+      _setting.get(SettingBoxKey.cfAiFilterEnabled, defaultValue: false);
+
+  static set cfAiFilterEnabled(bool value) =>
+      _setting.put(SettingBoxKey.cfAiFilterEnabled, value);
+
+  static FilterTier get cfFilterTier {
+    final index = _setting.get(
+      SettingBoxKey.cfFilterTier,
+      defaultValue: FilterTier.defaultTier.index,
+    );
+    if (index is int && index >= 0 && index < FilterTier.values.length) {
+      return FilterTier.values[index];
+    }
+    return FilterTier.defaultTier;
+  }
+
+  static set cfFilterTier(FilterTier value) =>
+      _setting.put(SettingBoxKey.cfFilterTier, value.index);
+
+  static bool get cfFilterProMode =>
+      _setting.get(SettingBoxKey.cfFilterProMode, defaultValue: false);
+
+  static set cfFilterProMode(bool value) =>
+      _setting.put(SettingBoxKey.cfFilterProMode, value);
+
+  static String get cfApiBaseUrl => _setting.get(
+    SettingBoxKey.cfApiBaseUrl,
+    defaultValue: 'https://api.typesafe.ai/v1/systemone',
+  );
+
+  static set cfApiBaseUrl(String value) =>
+      _setting.put(SettingBoxKey.cfApiBaseUrl, value);
+
+  static String get cfApiModel => _setting.get(
+    SettingBoxKey.cfApiModel,
+    defaultValue: 'jev-latest',
+  );
+
+  static set cfApiModel(String value) =>
+      _setting.put(SettingBoxKey.cfApiModel, value);
+
+  static int get cfApiTimeout {
+    final value = _setting.get(
+      SettingBoxKey.cfApiTimeout,
+      defaultValue: 6,
+    );
+    if (value is num) return value.toInt().clamp(2, 30).toInt();
+    return 6;
+  }
+
+  static set cfApiTimeout(int value) =>
+      _setting.put(SettingBoxKey.cfApiTimeout, value.clamp(2, 30).toInt());
+
+  static String get cfApiKey =>
+      _setting.get(SettingBoxKey.cfApiKey, defaultValue: '');
+
+  static set cfApiKey(String value) =>
+      _setting.put(SettingBoxKey.cfApiKey, value);
+
+  static Map<String, dynamic> get cfCategoryOverrides {
+    final raw = _setting.get(SettingBoxKey.cfCategoryOverrides);
+    if (raw is! String || raw.isEmpty) return const <String, dynamic>{};
+    try {
+      final json = jsonDecode(raw);
+      if (json is! Map) return const <String, dynamic>{};
+      final result = <String, dynamic>{};
+      json.forEach((key, value) {
+        if (key is String && value is Map) {
+          result[key] = Map<String, dynamic>.from(value);
+        }
+      });
+      return result;
+    } catch (_) {
+      return const <String, dynamic>{};
+    }
+  }
+
+  static set cfCategoryOverrides(Map<String, dynamic> value) =>
+      _setting.put(SettingBoxKey.cfCategoryOverrides, jsonEncode(value));
+
+  static List<FilterCategory> get cfCustomCategories {
+    final raw = _setting.get(SettingBoxKey.cfCustomCategories);
+    if (raw is! String || raw.isEmpty) return const <FilterCategory>[];
+    try {
+      return FilterCategory.listFromJson(jsonDecode(raw));
+    } catch (_) {
+      return const <FilterCategory>[];
+    }
+  }
+
+  static set cfCustomCategories(List<FilterCategory> value) => _setting.put(
+    SettingBoxKey.cfCustomCategories,
+    jsonEncode([for (final category in value) category.toJson()]),
+  );
 }
