@@ -28,9 +28,9 @@ void main() {
         RuleScope.reply,
         RuleScope.dynamic,
         RuleScope.video,
+        RuleScope.zone,
         RuleScope.live,
       });
-      expect(RuleType.zone.allowedScopes, {RuleScope.video});
       expect(RuleType.user.allowedScopes, {
         RuleScope.danmaku,
         RuleScope.reply,
@@ -38,14 +38,13 @@ void main() {
         RuleScope.video,
         RuleScope.live,
       });
-      expect(FilterRule.allowedScopes(RuleType.zone), {RuleScope.video});
       expect(
         {for (final type in RuleType.values) type.label},
-        {'关键词', '正则', '分区', '用户'},
+        {'关键词', '正则', '用户'},
       );
       expect(
         {for (final scope in RuleScope.values) scope.label},
-        {'弹幕', '评论', '动态', '视频', '私信', '直播'},
+        {'弹幕', '评论', '动态', '视频', '视频分区', '私信', '直播'},
       );
     });
   });
@@ -67,9 +66,9 @@ void main() {
         ),
         _rule(
           id: 'z1',
-          type: RuleType.zone,
+          type: RuleType.regex,
           content: '动画|电影',
-          scopes: {RuleScope.video},
+          scopes: {RuleScope.zone},
         ),
         _rule(
           id: 'u1',
@@ -226,7 +225,7 @@ void main() {
       expect(_rule(content: '').validate(), '内容不能为空');
       expect(_rule(scopes: const {}).validate(), contains('至少选择'));
       expect(
-        _rule(type: RuleType.zone, content: '动画', scopes: {RuleScope.reply})
+        _rule(type: RuleType.user, content: '1', scopes: {RuleScope.zone})
             .validate(),
         contains('不能用于'),
       );
@@ -308,7 +307,7 @@ void main() {
         contains('正则表达式无法编译'),
       );
       expect(
-        _rule(type: RuleType.zone, content: '[', scopes: {RuleScope.video})
+        _rule(type: RuleType.regex, content: '[', scopes: {RuleScope.zone})
             .validate(),
         contains('正则表达式无法编译'),
       );
@@ -318,10 +317,24 @@ void main() {
         isNull,
       );
       expect(
-        _rule(type: RuleType.zone, content: '动画|电影', scopes: {RuleScope.video})
+        _rule(type: RuleType.regex, content: '动画|电影', scopes: {RuleScope.zone})
             .validate(),
         isNull,
       );
+    });
+
+    test('旧版本的分区类型读成正则加视频分区范围', () {
+      final rule = FilterRule.fromJson({
+        'id': 'old-zone',
+        'type': 'zone',
+        'content': '动画',
+        'scopes': ['video'],
+      });
+      expect(rule, isNotNull);
+      expect(rule!.type, RuleType.regex);
+      expect(rule.scopes, {RuleScope.zone});
+      expect(rule.content, '动画');
+      expect(rule.validate(), isNull);
     });
 
     test('copyWith 能清空 midHash', () {

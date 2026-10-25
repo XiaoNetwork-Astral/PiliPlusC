@@ -1,26 +1,17 @@
+import 'package:PiliPlus/common/widgets/dialog/dialog.dart';
 import 'package:PiliPlus/common/widgets/flutter/list_tile.dart';
 import 'package:PiliPlus/common/widgets/scaffold/simple_scaffold.dart';
 import 'package:PiliPlus/common/widgets/view_safe_area.dart';
 import 'package:PiliPlus/models/cognitive_filter/filter_rule.dart';
-import 'package:PiliPlus/models/cognitive_filter/rule_scope.dart';
 import 'package:PiliPlus/models/cognitive_filter/rule_type.dart';
 import 'package:PiliPlus/pages/cognitive_filter/rule_edit_page.dart';
 import 'package:PiliPlus/utils/cognitive_filter/rule_store.dart';
 import 'package:get/get.dart';
 import 'package:material_ui/material_ui.dart' hide ListTile;
 
-const List<RuleScope> _scopeOrder = [
-  RuleScope.danmaku,
-  RuleScope.reply,
-  RuleScope.dynamic,
-  RuleScope.video,
-  RuleScope.live,
-  RuleScope.whisper,
-];
-
-/// 统一规则列表
+/// 屏蔽规则列表
 ///
-/// 一行一条规则，右侧开关控制启用，点击左侧进入编辑页
+/// 一行一条规则，右侧是开关和删除，点击左侧进入编辑页
 class RuleListPage extends StatefulWidget {
   const RuleListPage({super.key, this.initialType});
 
@@ -33,6 +24,7 @@ class RuleListPage extends StatefulWidget {
 
 class _RuleListPageState extends State<RuleListPage> {
   late RuleType? _filter = widget.initialType;
+  String _query = '';
 
   void _openEdit([FilterRule? rule]) {
     Get.to(() => RuleEditPage(rule: rule));
@@ -40,31 +32,35 @@ class _RuleListPageState extends State<RuleListPage> {
 
   List<FilterRule> _filtered(List<FilterRule> rules) {
     final filter = _filter;
-    if (filter == null) return rules;
+    final query = _query.trim().toLowerCase();
     return [
       for (final rule in rules)
-        if (rule.type == filter) rule,
+        if ((filter == null || rule.type == filter) &&
+            (query.isEmpty || _matches(rule, query)))
+          rule,
     ];
+  }
+
+  bool _matches(FilterRule rule, String query) {
+    final text = rule.isHashOnly
+        ? '${rule.midHash} b站 弹幕用户'
+        : '${rule.content} ${rule.type.label} ${_scopesOf(rule)}';
+    return text.toLowerCase().contains(query);
   }
 
   String _titleOf(FilterRule rule) {
     if (!rule.isHashOnly) return rule.content;
     final hash = rule.midHash ?? '';
-    return '弹幕用户 ${hash.length > 8 ? hash.substring(0, 8) : hash}';
+    return 'B 站弹幕用户 ${hash.length > 8 ? hash.substring(0, 8) : hash}';
   }
 
-  String _scopesOf(FilterRule rule) {
-    final labels = <String>[];
-    for (final scope in _scopeOrder) {
-      if (rule.scopes.contains(scope)) labels.add(scope.label);
-    }
-    return labels.join('、');
-  }
+  String _scopesOf(FilterRule rule) => [
+    for (final scope in ruleScopeOrder)
+      if (rule.scopes.contains(scope)) scope.label,
+  ].join('、');
 
   bool _hasBadRegex(FilterRule rule) {
-    if (rule.type != RuleType.regex && rule.type != RuleType.zone) {
-      return false;
-    }
+    if (rule.type != RuleType.regex) return false;
     try {
       RegExp(rule.content, caseSensitive: false);
       return false;
@@ -73,12 +69,20 @@ class _RuleListPageState extends State<RuleListPage> {
     }
   }
 
+  Future<void> _confirmDelete(FilterRule rule) async {
+    final confirmed = await showConfirmDialog(
+      context: context,
+      title: const Text('确定删除该规则？'),
+    );
+    if (confirmed) RuleStore.instance.remove(rule.id);
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final padding = MediaQuery.viewPaddingOf(context);
     return SimpleScaffold(
-      appBar: AppBar(title: const Text('规则')),
+      appBar: AppBar(title: const Text('屏蔽规则')),
       body: ViewSafeArea(
         child: ValueListenableBuilder<int>(
           valueListenable: RuleStore.instance.version,
@@ -86,29 +90,40 @@ class _RuleListPageState extends State<RuleListPage> {
             final rules = _filtered(RuleStore.instance.rules);
             return Column(
               children: [
-                const SizedBox(height: 8),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                  child: TextField(
+                    onChanged: (value) => setState(() => _query = value),
+                    textInputAction: TextInputAction.search,
+                    decoration: InputDecoration(
+                      isDense: true,
+                      hintText: '搜索规则',
+                      prefixIcon: const Icon(Icons.search),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(28),
+                      ),
+                    ),
+                  ),
+                ),
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
                   child: Row(
+                    spacing: 8,
                     children: [
                       for (final filter in <RuleType?>[
                         null,
                         ...RuleType.values,
                       ])
-                        Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: _filterChip(
-                            theme,
-                            filter?.label ?? '全部',
-                            _filter == filter,
-                            () => setState(() => _filter = filter),
-                          ),
+                        ChoiceChip(
+                          label: Text(filter?.label ?? '全部'),
+                          selected: _filter == filter,
+                          showCheckmark: false,
+                          onSelected: (_) => setState(() => _filter = filter),
                         ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 4),
                 Expanded(
                   child: rules.isEmpty
                       ? Center(
@@ -118,14 +133,10 @@ class _RuleListPageState extends State<RuleListPage> {
                           ),
                         )
                       : ListView.builder(
-                          padding: EdgeInsets.only(
-                            top: 4,
-                            bottom: padding.bottom + 100,
-                          ),
+                          padding: EdgeInsets.only(bottom: padding.bottom + 100),
                           itemCount: rules.length,
-                          itemBuilder: (context, index) {
-                            return _ruleTile(theme, rules[index]);
-                          },
+                          itemBuilder: (context, index) =>
+                              _ruleTile(theme, rules[index]),
                         ),
                 ),
               ],
@@ -147,48 +158,36 @@ class _RuleListPageState extends State<RuleListPage> {
     );
   }
 
-  Widget _filterChip(
-    ThemeData theme,
-    String label,
-    bool selected,
-    VoidCallback onTap,
-  ) {
-    final foreground = selected
-        ? theme.colorScheme.onPrimaryContainer
-        : theme.colorScheme.onSurfaceVariant;
-    return Material(
-      color: selected
-          ? theme.colorScheme.primaryContainer
-          : theme.colorScheme.surfaceContainerHighest,
-      borderRadius: BorderRadius.circular(18),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-          child: Text(
-            label,
-            style: theme.textTheme.labelLarge?.copyWith(
-              color: foreground,
-              fontWeight: selected ? FontWeight.w600 : null,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _ruleTile(ThemeData theme, FilterRule rule) {
-    final baseStyle = theme.textTheme.labelMedium?.copyWith(
-      color: theme.colorScheme.outline,
+    final outline = theme.colorScheme.outline;
+    final deleteButton = IconButton(
+      tooltip: '删除',
+      icon: Icon(Icons.delete_outline, color: outline),
+      onPressed: () => _confirmDelete(rule),
     );
+    // B 站云端只给出发送者哈希，没有 UID，所以只能删除，不能启停或修改
+    if (rule.isHashOnly) {
+      return ListTile(
+        title: Text(
+          _titleOf(rule),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: theme.textTheme.titleMedium,
+        ),
+        subtitle: Text(
+          '来自 B 站，只有哈希，不能启停或修改',
+          style: theme.textTheme.labelMedium?.copyWith(color: outline),
+        ),
+        trailing: deleteButton,
+      );
+    }
     return ListTile(
       title: Text(
         _titleOf(rule),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: theme.textTheme.titleMedium?.copyWith(
-          color: rule.enabled ? null : theme.colorScheme.outline,
+          color: rule.enabled ? null : outline,
         ),
       ),
       subtitle: Text.rich(
@@ -204,15 +203,21 @@ class _RuleListPageState extends State<RuleListPage> {
         ),
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
-        style: baseStyle,
+        style: theme.textTheme.labelMedium?.copyWith(color: outline),
       ),
-      trailing: Transform.scale(
-        scale: 0.8,
-        alignment: Alignment.centerRight,
-        child: Switch(
-          value: rule.enabled,
-          onChanged: (value) => RuleStore.instance.setEnabled(rule.id, value),
-        ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Transform.scale(
+            scale: 0.8,
+            child: Switch(
+              value: rule.enabled,
+              onChanged: (value) =>
+                  RuleStore.instance.setEnabled(rule.id, value),
+            ),
+          ),
+          deleteButton,
+        ],
       ),
       onTap: () => _openEdit(rule),
     );

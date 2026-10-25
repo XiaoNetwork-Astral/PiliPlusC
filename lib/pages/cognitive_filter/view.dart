@@ -95,7 +95,6 @@ class _CognitiveFilterPageState extends State<CognitiveFilterPage>
               child: CfSwitchTile(
                 icon: Icons.tune,
                 title: '专业模式',
-                subtitle: _proMode ? '已使用类别规则，档位不再生效' : '按类别单独设置开关与灵敏度',
                 value: _proMode,
                 onChanged: _setProMode,
               ),

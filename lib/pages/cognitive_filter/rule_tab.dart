@@ -2,7 +2,6 @@ import 'package:PiliPlus/pages/cognitive_filter/danmaku_block_page.dart';
 import 'package:PiliPlus/pages/cognitive_filter/rule_list_page.dart';
 import 'package:PiliPlus/pages/cognitive_filter/rule_sub_pages.dart';
 import 'package:PiliPlus/pages/cognitive_filter/widgets.dart';
-import 'package:PiliPlus/utils/cognitive_filter/rule_store.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
 import 'package:get/get.dart';
 import 'package:material_ui/material_ui.dart';
@@ -47,38 +46,32 @@ class _RuleFilterTabState extends State<RuleFilterTab> {
         CfSwitchTile(
           icon: Icons.filter_alt_outlined,
           title: '启用规则屏蔽',
-          subtitle: '关闭后不再使用下列任何非 AI 过滤',
           value: _enabled,
           onChanged: _toggle,
         ),
         CfTile(
           icon: Icons.rule,
-          title: '规则',
-          subtitle: '关键词、正则、分区与用户，共 ${RuleStore.instance.rules.length} 条',
+          title: '屏蔽规则',
           onTap: () => _open(() => const RuleListPage()),
         ),
         CfTile(
           icon: Icons.subtitles_outlined,
           title: '弹幕屏蔽',
-          subtitle: '智能云屏蔽等级、按类型屏蔽',
           onTap: () => _open(() => const DanmakuBlockSubPage()),
         ),
         CfTile(
           icon: Icons.comment_outlined,
           title: '评论屏蔽',
-          subtitle: '带货、@ 数量、复制简介等',
           onTap: () => _open(() => const ReplyRuleSubPage()),
         ),
         CfTile(
           icon: Icons.dynamic_feed_outlined,
           title: '动态屏蔽',
-          subtitle: '带货动态',
           onTap: () => _open(() => const DynRuleSubPage()),
         ),
         CfTile(
           icon: Icons.ondemand_video_outlined,
           title: '视频屏蔽',
-          subtitle: '点赞率、时长、播放量等',
           onTap: () => _open(() => const VideoRuleSubPage()),
         ),
       ],

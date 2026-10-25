@@ -107,7 +107,7 @@ abstract final class VideoHttp {
     }
     if (_blocked(i['args']?['up_id'], snap)) return true;
     if (i['args']?['tname'] case final String tname
-        when snap.matchZone(tname)) {
+        when RuleEngine.instance.matchText(RuleScope.zone, tname)) {
       return true;
     }
     return false;
@@ -204,7 +204,8 @@ abstract final class VideoHttp {
     )) {
       return false;
     }
-    if (i['tname'] case final String tname when snap.matchZone(tname)) {
+    if (i['tname'] case final String tname
+        when RuleEngine.instance.matchText(RuleScope.zone, tname)) {
       return false;
     }
     return true;

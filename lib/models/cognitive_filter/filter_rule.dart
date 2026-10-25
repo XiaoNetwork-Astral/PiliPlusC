@@ -35,7 +35,7 @@ class FilterRule {
 
   final RuleType type;
 
-  /// 关键词、正则、分区正则，或用户 UID 的十进制字符串
+  /// 关键词、正则，或用户 UID 的十进制字符串
   final String content;
 
   /// 生效范围，非空且必须是 [type] 允许的子集
@@ -74,7 +74,7 @@ class FilterRule {
         return '「${type.label}」规则不能用于「${scope.label}」';
       }
     }
-    if (type == RuleType.regex || type == RuleType.zone) {
+    if (type == RuleType.regex) {
       try {
         RegExp(content, caseSensitive: false);
       } on FormatException catch (e) {
@@ -128,7 +128,10 @@ class FilterRule {
 
     final id = _stringOf(json['id']).trim();
     if (id.isEmpty) return null;
-    final type = RuleType.byName(_stringOf(json['type']));
+    // 旧版本曾有独立的「分区」类型，现在是正则加视频分区范围
+    final typeName = _stringOf(json['type']);
+    final legacyZone = typeName == 'zone';
+    final type = legacyZone ? RuleType.regex : RuleType.byName(typeName);
     if (type == null) return null;
 
     var content = _stringOf(json['content']);
@@ -139,7 +142,11 @@ class FilterRule {
     final enabled = rawEnabled is bool ? rawEnabled : true;
 
     Set<RuleScope> scopes;
-    if (type == RuleType.user && contentTrimmed.isEmpty && midHash != null) {
+    if (legacyZone) {
+      scopes = {RuleScope.zone};
+    } else if (type == RuleType.user &&
+        contentTrimmed.isEmpty &&
+        midHash != null) {
       // 只有哈希的规则范围固定为弹幕
       scopes = {RuleScope.danmaku};
     } else {

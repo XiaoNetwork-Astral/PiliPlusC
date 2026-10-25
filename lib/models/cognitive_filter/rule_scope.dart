@@ -4,6 +4,7 @@ enum RuleScope {
   reply('评论'),
   dynamic('动态'),
   video('视频'),
+  zone('视频分区'),
   whisper('私信'),
   live('直播');
 

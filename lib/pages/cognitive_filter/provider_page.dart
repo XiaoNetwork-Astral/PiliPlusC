@@ -124,7 +124,6 @@ class _FilterProviderPageState extends State<FilterProviderPage> {
     Pref.cfApiKey = result;
     if (!mounted) return;
     setState(() {});
-    SmartDialog.showToast(result.isEmpty ? '已清除 API Key' : '已保存');
   }
 
   Future<void> _editModel() async {
@@ -248,7 +247,6 @@ class _FilterProviderPageState extends State<FilterProviderPage> {
         child: ListView(
           padding: EdgeInsets.only(bottom: bottomPadding),
           children: [
-            const CfHint('目前仅支持 Jev 判定接口，可使用官方或兼容的中转服务'),
             CfTile(
               icon: Icons.link,
               title: '接口地址',
@@ -258,7 +256,6 @@ class _FilterProviderPageState extends State<FilterProviderPage> {
             CfTile(
               icon: Icons.key,
               title: 'API Key',
-              subtitle: Pref.cfApiKey.isEmpty ? '未填写' : '已填写',
               onTap: _editApiKey,
             ),
             CfTile(
@@ -270,13 +267,12 @@ class _FilterProviderPageState extends State<FilterProviderPage> {
             CfTile(
               icon: Icons.timer_outlined,
               title: '等待超时',
-              subtitle: '当前 $_timeout 秒',
+              subtitle: '$_timeout 秒',
               onTap: _editTimeout,
             ),
             CfTile(
               icon: Icons.wifi_tethering,
               title: '测试连接',
-              subtitle: '用当前配置向 Jev 接口发一次请求',
               trailing: _testing
                   ? const SizedBox(
                       width: 20,

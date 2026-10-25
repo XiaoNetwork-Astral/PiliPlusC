@@ -7,22 +7,18 @@ import 'package:PiliPlus/models/cognitive_filter/user_rule_extra.dart';
 ///
 /// 正则编译失败只在构造时静默跳过，规则本身仍留在规则列表里。
 class RuleSet {
-  RuleSet._(this._keywords, this._regexps, this._zoneRegexps);
+  RuleSet._(this._keywords, this._regexps);
 
   final List<String> _keywords;
 
   final List<RegExp> _regexps;
 
-  final List<RegExp> _zoneRegexps;
+  bool get isEmpty => _keywords.isEmpty && _regexps.isEmpty;
 
-  bool get isEmpty =>
-      _keywords.isEmpty && _regexps.isEmpty && _zoneRegexps.isEmpty;
-
-  /// 编译某个范围的文本规则；`zone` 规则只在视频范围进入分区匹配
+  /// 编译某个范围的文本规则，视频分区也是一个范围
   factory RuleSet.text(Iterable<FilterRule> rules, RuleScope scope) {
     final keywords = <String>[];
     final regexps = <RegExp>[];
-    final zoneRegexps = <RegExp>[];
     for (final rule in rules) {
       if (!rule.enabled || !rule.scopes.contains(scope)) continue;
       // 防御式跳过类型不允许的范围（例如私信范围的正则）
@@ -37,17 +33,12 @@ class RuleSet {
           final regexp = _compile(rule.content);
           if (regexp != null) regexps.add(regexp);
           break;
-        case RuleType.zone:
-          if (scope != RuleScope.video) break;
-          final zoneRegexp = _compile(rule.content);
-          if (zoneRegexp != null) zoneRegexps.add(zoneRegexp);
-          break;
         case RuleType.user:
           // 用户规则不参与文本匹配
           break;
       }
     }
-    return RuleSet._(keywords, regexps, zoneRegexps);
+    return RuleSet._(keywords, regexps);
   }
 
   /// 关键词按大小写不敏感的子串匹配，正则按大小写不敏感匹配
@@ -61,15 +52,6 @@ class RuleSet {
     }
     for (final regexp in _regexps) {
       if (regexp.hasMatch(text)) return true;
-    }
-    return false;
-  }
-
-  /// 只用于视频分区名 `tname`；[enabled] 关闭时一律返回 false
-  bool matchesZone(String zoneName, {bool enabled = true}) {
-    if (!enabled || zoneName.isEmpty) return false;
-    for (final regexp in _zoneRegexps) {
-      if (regexp.hasMatch(zoneName)) return true;
     }
     return false;
   }

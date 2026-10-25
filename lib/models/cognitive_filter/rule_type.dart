@@ -6,12 +6,23 @@ const Set<RuleScope> allRuleScopes = {
   RuleScope.reply,
   RuleScope.dynamic,
   RuleScope.video,
+  RuleScope.zone,
   RuleScope.whisper,
   RuleScope.live,
 };
 
-/// 正则只用于有文本正文的范围（含直播卡片标题/分区名/主播名）
+/// 正则只用于有文本正文的范围（含视频分区名、直播卡片标题/分区名/主播名）
 const Set<RuleScope> textRuleScopes = {
+  RuleScope.danmaku,
+  RuleScope.reply,
+  RuleScope.dynamic,
+  RuleScope.video,
+  RuleScope.zone,
+  RuleScope.live,
+};
+
+/// 用户规则可用于五个内容范围
+const Set<RuleScope> userRuleScopes = {
   RuleScope.danmaku,
   RuleScope.reply,
   RuleScope.dynamic,
@@ -19,17 +30,10 @@ const Set<RuleScope> textRuleScopes = {
   RuleScope.live,
 };
 
-/// 分区规则只看视频分区名
-const Set<RuleScope> zoneRuleScopes = {RuleScope.video};
-
-/// 用户规则可用于五个内容范围
-const Set<RuleScope> userRuleScopes = textRuleScopes;
-
 /// 规则类型
 enum RuleType {
   keyword('关键词', allRuleScopes),
   regex('正则', textRuleScopes),
-  zone('分区', zoneRuleScopes),
   user('用户', userRuleScopes);
 
   const RuleType(this.label, this.allowedScopes);

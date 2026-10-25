@@ -192,7 +192,6 @@ class _CategoryEditPageState extends State<CategoryEditPage> {
       Pref.cfCategoryOverrides = overrides;
     }
 
-    SmartDialog.showToast('已保存');
     Get.back(result: true);
   }
 
@@ -206,7 +205,6 @@ class _CategoryEditPageState extends State<CategoryEditPage> {
       _threshold = factory.threshold.clamp(0.30, 0.95).toDouble();
       _surfaces = Set<FilterSurface>.of(factory.surfaces);
     });
-    SmartDialog.showToast('已恢复默认');
   }
 
   Future<void> _delete() async {
@@ -220,7 +218,6 @@ class _CategoryEditPageState extends State<CategoryEditPage> {
         .where((item) => item.id != _id)
         .toList();
     Pref.cfCustomCategories = list;
-    SmartDialog.showToast('已删除');
     Get.back(result: true);
   }
 

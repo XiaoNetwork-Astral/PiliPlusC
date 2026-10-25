@@ -113,9 +113,9 @@ void main() {
         _rule(id: 'uid', type: RuleType.user, content: '12345'),
         _rule(
           id: 'zone',
-          type: RuleType.zone,
+          type: RuleType.regex,
           content: '动画',
-          scopes: {RuleScope.video},
+          scopes: {RuleScope.zone},
         ),
       ];
       expect(

@@ -125,24 +125,16 @@ List<FilterRule> migrateLegacy(LegacyRuleSource source) {
     if (seen.add(_semanticKey(rule))) result.add(rule);
   }
 
-  void addPattern(String pattern, RuleScope scope, {bool asZone = false}) {
+  void addPattern(String pattern, RuleScope scope) {
     for (final segment in splitLegacyPattern(pattern)) {
-      if (asZone) {
-        // 分区规则按正则匹配；关键词段重新转义，保持字面量语义
-        final content = segment.type == RuleType.keyword
-            ? RegExp.escape(segment.content)
-            : segment.content;
-        add(RuleType.zone, content, const {RuleScope.video});
-      } else {
-        add(segment.type, segment.content, {scope});
-      }
+      add(segment.type, segment.content, {scope});
     }
   }
 
   addPattern(source.replyPattern, RuleScope.reply);
   addPattern(source.dynamicPattern, RuleScope.dynamic);
   addPattern(source.videoPattern, RuleScope.video);
-  addPattern(source.zonePattern, RuleScope.video, asZone: true);
+  addPattern(source.zonePattern, RuleScope.zone);
 
   for (final keyword in source.danmakuKeywords) {
     if (keyword.isEmpty) continue;

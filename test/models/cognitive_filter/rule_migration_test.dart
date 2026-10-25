@@ -124,12 +124,12 @@ void main() {
         {RuleScope.video},
       );
 
-      final zone1 = _find(rules, RuleType.zone, '动画');
+      final zone1 = _find(rules, RuleType.keyword, '动画');
       expect(zone1, isNotNull);
-      expect(zone1!.scopes, {RuleScope.video});
-      final zone2 = _find(rules, RuleType.zone, '(电影)');
+      expect(zone1!.scopes, {RuleScope.zone});
+      final zone2 = _find(rules, RuleType.regex, '(电影)');
       expect(zone2, isNotNull);
-      expect(zone2!.scopes, {RuleScope.video});
+      expect(zone2!.scopes, {RuleScope.zone});
 
       expect(
         _find(rules, RuleType.keyword, '弹幕词')!.scopes,
@@ -170,15 +170,16 @@ void main() {
       expect(merged.first.id, 'custom-id');
     });
 
-    test('分区里的转义字面量仍按正则语义匹配', () {
+    test('分区里的转义字面量还原成视频分区范围的关键词', () {
       final rules = migrateLegacy(const LegacyRuleSource(zonePattern: r'\.'));
       expect(rules.length, 1);
       final rule = rules.single;
-      expect(rule.type, RuleType.zone);
-      expect(rule.content, r'\.');
-      final set = RuleSet.text(rules, RuleScope.video);
-      expect(set.matchesZone('电影.区'), isTrue);
-      expect(set.matchesZone('电影X区'), isFalse);
+      expect(rule.type, RuleType.keyword);
+      expect(rule.content, '.');
+      expect(rule.scopes, {RuleScope.zone});
+      final set = RuleSet.text(rules, RuleScope.zone);
+      expect(set.matchesText('电影.区'), isTrue);
+      expect(set.matchesText('电影X区'), isFalse);
     });
 
     test('整串回退产生的坏正则留在列表里，但引擎跳过', () {

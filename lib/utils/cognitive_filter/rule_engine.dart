@@ -55,14 +55,6 @@ class RuleEngine {
     return _textOf(scope).matchesText(text, enabled: enabled);
   }
 
-  /// 视频分区名是否命中分区规则
-  bool matchZone(String zoneName) {
-    final enabled = Pref.cfRuleFilterEnabled;
-    if (!enabled || zoneName.isEmpty) return false;
-    _ensureCache();
-    return _textOf(RuleScope.video).matchesZone(zoneName, enabled: enabled);
-  }
-
   /// 某个范围内该 UID 是否被屏蔽，被禁用或被收窄的 UID 返回 false
   bool userBlocked(RuleScope scope, int mid) {
     final enabled = Pref.cfRuleFilterEnabled;
@@ -101,9 +93,6 @@ class RuleSnapshot {
 
   bool matchText(String text) =>
       text.isNotEmpty && (_text?.matchesText(text) ?? false);
-
-  bool matchZone(String zoneName) =>
-      zoneName.isNotEmpty && (_text?.matchesZone(zoneName) ?? false);
 
   bool userBlocked(int mid) => mid > 0 && (_users?.blocksMid(mid) ?? false);
 

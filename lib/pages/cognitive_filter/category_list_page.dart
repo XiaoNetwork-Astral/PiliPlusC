@@ -71,7 +71,6 @@ class _CategoryRulesPageState extends State<CategoryRulesPage> {
         child: ListView(
           padding: EdgeInsets.only(bottom: bottomPadding),
           children: [
-            const CfHint('开关与阈值只影响 AI 屏蔽，规则屏蔽不受影响'),
             for (final category in _categories)
               CfTile(
                 title: category.name,

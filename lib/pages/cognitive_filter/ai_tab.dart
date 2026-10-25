@@ -82,11 +82,6 @@ class _AiFilterTabState extends State<AiFilterTab> {
     setState(() => _enabled = true);
   }
 
-  String get _providerSubtitle {
-    final keyState = Pref.cfApiKey.isEmpty ? 'API Key 未填写' : 'API Key 已填写';
-    return '当前模型 ${Pref.cfApiModel}，$keyState';
-  }
-
   Future<void> _openProvider() async {
     await Get.to(() => const FilterProviderPage());
     if (!mounted) return;
@@ -110,21 +105,18 @@ class _AiFilterTabState extends State<AiFilterTab> {
         CfSwitchTile(
           icon: Icons.auto_awesome_outlined,
           title: '启用 AI 屏蔽',
-          subtitle: '对规则屏蔽后的内容再交给 Jev 二次判断',
           value: _enabled,
           onChanged: _toggle,
         ),
         CfTile(
           icon: Icons.dns_outlined,
           title: 'AI 提供商',
-          subtitle: _providerSubtitle,
           onTap: _openProvider,
         ),
         if (widget.proMode)
           CfTile(
             icon: Icons.category_outlined,
             title: '类别规则',
-            subtitle: '调整每个类别的开关、阈值与适用面',
             onTap: _openCategories,
           ),
       ],

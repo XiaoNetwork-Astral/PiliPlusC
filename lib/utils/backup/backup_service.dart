@@ -357,9 +357,7 @@ abstract final class BackupService {
 
     final report = await CloudSync.push(_kindsOf(syncItems));
     if (failure == null) {
-      return report.hasFailure
-          ? '导入完成，云端同步部分失败\n${report.summary}'
-          : '导入成功\n${report.summary}';
+      return report.hasFailure ? '云端同步部分失败\n${report.summary}' : null;
     }
     return '$failure\n${report.summary}';
   }
@@ -372,7 +370,7 @@ abstract final class BackupService {
       case BackupItem.account:
         return '${countOf(item) ?? 0} 个';
       case BackupItem.filterKey:
-        return (countOf(item) ?? 0) > 0 ? '已填写' : '未填写';
+        return '';
       case BackupItem.blacklist:
         return '${countOf(item) ?? 0} 个';
       case BackupItem.danmakuRules:
@@ -525,18 +523,14 @@ abstract final class BackupService {
     }
   }
 
-  static Future<String> _exportCloud(Set<BackupItem> items) async {
+  static Future<String?> _exportCloud(Set<BackupItem> items) async {
     final report = await CloudSync.push(_kindsOf(items));
-    return report.hasFailure
-        ? '上传完成，部分失败\n${report.summary}'
-        : '上传完成\n${report.summary}';
+    return report.hasFailure ? '上传部分失败\n${report.summary}' : null;
   }
 
-  static Future<String> _importCloud(Set<BackupItem> items) async {
+  static Future<String?> _importCloud(Set<BackupItem> items) async {
     final report = await CloudSync.pull(_kindsOf(items));
-    return report.hasFailure
-        ? '下载完成，部分失败\n${report.summary}'
-        : '下载完成\n${report.summary}';
+    return report.hasFailure ? '下载部分失败\n${report.summary}' : null;
   }
 
   static Set<CloudSyncKind> _kindsOf(Iterable<BackupItem> items) {

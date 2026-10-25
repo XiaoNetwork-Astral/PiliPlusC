@@ -101,12 +101,12 @@ void main() {
       final zoneSet = RuleSet.text([
         _rule(
           id: 'z',
-          type: RuleType.zone,
+          type: RuleType.regex,
           content: '动画',
-          scopes: const {RuleScope.video},
+          scopes: const {RuleScope.zone},
         ),
-      ], RuleScope.video);
-      expect(zoneSet.matchesZone('动画区', enabled: false), isFalse);
+      ], RuleScope.zone);
+      expect(zoneSet.matchesText('动画区', enabled: false), isFalse);
 
       final users = UserRuleSet.compute(
         scope: RuleScope.reply,
@@ -119,36 +119,37 @@ void main() {
   });
 
   group('分区匹配', () {
-    test('分区规则只看 tname，且只用于视频', () {
+    test('视频分区范围的规则只匹配分区名', () {
       final rules = [
         _rule(
           id: 'z',
-          type: RuleType.zone,
+          type: RuleType.regex,
           content: '动画|电影',
-          scopes: const {RuleScope.video},
+          scopes: const {RuleScope.zone},
         ),
       ];
-      final video = RuleSet.text(rules, RuleScope.video);
-      expect(video.matchesZone('新番动画区'), isTrue);
-      expect(video.matchesZone('电影区'), isTrue);
-      expect(video.matchesZone('游戏区'), isFalse);
-      expect(video.matchesZone(''), isFalse);
+      final zone = RuleSet.text(rules, RuleScope.zone);
+      expect(zone.matchesText('新番动画区'), isTrue);
+      expect(zone.matchesText('电影区'), isTrue);
+      expect(zone.matchesText('游戏区'), isFalse);
+      expect(zone.matchesText(''), isFalse);
 
-      final reply = RuleSet.text(rules, RuleScope.reply);
-      expect(reply.matchesZone('动画区'), isFalse);
+      final video = RuleSet.text(rules, RuleScope.video);
+      expect(video.matchesText('动画区'), isFalse);
     });
 
-    test('分区正则大小写不敏感，但不参与文本匹配', () {
+    test('分区正则大小写不敏感，但不参与视频标题匹配', () {
       final rules = [
         _rule(
           id: 'z',
-          type: RuleType.zone,
+          type: RuleType.regex,
           content: 'cook',
-          scopes: const {RuleScope.video},
+          scopes: const {RuleScope.zone},
         ),
       ];
+      final zone = RuleSet.text(rules, RuleScope.zone);
+      expect(zone.matchesText('COOK区'), isTrue);
       final video = RuleSet.text(rules, RuleScope.video);
-      expect(video.matchesZone('COOK区'), isTrue);
       expect(video.matchesText('cook 内容'), isFalse);
     });
 
@@ -156,9 +157,9 @@ void main() {
       final rules = [
         _rule(
           id: 'z',
-          type: RuleType.zone,
+          type: RuleType.regex,
           content: '动画',
-          scopes: const {RuleScope.video},
+          scopes: const {RuleScope.zone},
         ),
       ];
       expect(RuleSet.text(rules, RuleScope.live).isEmpty, isTrue);
