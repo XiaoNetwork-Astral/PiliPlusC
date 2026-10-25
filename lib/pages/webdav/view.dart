@@ -32,21 +32,8 @@ class _WebDavSettingPageState extends State<WebDavSettingPage> {
   String _password = Pref.webdavPassword;
   String _directory = Pref.webdavDirectory;
 
-  String _savedUri = Pref.webdavUri;
-  String _savedUsername = Pref.webdavUsername;
-  String _savedPassword = Pref.webdavPassword;
-  String _savedDirectory = Pref.webdavDirectory;
-
   bool _testing = false;
   bool _encryptionDirty = false;
-
-  bool get _infoDirty =>
-      _uri != _savedUri ||
-      _username != _savedUsername ||
-      _password != _savedPassword ||
-      _directory != _savedDirectory;
-
-  bool get _dirty => _infoDirty || _encryptionDirty;
 
   String? _validateUri(String uri) {
     if (uri.isEmpty) return '地址不能为空';
@@ -64,7 +51,9 @@ class _WebDavSettingPageState extends State<WebDavSettingPage> {
       keyboardType: TextInputType.url,
       validator: _validateUri,
     );
-    if (result != null) setState(() => _uri = result);
+    if (result == null) return;
+    await GStorage.setting.put(SettingBoxKey.webdavUri, result);
+    if (mounted) setState(() => _uri = result);
   }
 
   Future<void> _editUsername() async {
@@ -73,7 +62,9 @@ class _WebDavSettingPageState extends State<WebDavSettingPage> {
       title: '用户',
       initialValue: _username,
     );
-    if (result != null) setState(() => _username = result);
+    if (result == null) return;
+    await GStorage.setting.put(SettingBoxKey.webdavUsername, result);
+    if (mounted) setState(() => _username = result);
   }
 
   Future<void> _editPassword() async {
@@ -83,7 +74,9 @@ class _WebDavSettingPageState extends State<WebDavSettingPage> {
       initialValue: _password,
       obscureText: true,
     );
-    if (result != null) setState(() => _password = result);
+    if (result == null) return;
+    await GStorage.setting.put(SettingBoxKey.webdavPassword, result);
+    if (mounted) setState(() => _password = result);
   }
 
   Future<void> _editDirectory() async {
@@ -92,28 +85,9 @@ class _WebDavSettingPageState extends State<WebDavSettingPage> {
       title: '路径',
       initialValue: _directory,
     );
-    if (result != null) setState(() => _directory = result);
-  }
-
-  Future<void> _saveInfo() async {
-    final error = _validateUri(_uri);
-    if (error != null) {
-      SmartDialog.showToast(error);
-      return;
-    }
-    await GStorage.setting.putAll({
-      SettingBoxKey.webdavUri: _uri,
-      SettingBoxKey.webdavUsername: _username,
-      SettingBoxKey.webdavPassword: _password,
-      SettingBoxKey.webdavDirectory: _directory,
-    });
-    if (!mounted) return;
-    setState(() {
-      _savedUri = _uri;
-      _savedUsername = _username;
-      _savedPassword = _password;
-      _savedDirectory = _directory;
-    });
+    if (result == null) return;
+    await GStorage.setting.put(SettingBoxKey.webdavDirectory, result);
+    if (mounted) setState(() => _directory = result);
   }
 
   Future<void> _testConnection() async {
@@ -123,35 +97,16 @@ class _WebDavSettingPageState extends State<WebDavSettingPage> {
       return;
     }
     setState(() => _testing = true);
-
-    final origin = {
-      SettingBoxKey.webdavUri: Pref.webdavUri,
-      SettingBoxKey.webdavUsername: Pref.webdavUsername,
-      SettingBoxKey.webdavPassword: Pref.webdavPassword,
-      SettingBoxKey.webdavDirectory: Pref.webdavDirectory,
-    };
-    final target = {
-      SettingBoxKey.webdavUri: _uri,
-      SettingBoxKey.webdavUsername: _username,
-      SettingBoxKey.webdavPassword: _password,
-      SettingBoxKey.webdavDirectory: _directory,
-    };
     String message;
     try {
-      await GStorage.setting.putAll(target);
       final result = await WebDav().init();
       message = result.first ? '连接成功' : '连接失败：${result.second}';
     } catch (e) {
       message = '连接失败：${WebDav.describeError(e)}';
     } finally {
-      await GStorage.setting.putAll(origin);
-      if (mounted) {
-        setState(() => _testing = false);
-      }
+      if (mounted) setState(() => _testing = false);
     }
-    if (mounted) {
-      SmartDialog.showToast(message);
-    }
+    SmartDialog.showToast(message);
   }
 
   Future<void> _saveEncryption(bool encrypt, String password) async {
@@ -167,13 +122,7 @@ class _WebDavSettingPageState extends State<WebDavSettingPage> {
   Future<void> _onBack() async {
     final discard = await showUnsavedChangesDialog(context);
     if (!discard || !mounted) return;
-    setState(() {
-      _savedUri = _uri;
-      _savedUsername = _username;
-      _savedPassword = _password;
-      _savedDirectory = _directory;
-      _encryptionDirty = false;
-    });
+    setState(() => _encryptionDirty = false);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) Get.back();
     });
@@ -216,21 +165,19 @@ class _WebDavSettingPageState extends State<WebDavSettingPage> {
             CfTile(
               icon: Icons.wifi_tethering,
               title: '测试连接',
-              enabled: !_testing,
               trailing: _testing
                   ? const SizedBox(
                       width: 20,
                       height: 20,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : null,
-              onTap: _testConnection,
-            ),
-            CfTile(
-              icon: Icons.save_outlined,
-              title: '保存',
-              enabled: _infoDirty,
-              onTap: _saveInfo,
+                  : Text(
+                      '测试',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+              onTap: _testing ? null : _testConnection,
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
@@ -250,7 +197,7 @@ class _WebDavSettingPageState extends State<WebDavSettingPage> {
     );
     if (!showAppBar) return page;
     return popScope(
-      canPop: !_dirty,
+      canPop: !_encryptionDirty,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
         _onBack();

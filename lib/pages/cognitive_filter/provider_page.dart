@@ -1,19 +1,16 @@
 import 'package:PiliPlus/common/widgets/dialog/text_input_dialog.dart';
-import 'package:PiliPlus/common/widgets/flutter/pop_scope.dart';
 import 'package:PiliPlus/common/widgets/scaffold/simple_scaffold.dart';
 import 'package:PiliPlus/common/widgets/view_safe_area.dart';
-import 'package:PiliPlus/pages/backup/widgets/backup_dialogs.dart';
 import 'package:PiliPlus/pages/cognitive_filter/widgets.dart';
 import 'package:PiliPlus/utils/cognitive_filter/jev_client.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
 import 'package:flutter/services.dart' show FilteringTextInputFormatter;
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
-import 'package:get/get.dart';
 import 'package:material_ui/material_ui.dart';
 
 /// AI 提供商设置
 ///
-/// 先在页面里修改，测试连接用的是当前填写的内容，点保存才会写入。
+/// 修改后立即写入，测试连接用的就是当前保存的内容。
 /// API Key 只读写存储，不出现在界面与日志里。
 class FilterProviderPage extends StatefulWidget {
   const FilterProviderPage({super.key});
@@ -28,18 +25,7 @@ class _FilterProviderPageState extends State<FilterProviderPage> {
   String _model = Pref.cfApiModel;
   int _timeout = Pref.cfApiTimeout;
 
-  String _savedBaseUrl = Pref.cfApiBaseUrl;
-  String _savedApiKey = Pref.cfApiKey;
-  String _savedModel = Pref.cfApiModel;
-  int _savedTimeout = Pref.cfApiTimeout;
-
   bool _testing = false;
-
-  bool get _dirty =>
-      _baseUrl != _savedBaseUrl ||
-      _apiKey != _savedApiKey ||
-      _model != _savedModel ||
-      _timeout != _savedTimeout;
 
   String? _validateUrl(String value) {
     if (value.isEmpty) return '地址不能为空';
@@ -57,7 +43,9 @@ class _FilterProviderPageState extends State<FilterProviderPage> {
       keyboardType: TextInputType.url,
       validator: _validateUrl,
     );
-    if (result != null) setState(() => _baseUrl = result);
+    if (result == null) return;
+    Pref.cfApiBaseUrl = result;
+    setState(() => _baseUrl = result);
   }
 
   Future<void> _editApiKey() async {
@@ -67,7 +55,9 @@ class _FilterProviderPageState extends State<FilterProviderPage> {
       initialValue: _apiKey,
       obscureText: true,
     );
-    if (result != null) setState(() => _apiKey = result);
+    if (result == null) return;
+    Pref.cfApiKey = result;
+    setState(() => _apiKey = result);
   }
 
   Future<void> _editModel() async {
@@ -77,7 +67,9 @@ class _FilterProviderPageState extends State<FilterProviderPage> {
       initialValue: _model,
       validator: (value) => value.isEmpty ? '模型名不能为空' : null,
     );
-    if (result != null) setState(() => _model = result);
+    if (result == null) return;
+    Pref.cfApiModel = result;
+    setState(() => _model = result);
   }
 
   Future<void> _editTimeout() async {
@@ -96,20 +88,10 @@ class _FilterProviderPageState extends State<FilterProviderPage> {
         return null;
       },
     );
-    if (result != null) setState(() => _timeout = int.parse(result));
-  }
-
-  void _save() {
-    Pref.cfApiBaseUrl = _baseUrl;
-    Pref.cfApiKey = _apiKey;
-    Pref.cfApiModel = _model;
-    Pref.cfApiTimeout = _timeout;
-    setState(() {
-      _savedBaseUrl = _baseUrl;
-      _savedApiKey = _apiKey;
-      _savedModel = _model;
-      _savedTimeout = _timeout;
-    });
+    if (result == null) return;
+    final seconds = int.parse(result);
+    Pref.cfApiTimeout = seconds;
+    setState(() => _timeout = seconds);
   }
 
   Future<void> _testConnection() async {
@@ -143,80 +125,57 @@ class _FilterProviderPageState extends State<FilterProviderPage> {
     SmartDialog.showToast(message);
   }
 
-  Future<void> _onBack() async {
-    final discard = await showUnsavedChangesDialog(context);
-    if (!discard || !mounted) return;
-    setState(() {
-      _savedBaseUrl = _baseUrl;
-      _savedApiKey = _apiKey;
-      _savedModel = _model;
-      _savedTimeout = _timeout;
-    });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) Get.back();
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     final bottomPadding = MediaQuery.viewPaddingOf(context).bottom + 100;
-    return popScope(
-      canPop: !_dirty,
-      onPopInvokedWithResult: (didPop, result) {
-        if (didPop) return;
-        _onBack();
-      },
-      child: SimpleScaffold(
-        appBar: AppBar(title: const Text('AI 提供商')),
-        body: ViewSafeArea(
-          child: ListView(
-            padding: EdgeInsets.only(bottom: bottomPadding),
-            children: [
-              CfTile(
-                icon: Icons.link,
-                title: '接口地址',
-                subtitle: _baseUrl,
-                onTap: _editBaseUrl,
-              ),
-              CfTile(
-                icon: Icons.key,
-                title: 'API Key',
-                subtitle: _apiKey.isEmpty ? null : '••••••••',
-                onTap: _editApiKey,
-              ),
-              CfTile(
-                icon: Icons.memory,
-                title: '模型名',
-                subtitle: _model,
-                onTap: _editModel,
-              ),
-              CfTile(
-                icon: Icons.timer_outlined,
-                title: '等待超时',
-                subtitle: '$_timeout 秒',
-                onTap: _editTimeout,
-              ),
-              CfTile(
-                icon: Icons.wifi_tethering,
-                title: '测试连接',
-                enabled: !_testing,
-                trailing: _testing
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : null,
-                onTap: _testConnection,
-              ),
-              CfTile(
-                icon: Icons.save_outlined,
-                title: '保存',
-                enabled: _dirty,
-                onTap: _save,
-              ),
-            ],
-          ),
+    return SimpleScaffold(
+      appBar: AppBar(title: const Text('AI 提供商')),
+      body: ViewSafeArea(
+        child: ListView(
+          padding: EdgeInsets.only(bottom: bottomPadding),
+          children: [
+            CfTile(
+              icon: Icons.link,
+              title: '接口地址',
+              subtitle: _baseUrl,
+              onTap: _editBaseUrl,
+            ),
+            CfTile(
+              icon: Icons.key,
+              title: 'API Key',
+              subtitle: _apiKey.isEmpty ? null : '••••••••',
+              onTap: _editApiKey,
+            ),
+            CfTile(
+              icon: Icons.memory,
+              title: '模型名',
+              subtitle: _model,
+              onTap: _editModel,
+            ),
+            CfTile(
+              icon: Icons.timer_outlined,
+              title: '等待超时',
+              subtitle: '$_timeout 秒',
+              onTap: _editTimeout,
+            ),
+            CfTile(
+              icon: Icons.wifi_tethering,
+              title: '测试连接',
+              trailing: _testing
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Text(
+                      '测试',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+              onTap: _testing ? null : _testConnection,
+            ),
+          ],
         ),
       ),
     );

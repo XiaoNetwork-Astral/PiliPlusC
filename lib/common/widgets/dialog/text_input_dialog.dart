@@ -14,6 +14,7 @@ Future<String?> showTextInputDialog({
   TextInputType? keyboardType,
   List<TextInputFormatter>? inputFormatters,
   String? suffixText,
+  int maxLines = 1,
   String? Function(String value)? validator,
 }) {
   return showDialog<String>(
@@ -26,6 +27,7 @@ Future<String?> showTextInputDialog({
       keyboardType: keyboardType,
       inputFormatters: inputFormatters,
       suffixText: suffixText,
+      maxLines: maxLines,
       validator: validator,
     ),
   );
@@ -40,6 +42,7 @@ class _TextInputDialog extends StatefulWidget {
     this.keyboardType,
     this.inputFormatters,
     this.suffixText,
+    required this.maxLines,
     this.validator,
   });
 
@@ -50,6 +53,7 @@ class _TextInputDialog extends StatefulWidget {
   final TextInputType? keyboardType;
   final List<TextInputFormatter>? inputFormatters;
   final String? suffixText;
+  final int maxLines;
   final String? Function(String value)? validator;
 
   @override
@@ -87,9 +91,15 @@ class _TextInputDialogState extends State<_TextInputDialog> {
         controller: _controller,
         autofocus: true,
         obscureText: _obscure,
-        keyboardType: widget.keyboardType,
+        minLines: 1,
+        maxLines: widget.maxLines,
+        keyboardType: widget.maxLines > 1
+            ? TextInputType.multiline
+            : widget.keyboardType,
         inputFormatters: widget.inputFormatters,
-        textInputAction: TextInputAction.done,
+        textInputAction: widget.maxLines > 1
+            ? TextInputAction.newline
+            : TextInputAction.done,
         onChanged: (_) {
           if (_error != null) setState(() => _error = null);
         },

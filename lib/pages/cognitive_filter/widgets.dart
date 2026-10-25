@@ -11,6 +11,7 @@ class CfTile extends StatelessWidget {
     this.trailing,
     this.onTap,
     this.enabled = true,
+    this.subtitleMaxLines,
   });
 
   final String title;
@@ -21,6 +22,9 @@ class CfTile extends StatelessWidget {
 
   /// 为 false 时整行置灰且不响应点击
   final bool enabled;
+
+  /// 副标题最多显示的行数，超出以省略号截断
+  final int? subtitleMaxLines;
 
   @override
   Widget build(BuildContext context) {
@@ -39,6 +43,8 @@ class CfTile extends StatelessWidget {
           ? null
           : Text(
               subtitle!,
+              maxLines: subtitleMaxLines,
+              overflow: subtitleMaxLines == null ? null : TextOverflow.ellipsis,
               style: theme.textTheme.labelMedium!.copyWith(
                 color: theme.colorScheme.outline,
               ),
