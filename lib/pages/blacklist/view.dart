@@ -11,10 +11,13 @@ import 'package:PiliPlus/common/widgets/sliver_wrap.dart';
 import 'package:PiliPlus/common/widgets/view_sliver_safe_area.dart';
 import 'package:PiliPlus/http/loading_state.dart';
 import 'package:PiliPlus/models/common/enum_with_label.dart';
+import 'package:PiliPlus/models/common/dm_block_type.dart';
 import 'package:PiliPlus/models/common/image_type.dart';
 import 'package:PiliPlus/models_new/blacklist/list.dart';
 import 'package:PiliPlus/pages/blacklist/controller.dart';
+import 'package:PiliPlus/pages/cognitive_filter/danmaku_rule_store.dart';
 import 'package:PiliPlus/pages/search/widgets/search_text.dart';
+import 'package:PiliPlus/utils/danmaku_utils.dart';
 import 'package:PiliPlus/utils/date_utils.dart';
 import 'package:PiliPlus/utils/utils.dart';
 import 'package:flutter/services.dart' show FilteringTextInputFormatter;
@@ -25,6 +28,7 @@ import 'package:material_ui/material_ui.dart';
 enum _BlockType implements EnumWithLabel {
   local('本地'),
   online('在线'),
+  danmaku('弹幕用户'),
   ;
 
   @override
@@ -85,6 +89,7 @@ class _BlackListPageState extends State<BlackListPage>
                     (e) => switch (e) {
                       _BlockType.local => _local,
                       _BlockType.online => _online,
+                      _BlockType.danmaku => _danmakuUsers,
                     },
                   )
                   .toList(),
@@ -215,6 +220,97 @@ class _BlackListPageState extends State<BlackListPage>
                         title: const Text('确定移除该用户？'),
                         onConfirm: () {
                           _blackListController.blackMids.remove(mid);
+                          setState(() {});
+                        },
+                      ),
+                      height: 1,
+                      maxLines: 1,
+                      fontSize: 14,
+                      overflow: .ellipsis,
+                      padding: const .fromLTRB(11, 8, 11, 0),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAddHashDialog() {
+    var text = '';
+    showConfirmDialog(
+      context: context,
+      title: const Text('屏蔽弹幕用户'),
+      content: TextField(
+        autofocus: true,
+        textInputAction: .done,
+        keyboardType: .number,
+        onChanged: (value) => text = value,
+        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+        decoration: const InputDecoration(
+          labelText: 'UID',
+          border: OutlineInputBorder(),
+        ),
+      ),
+      onConfirm: () {
+        final mid = int.tryParse(text);
+        if (mid == null) {
+          SmartDialog.showToast('请输入正确的 UID');
+          return;
+        }
+        final error = DanmakuRuleStore.add(
+          DmBlockType.uid,
+          DmUtils.midToHash(mid),
+        );
+        SmartDialog.showToast(error ?? '屏蔽成功');
+        setState(() {});
+      },
+    );
+  }
+
+  Widget get _danmakuUsers {
+    final hashes = DanmakuRuleStore.items(DmBlockType.uid);
+    return ScaffoldLayout(
+      fab: Padding(
+        padding: .only(
+          right: kFloatingActionButtonMargin + padding.right,
+          bottom: kFloatingActionButtonMargin + padding.bottom,
+        ),
+        child: FloatingActionButton(
+          tooltip: '添加',
+          onPressed: _showAddHashDialog,
+          child: const Icon(Icons.add),
+        ),
+      ),
+      body: CustomScrollView(
+        key: const PageStorageKey(_BlockType.danmaku),
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          ViewSliverSafeArea(
+            bottom: 180,
+            sliver: SliverPadding(
+              padding: const .fromLTRB(12, 12, 12, 0),
+              sliver: SliverFixedWrap(
+                spacing: 8,
+                runSpacing: 8,
+                mainAxisExtent: 30,
+                delegate: SliverChildBuilderDelegate(
+                  addAutomaticKeepAlives: false,
+                  addRepaintBoundaries: false,
+                  childCount: hashes.length,
+                  (context, index) {
+                    final hash = hashes[index];
+                    return SearchText(
+                      text: hash,
+                      onTap: (_) {},
+                      onLongPress: (_) => showConfirmDialog(
+                        context: context,
+                        title: const Text('确定移除该用户？'),
+                        onConfirm: () {
+                          DanmakuRuleStore.remove(DmBlockType.uid, hash);
                           setState(() {});
                         },
                       ),

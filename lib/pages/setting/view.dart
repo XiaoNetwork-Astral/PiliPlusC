@@ -6,6 +6,7 @@ import 'package:PiliPlus/http/login.dart';
 import 'package:PiliPlus/models/common/setting_type.dart';
 import 'package:PiliPlus/pages/about/view.dart';
 import 'package:PiliPlus/pages/backup/view.dart';
+import 'package:PiliPlus/pages/cognitive_filter/view.dart';
 import 'package:PiliPlus/pages/login/controller.dart';
 import 'package:PiliPlus/pages/setting/common_setting.dart';
 import 'package:PiliPlus/pages/setting/widgets/multi_select_dialog.dart';
@@ -82,6 +83,11 @@ class _SettingPageState extends State<SettingPage> {
       icon: Icon(CustomIcons.motion_photos_on_outlined),
     ),
     _SettingsModel(
+      type: .cognitiveFilter,
+      subtitle: '规则屏蔽、AI 屏蔽、档位与类别规则',
+      icon: Icon(Icons.filter_alt_outlined),
+    ),
+    _SettingsModel(
       type: .styleSetting,
       subtitle: '横屏适配（平板）、侧栏、列宽、首页、动态红点、主题、字号、图片、帧率等',
       icon: Icon(Icons.style_outlined),
@@ -133,6 +139,9 @@ class _SettingPageState extends State<SettingPage> {
                     flex: 6,
                     child: switch (_type) {
                       .backupSetting => const BackupPage(showAppBar: false),
+                      .cognitiveFilter => const CognitiveFilterPage(
+                        showAppBar: false,
+                      ),
                       .about => const AboutPage(showAppBar: false),
                       _ => CommonSetting(
                         settingType: _type,
@@ -159,6 +168,7 @@ class _SettingPageState extends State<SettingPage> {
       Get.to(
         () => switch (type) {
           .backupSetting => const BackupPage(),
+          .cognitiveFilter => const CognitiveFilterPage(),
           .about => const AboutPage(),
           _ => CommonSetting(settingType: type),
         },

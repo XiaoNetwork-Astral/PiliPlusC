@@ -17,6 +17,7 @@ enum SettingType {
   dmSetting('弹幕设置'),
   replySetting('评论设置'),
   dynSetting('动态设置'),
+  cognitiveFilter('认知滤网'),
   styleSetting('外观设置'),
   extraSetting('其它设置'),
   backupSetting('备份与恢复'),
@@ -36,6 +37,6 @@ enum SettingType {
     .replySetting => replySettings,
     .styleSetting => styleSettings,
     .extraSetting => extraSettings,
-    .backupSetting || .about => throw UnimplementedError(),
+    .backupSetting || .about || .cognitiveFilter => throw UnimplementedError(),
   };
 }
