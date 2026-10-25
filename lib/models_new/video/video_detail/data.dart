@@ -19,6 +19,7 @@ class VideoDetailData {
   int? copyright;
   String? pic;
   String? title;
+  String? tname;
   int? pubdate;
   int? ctime;
   String? desc;
@@ -71,6 +72,7 @@ class VideoDetailData {
     this.copyright,
     this.pic,
     this.title,
+    this.tname,
     this.pubdate,
     this.ctime,
     this.desc,
@@ -98,6 +100,7 @@ class VideoDetailData {
         copyright: json['copyright'] as int?,
         pic: json['pic'] as String?,
         title: json['title'] as String?,
+        tname: json['tname'] as String?,
         pubdate: json['pubdate'] as int?,
         ctime: json['ctime'] as int?,
         desc: json['desc'] as String?,

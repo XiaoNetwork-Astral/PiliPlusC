@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:PiliPlus/grpc/bilibili/community/service/dm/v1.pb.dart';
 import 'package:PiliPlus/pages/danmaku/controller.dart';
 import 'package:PiliPlus/pages/danmaku/danmaku_model.dart';
+import 'package:PiliPlus/pages/danmaku/judge_context.dart';
 import 'package:PiliPlus/plugin/pl_player/controller.dart';
 import 'package:PiliPlus/plugin/pl_player/models/play_status.dart';
 import 'package:PiliPlus/plugin/pl_player/utils/danmaku_options.dart';
@@ -19,6 +20,7 @@ class PlDanmaku extends StatefulWidget {
   final bool isFullScreen;
   final bool isFileSource;
   final Size size;
+  final DanmakuJudgeContext? judgeContext;
 
   const PlDanmaku({
     super.key,
@@ -28,6 +30,7 @@ class PlDanmaku extends StatefulWidget {
     required this.isFullScreen,
     required this.isFileSource,
     required this.size,
+    this.judgeContext,
   });
 
   @override
@@ -50,6 +53,7 @@ class _PlDanmakuState extends State<PlDanmaku> {
       widget.cid,
       playerController,
       widget.isFileSource,
+      widget.judgeContext,
     );
     if (playerController.enableShowDanmaku.value) {
       if (widget.isFileSource) {
@@ -180,12 +184,35 @@ class _PlDanmakuState extends State<PlDanmaku> {
             ? playerController.danmakuOpacity.value
             : 0,
         duration: const Duration(milliseconds: 100),
-        child: DanmakuScreen<DanmakuExtra>(
-          createdController: (e) {
-            playerController.danmakuController = _controller = e;
-          },
-          option: option,
-          size: widget.size,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            DanmakuScreen<DanmakuExtra>(
+              createdController: (e) {
+                playerController.danmakuController = _controller = e;
+              },
+              option: option,
+              size: widget.size,
+            ),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: IgnorePointer(
+                child: ValueListenableBuilder<bool>(
+                  valueListenable: _plDanmakuController.judging,
+                  builder: (context, judging, _) => judging
+                      ? Text(
+                          'AI 判定中',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.white.withValues(alpha: 0.45),
+                          ),
+                        )
+                      : const SizedBox.shrink(),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

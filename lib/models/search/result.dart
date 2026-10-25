@@ -22,8 +22,10 @@ abstract class SearchNumData<T> {
   List<T>? list;
 }
 
-bool _midBlocked(RuleSnapshot snap, Object? mid) =>
-    mid is int && snap.userBlocked(mid);
+bool _midBlocked(RuleSnapshot snap, Object? mid, {String? text}) =>
+    mid is int && snap.userBlocked(mid, text: text);
+
+String? _firstString(Object? value) => value is String ? value : null;
 
 /// 视频搜索里可能混入直播卡片，直播卡片按 live 范围判断
 bool _searchItemBlocked(
@@ -33,11 +35,13 @@ bool _searchItemBlocked(
 ) {
   if (e is! Map) return false;
   final mid = e['mid'] ?? e['uid'];
-  if (e['type'] != 'live_room') return _midBlocked(videoSnap, mid);
+  if (e['type'] != 'live_room') {
+    return _midBlocked(videoSnap, mid, text: _firstString(e['title']));
+  }
   final author = e['author'] ?? e['uname'];
   final title = e['title'];
   final cate = e['cate_name'] ?? e['area_name'];
-  return _midBlocked(liveSnap, mid) ||
+  return _midBlocked(liveSnap, mid, text: _firstString(author)) ||
       (author is String && liveSnap.matchText(author)) ||
       liveSnap.matchText(
         title is String ? Em.regTitle(title).map((t) => t.text).join() : '',
@@ -81,7 +85,11 @@ class SearchVideoData extends SearchNumData<SearchVideoItemModel> {
           case 'bili_user':
             if (item['data'] case List users when users.isNotEmpty) {
               for (final e in users) {
-                if (!_midBlocked(videoSnap, e['mid'])) {
+                if (!_midBlocked(
+                  videoSnap,
+                  e['mid'],
+                  text: _firstString(e['uname']),
+                )) {
                   (searchUser ??= <SearchUser>[]).add(SearchUser.fromJson(e));
                 }
               }
@@ -283,7 +291,9 @@ class SearchUserData extends SearchNumData<SearchUserItemModel> {
     final snap = RuleEngine.instance.snapshot(RuleScope.video);
     numResults = (json['numResults'] as num?)?.toInt();
     list = (json['result'] as List?)
-        ?.where((e) => !_midBlocked(snap, e['mid']))
+        ?.where(
+          (e) => !_midBlocked(snap, e['mid'], text: _firstString(e['uname'])),
+        )
         .map<SearchUserItemModel>((e) => SearchUserItemModel.fromJson(e))
         .toList();
   }
@@ -432,7 +442,7 @@ class SearchLiveItemModel {
 
   /// 标题、主播名、分区名或主播 UID 任一命中即剔除
   bool blockedBy(RuleSnapshot snap) =>
-      snap.userBlocked(uid ?? 0) ||
+      snap.userBlocked(uid ?? 0, text: uname) ||
       snap.matchText(uname ?? '') ||
       snap.matchText(cateName ?? '') ||
       snap.matchText(title.map((e) => e.text).join());
@@ -546,7 +556,9 @@ class SearchArticleData extends SearchNumData<SearchArticleItemModel> {
     final snap = RuleEngine.instance.snapshot(RuleScope.video);
     numResults = (json['numResults'] as num?)?.toInt();
     list = (json['result'] as List?)
-        ?.where((e) => !_midBlocked(snap, e['mid']))
+        ?.where(
+          (e) => !_midBlocked(snap, e['mid'], text: _firstString(e['title'])),
+        )
         .map((e) => SearchArticleItemModel.fromJson(e))
         .toList();
   }

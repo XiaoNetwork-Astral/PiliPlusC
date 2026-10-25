@@ -23,7 +23,8 @@ class DynamicsDataModel {
 
   DynamicsDataModel.empty() : items = <DynamicItemModel>[], hasMore = false;
 
-  static String _getMatchText(DynamicItemModel item) {
+  /// 动态参与规则与 AI 过滤的文本
+  static String matchText(DynamicItemModel item) {
     final moduleDynamic = item.modules.moduleDynamic;
     final opus = moduleDynamic?.major?.opus;
     return (opus?.title ?? '') +
@@ -74,11 +75,11 @@ class DynamicsDataModel {
           continue;
         }
         if (item.orig case final orig?) {
-          if (snap.matchText(_getMatchText(orig))) {
+          if (snap.matchText(matchText(orig))) {
             continue;
           }
         }
-        if (snap.matchText(_getMatchText(item))) {
+        if (snap.matchText(matchText(item))) {
           continue;
         }
         if (filterBan &&

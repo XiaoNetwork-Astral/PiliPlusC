@@ -5,8 +5,10 @@ import 'package:PiliPlus/grpc/grpc_req.dart';
 import 'package:PiliPlus/grpc/url.dart';
 import 'package:PiliPlus/http/loading_state.dart';
 import 'package:PiliPlus/models/cognitive_filter/filter_rule.dart';
+import 'package:PiliPlus/models/cognitive_filter/filter_surface.dart';
 import 'package:PiliPlus/models/cognitive_filter/rule_scope.dart';
 import 'package:PiliPlus/models/cognitive_filter/rule_type.dart';
+import 'package:PiliPlus/utils/cognitive_filter/ai_filter_helper.dart';
 import 'package:PiliPlus/utils/cognitive_filter/rule_engine.dart';
 import 'package:PiliPlus/utils/cognitive_filter/rule_store.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
@@ -105,7 +107,10 @@ abstract final class ReplyGrpc {
     bool enabled,
   ) {
     if (!enabled) return false;
-    return snap.userBlocked(reply.mid.toInt()) ||
+    return snap.userBlocked(
+          reply.mid.toInt(),
+          text: reply.content.message,
+        ) ||
         _blockReplyAtCount(reply) ||
         _blockAtOnlyReply(reply) ||
         (antiGoodsReply && _needRemoveGoodGrpc(reply)) ||
@@ -152,9 +157,20 @@ abstract final class ReplyGrpc {
     if (res case Success(:final response)) {
       final snap = RuleEngine.instance.snapshot(RuleScope.reply);
       final enabled = Pref.cfRuleFilterEnabled;
-      if (response.hasUpTop() &&
-          needRemoveGrpc(response.upTop, snap, enabled)) {
-        response.clearUpTop();
+      if (response.hasUpTop()) {
+        if (needRemoveGrpc(response.upTop, snap, enabled)) {
+          response.clearUpTop();
+        } else {
+          // 置顶同样是评论，规则未命中时交给 AI
+          final kept = await aiFilterList<ReplyInfo>(
+            surface: FilterSurface.reply,
+            items: [response.upTop],
+            textOf: (e) => e.content.message,
+          );
+          if (kept.isEmpty) {
+            response.clearUpTop();
+          }
+        }
       }
 
       if (response.replies.isNotEmpty) {
@@ -167,6 +183,36 @@ abstract final class ReplyGrpc {
           }
           return hasMatch;
         });
+        // 规则过滤后再交给 AI，楼中楼一并判定
+        final filtered = await aiFilterList<ReplyInfo>(
+          surface: FilterSurface.reply,
+          items: response.replies,
+          textOf: (item) => item.content.message,
+        );
+        final nested = <ReplyInfo>[
+          for (final item in filtered)
+            if (item.replies.isNotEmpty) ...item.replies,
+        ];
+        if (nested.isNotEmpty) {
+          final kept = await aiFilterList<ReplyInfo>(
+            surface: FilterSurface.reply,
+            items: nested,
+            textOf: (e) => e.content.message,
+          );
+          if (!identical(kept, nested)) {
+            final keptSet = Set<ReplyInfo>.identity()..addAll(kept);
+            for (final item in filtered) {
+              if (item.replies.isNotEmpty) {
+                item.replies.removeWhere((e) => !keptSet.contains(e));
+              }
+            }
+          }
+        }
+        if (!identical(filtered, response.replies)) {
+          response.replies
+            ..clear()
+            ..addAll(filtered);
+        }
       }
     }
     return res;
@@ -197,6 +243,16 @@ abstract final class ReplyGrpc {
       final snap = RuleEngine.instance.snapshot(RuleScope.reply);
       final enabled = Pref.cfRuleFilterEnabled;
       replies.removeWhere((e) => needRemoveGrpc(e, snap, enabled));
+      final filtered = await aiFilterList<ReplyInfo>(
+        surface: FilterSurface.reply,
+        items: replies,
+        textOf: (e) => e.content.message,
+      );
+      if (!identical(filtered, replies)) {
+        replies
+          ..clear()
+          ..addAll(filtered);
+      }
     }
     return res;
   }
@@ -223,6 +279,16 @@ abstract final class ReplyGrpc {
       final snap = RuleEngine.instance.snapshot(RuleScope.reply);
       final enabled = Pref.cfRuleFilterEnabled;
       replies.removeWhere((e) => needRemoveGrpc(e, snap, enabled));
+      final filtered = await aiFilterList<ReplyInfo>(
+        surface: FilterSurface.reply,
+        items: replies,
+        textOf: (e) => e.content.message,
+      );
+      if (!identical(filtered, replies)) {
+        replies
+          ..clear()
+          ..addAll(filtered);
+      }
     }
     return res;
   }

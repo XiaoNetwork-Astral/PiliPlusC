@@ -25,6 +25,7 @@ import 'package:PiliPlus/models_new/video/video_detail/page.dart';
 import 'package:PiliPlus/models_new/video/video_detail/ugc_season.dart';
 import 'package:PiliPlus/models_new/video/video_tag/data.dart';
 import 'package:PiliPlus/pages/common/common_intro_controller.dart';
+import 'package:PiliPlus/pages/danmaku/judge_context.dart';
 import 'package:PiliPlus/pages/danmaku/view.dart';
 import 'package:PiliPlus/pages/episode_panel/view.dart';
 import 'package:PiliPlus/pages/video/ai_conclusion/view.dart';
@@ -1313,6 +1314,12 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
                         isFullScreen: plPlayerController!.isFullScreen.value,
                         isFileSource: videoDetailController.isFileSource,
                         size: Size(width, height),
+                        judgeContext: DanmakuJudgeContext(
+                          title: () =>
+                              introController.videoDetail.value.title ?? '',
+                          partition: () =>
+                              introController.videoDetail.value.tname ?? '',
+                        ),
                       ),
                     ),
               showEpisodes: showEpisodes,

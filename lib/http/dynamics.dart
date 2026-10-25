@@ -8,6 +8,7 @@ import 'package:PiliPlus/http/error_msg.dart';
 import 'package:PiliPlus/http/init.dart';
 import 'package:PiliPlus/http/loading_state.dart';
 import 'package:PiliPlus/http/reply.dart';
+import 'package:PiliPlus/models/cognitive_filter/filter_surface.dart';
 import 'package:PiliPlus/models/cognitive_filter/rule_scope.dart';
 import 'package:PiliPlus/models/common/dynamic/dynamics_type.dart';
 import 'package:PiliPlus/models/common/reply/reply_option_type.dart';
@@ -28,6 +29,7 @@ import 'package:PiliPlus/models_new/dynamic/dyn_topic_top/top_details.dart';
 import 'package:PiliPlus/models_new/dynamic/dyn_topic_top/topic_item.dart';
 import 'package:PiliPlus/models_new/followee_votes/vote.dart';
 import 'package:PiliPlus/utils/accounts.dart';
+import 'package:PiliPlus/utils/cognitive_filter/ai_filter_helper.dart';
 import 'package:PiliPlus/utils/cognitive_filter/rule_engine.dart';
 import 'package:PiliPlus/utils/utils.dart';
 import 'package:PiliPlus/utils/wbi_sign.dart';
@@ -67,7 +69,10 @@ abstract final class DynamicsHttp {
         if (type != .up) {
           final snap = RuleEngine.instance.snapshot(RuleScope.dynamic);
           data.items?.removeWhere(
-            (item) => snap.userBlocked(item.modules.moduleAuthor?.mid ?? 0),
+            (item) => snap.userBlocked(
+              item.modules.moduleAuthor?.mid ?? 0,
+              text: item.modules.moduleDynamic?.desc?.text,
+            ),
           );
           if (data.items?.isEmpty ?? true) data.loadNext = data.hasMore;
         }
@@ -76,6 +81,19 @@ abstract final class DynamicsHttp {
             (item) => !followMids.contains(item.modules.moduleAuthor?.mid),
           );
           if (data.items?.isEmpty ?? true) data.loadNext = data.hasMore;
+        }
+        final items = data.items;
+        if (items != null && items.isNotEmpty) {
+          // 规则过滤后再交给 AI
+          final filtered = await aiFilterList<DynamicItemModel>(
+            surface: FilterSurface.dynamic,
+            items: items,
+            textOf: DynamicsDataModel.matchText,
+          );
+          if (!identical(filtered, items)) {
+            data.items = filtered;
+            if (filtered.isEmpty) data.loadNext = data.hasMore;
+          }
         }
         if (data.loadNext == true && depth < _maxAutoLoadPages) {
           return await followDynamic(

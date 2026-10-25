@@ -8,6 +8,7 @@ import 'package:PiliPlus/http/browser_ua.dart';
 import 'package:PiliPlus/http/constants.dart';
 import 'package:PiliPlus/http/init.dart';
 import 'package:PiliPlus/http/loading_state.dart';
+import 'package:PiliPlus/models/cognitive_filter/filter_surface.dart';
 import 'package:PiliPlus/models/cognitive_filter/rule_scope.dart';
 import 'package:PiliPlus/models/common/account_type.dart';
 import 'package:PiliPlus/models/common/video/video_type.dart';
@@ -30,6 +31,7 @@ import 'package:PiliPlus/models_new/video/video_relation/data.dart';
 import 'package:PiliPlus/models_new/video/video_shot/data.dart';
 import 'package:PiliPlus/utils/accounts.dart';
 import 'package:PiliPlus/utils/app_sign.dart';
+import 'package:PiliPlus/utils/cognitive_filter/ai_filter_helper.dart';
 import 'package:PiliPlus/utils/cognitive_filter/rule_engine.dart';
 import 'package:PiliPlus/utils/extension/string_ext.dart';
 import 'package:PiliPlus/utils/id_utils.dart';
@@ -50,8 +52,19 @@ abstract final class VideoHttp {
   static RegExp zoneRegExp = RegExp('');
   static bool enableFilter = false;
 
-  static bool _blocked(dynamic mid, RuleSnapshot snap) =>
-      mid is int && snap.userBlocked(mid);
+  static bool _blocked(dynamic mid, RuleSnapshot snap, {String? text}) =>
+      mid is int && snap.userBlocked(mid, text: text);
+
+  static String? _textOf(Object? value) => value is String ? value : null;
+
+  /// 推荐流判定文本：标题（UP主：xxx）
+  static String _rcmdText(BaseRcmdVideoItemModel item) {
+    final name = item.owner.name;
+    if (name == null || name.isEmpty) {
+      return item.title;
+    }
+    return '${item.title}（UP主：$name）';
+  }
 
   // 首页推荐视频
   static Future<LoadingState<List<RcmdVideoItemModel>>> rcmdVideoList({
@@ -86,7 +99,12 @@ abstract final class VideoHttp {
           list.add(videoItem);
         }
       }
-      return Success(list);
+      final filtered = await aiFilterList<RcmdVideoItemModel>(
+        surface: FilterSurface.video,
+        items: list,
+        textOf: _rcmdText,
+      );
+      return Success(filtered);
     } else {
       return Error(res.data['message']);
     }
@@ -94,7 +112,9 @@ abstract final class VideoHttp {
 
   static bool _filterWebRcmd(dynamic i, RuleSnapshot snap) {
     if (i['goto'] != 'av') return true;
-    if (_blocked(i['owner']?['mid'], snap)) return true;
+    if (_blocked(i['owner']?['mid'], snap, text: _textOf(i['title']))) {
+      return true;
+    }
     return false;
   }
 
@@ -105,7 +125,9 @@ abstract final class VideoHttp {
         i['can_play'] != 1) {
       return true;
     }
-    if (_blocked(i['args']?['up_id'], snap)) return true;
+    if (_blocked(i['args']?['up_id'], snap, text: _textOf(i['title']))) {
+      return true;
+    }
     if (i['args']?['tname'] case final String tname
         when RuleEngine.instance.matchText(RuleScope.zone, tname)) {
       return true;
@@ -181,7 +203,12 @@ abstract final class VideoHttp {
           list.add(videoItem);
         }
       }
-      return Success(list);
+      final filtered = await aiFilterList<RcmdVideoItemAppModel>(
+        surface: FilterSurface.video,
+        items: list,
+        textOf: _rcmdText,
+      );
+      return Success(filtered);
     } else {
       return Error(res.data['message']);
     }
@@ -192,7 +219,9 @@ abstract final class VideoHttp {
     RuleSnapshot snap,
     bool enabled,
   ) {
-    if (_blocked(i['owner']?['mid'], snap)) return false;
+    if (_blocked(i['owner']?['mid'], snap, text: _textOf(i['title']))) {
+      return false;
+    }
     if (i['title'] case final String title
         when RecommendFilter.filterTitle(title, snap)) {
       return false;
@@ -411,7 +440,13 @@ abstract final class VideoHttp {
       final snap = RuleEngine.instance.snapshot(RuleScope.video);
       final enabled = Pref.cfRuleFilterEnabled;
       final items = (res.data['data'] as List?)
-          ?.where((e) => !_blocked(e['owner']?['mid'], snap))
+          ?.where(
+            (e) => !_blocked(
+              e['owner']?['mid'],
+              snap,
+              text: _textOf(e['title']),
+            ),
+          )
           .map((i) => HotVideoItemModel.fromJson(i));
       final List<HotVideoItemModel>? list;
       if (enabled && RecommendFilter.applyFilterToRelatedVideos) {

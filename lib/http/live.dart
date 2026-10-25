@@ -3,6 +3,7 @@ import 'package:PiliPlus/http/api.dart';
 import 'package:PiliPlus/http/browser_ua.dart';
 import 'package:PiliPlus/http/init.dart';
 import 'package:PiliPlus/http/loading_state.dart';
+import 'package:PiliPlus/models/cognitive_filter/filter_surface.dart';
 import 'package:PiliPlus/models/cognitive_filter/rule_scope.dart';
 import 'package:PiliPlus/models/common/account_type.dart';
 import 'package:PiliPlus/models/common/live/live_contribution_rank_type.dart';
@@ -28,6 +29,7 @@ import 'package:PiliPlus/models_new/live/live_superchat/data.dart';
 import 'package:PiliPlus/utils/accounts.dart';
 import 'package:PiliPlus/utils/accounts/account.dart';
 import 'package:PiliPlus/utils/app_sign.dart';
+import 'package:PiliPlus/utils/cognitive_filter/ai_filter_helper.dart';
 import 'package:PiliPlus/utils/cognitive_filter/rule_engine.dart';
 import 'package:PiliPlus/utils/wbi_sign.dart';
 import 'package:dio/dio.dart';
@@ -46,7 +48,17 @@ abstract final class LiveHttp {
       snap.matchText(title ?? '') ||
       snap.matchText(uname ?? '') ||
       snap.matchText(areaName ?? '') ||
-      snap.userBlocked(uid ?? 0);
+      snap.userBlocked(uid ?? 0, text: title ?? uname ?? areaName);
+
+  /// 直播卡片判定文本：标题（主播：xxx）
+  static String _liveText(String? title, String? uname) {
+    final text = title ?? '';
+    final name = uname ?? '';
+    if (name.isEmpty) {
+      return text;
+    }
+    return '$text（主播：$name）';
+  }
 
   static Future<LoadingState<void>> sendLiveMsg({
     required Object roomId,
@@ -275,6 +287,33 @@ abstract final class LiveHttp {
           uid: e.uid,
         ),
       );
+      final cards = data.cardList;
+      if (cards != null && cards.isNotEmpty) {
+        final filtered = await aiFilterList(
+          surface: FilterSurface.live,
+          items: cards,
+          textOf: (e) {
+            final item = e.cardData?.smallCardV1;
+            return _liveText(item?.title, item?.uname);
+          },
+        );
+        if (!identical(filtered, cards)) {
+          data.cardList = filtered;
+        }
+      }
+      final followList = data.followItem?.cardData?.myIdolV1?.list;
+      if (followList != null && followList.isNotEmpty) {
+        final filtered = await aiFilterList(
+          surface: FilterSurface.live,
+          items: followList,
+          textOf: (e) => _liveText(e.title, e.uname),
+        );
+        if (!identical(filtered, followList)) {
+          followList
+            ..clear()
+            ..addAll(filtered);
+        }
+      }
       return Success(data);
     } else {
       return Error(res.data['message']);
@@ -303,6 +342,17 @@ abstract final class LiveHttp {
           uid: e.uid,
         ),
       );
+      final list = data.list;
+      if (list != null && list.isNotEmpty) {
+        final filtered = await aiFilterList(
+          surface: FilterSurface.live,
+          items: list,
+          textOf: (e) => _liveText(e.title, e.uname),
+        );
+        if (!identical(filtered, list)) {
+          data.list = filtered;
+        }
+      }
       return Success(data);
     } else {
       return Error(res.data['message']);
@@ -375,6 +425,17 @@ abstract final class LiveHttp {
           uid: e.uid,
         ),
       );
+      final cards = data.cardList;
+      if (cards != null && cards.isNotEmpty) {
+        final filtered = await aiFilterList(
+          surface: FilterSurface.live,
+          items: cards,
+          textOf: (e) => _liveText(e.title, e.uname),
+        );
+        if (!identical(filtered, cards)) {
+          data.cardList = filtered;
+        }
+      }
       return Success(data);
     } else {
       return Error(res.data['message']);
