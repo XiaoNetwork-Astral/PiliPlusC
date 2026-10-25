@@ -1,4 +1,3 @@
-import 'package:PiliPlus/common/widgets/dialog/dialog.dart';
 import 'package:PiliPlus/common/widgets/scaffold/simple_scaffold.dart';
 import 'package:PiliPlus/common/widgets/view_insets_safe_area.dart';
 import 'package:PiliPlus/common/widgets/view_safe_area.dart';
@@ -6,7 +5,6 @@ import 'package:PiliPlus/models/cognitive_filter/builtin_categories.dart';
 import 'package:PiliPlus/models/cognitive_filter/config.dart';
 import 'package:PiliPlus/models/cognitive_filter/filter_category.dart';
 import 'package:PiliPlus/models/cognitive_filter/filter_surface.dart';
-import 'package:PiliPlus/models/cognitive_filter/filter_tier.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
@@ -207,20 +205,6 @@ class _CategoryEditPageState extends State<CategoryEditPage> {
     });
   }
 
-  Future<void> _delete() async {
-    final confirmed = await showConfirmDialog(
-      context: context,
-      title: const Text('删除这个类别'),
-      content: const Text('删除后无法恢复'),
-    );
-    if (!confirmed) return;
-    final list = Pref.cfCustomCategories
-        .where((item) => item.id != _id)
-        .toList();
-    Pref.cfCustomCategories = list;
-    Get.back(result: true);
-  }
-
   bool _sameThreshold(double value, double other) =>
       (value - other).abs() < 0.0001;
 
@@ -231,6 +215,9 @@ class _CategoryEditPageState extends State<CategoryEditPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final bottomPadding = MediaQuery.viewPaddingOf(context).bottom + 100;
+    final sectionStyle = theme.textTheme.labelLarge?.copyWith(
+      color: theme.colorScheme.outline,
+    );
     return SimpleScaffold(
       appBar: AppBar(
         title: Text(_title),
@@ -243,37 +230,19 @@ class _CategoryEditPageState extends State<CategoryEditPage> {
           child: ListView(
             padding: EdgeInsets.fromLTRB(16, 8, 16, bottomPadding),
             children: [
-              TextField(
-                controller: _nameController,
-                readOnly: !_isCustom,
-                onChanged: _isCustom ? (_) => setState(() {}) : null,
-                decoration: const InputDecoration(labelText: '名称'),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _questionController,
-                minLines: 3,
-                maxLines: 6,
-                decoration: const InputDecoration(labelText: '判定问题'),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _trueController,
-                minLines: 2,
-                maxLines: 5,
-                decoration: const InputDecoration(labelText: '算作是'),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _falseController,
-                minLines: 2,
-                maxLines: 5,
-                decoration: const InputDecoration(labelText: '算作否'),
-              ),
-              const SizedBox(height: 20),
+              if (_isCustom) ...[
+                _field(_nameController, '名称', onChanged: () => setState(() {})),
+                const SizedBox(height: 16),
+              ],
+              _field(_questionController, '判定问题', maxLines: 6),
+              const SizedBox(height: 16),
+              _field(_trueController, '算作是', maxLines: 5),
+              const SizedBox(height: 16),
+              _field(_falseController, '算作否', maxLines: 5),
+              const SizedBox(height: 24),
               Row(
                 children: [
-                  Text('屏蔽阈值', style: theme.textTheme.titleMedium),
+                  Text('屏蔽阈值', style: sectionStyle),
                   const Spacer(),
                   Text(
                     _threshold.toStringAsFixed(2),
@@ -287,58 +256,33 @@ class _CategoryEditPageState extends State<CategoryEditPage> {
                 value: _threshold,
                 min: 0.30,
                 max: 0.95,
-                divisions: 65,
-                label: _threshold.toStringAsFixed(2),
+                divisions: 13,
                 onChanged: (value) => setState(() => _threshold = value),
               ),
-              Row(
-                children: [
-                  Text(
-                    '灵敏度',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: theme.colorScheme.outline,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  for (final sensitivity in FilterSensitivity.values) ...[
-                    _sensitivityButton(sensitivity),
-                    const SizedBox(width: 8),
-                  ],
-                ],
-              ),
-              const SizedBox(height: 20),
-              Text('应用于', style: theme.textTheme.titleMedium),
+              const SizedBox(height: 16),
+              Text('应用于', style: sectionStyle),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
                 children: [
                   for (final surface in FilterSurface.values)
-                    _surfaceButton(surface),
+                    FilterChip(
+                      label: Text(surface.label),
+                      selected: _surfaces.contains(surface),
+                      onSelected: (_) => _toggleSurface(surface),
+                    ),
                 ],
               ),
-              const SizedBox(height: 28),
-              if (_builtin)
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
+              if (_builtin) ...[
+                const SizedBox(height: 24),
+                Center(
+                  child: TextButton(
                     onPressed: _reset,
-                    icon: const Icon(Icons.restore),
-                    label: const Text('恢复默认'),
+                    child: const Text('恢复默认'),
                   ),
                 ),
-              if (_isCustom)
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: _delete,
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: theme.colorScheme.error,
-                    ),
-                    icon: const Icon(Icons.delete_outline),
-                    label: const Text('删除'),
-                  ),
-                ),
+              ],
             ],
           ),
         ),
@@ -346,39 +290,21 @@ class _CategoryEditPageState extends State<CategoryEditPage> {
     );
   }
 
-  Widget _sensitivityButton(FilterSensitivity sensitivity) {
-    final selected = (_threshold - sensitivity.threshold).abs() < 0.001;
-    void onPressed() {
-      setState(() {
-        _threshold = sensitivity.threshold.clamp(0.30, 0.95).toDouble();
-      });
-    }
-
-    if (selected) {
-      return FilledButton.tonal(
-        onPressed: onPressed,
-        child: Text(sensitivity.label),
-      );
-    }
-    return OutlinedButton(
-      onPressed: onPressed,
-      child: Text(sensitivity.label),
-    );
-  }
-
-  Widget _surfaceButton(FilterSurface surface) {
-    final selected = _surfaces.contains(surface);
-    void onPressed() => _toggleSurface(surface);
-
-    if (selected) {
-      return FilledButton.tonal(
-        onPressed: onPressed,
-        child: Text(surface.label),
-      );
-    }
-    return OutlinedButton(
-      onPressed: onPressed,
-      child: Text(surface.label),
+  Widget _field(
+    TextEditingController controller,
+    String label, {
+    int maxLines = 1,
+    VoidCallback? onChanged,
+  }) {
+    return TextField(
+      controller: controller,
+      minLines: 1,
+      maxLines: maxLines,
+      onChanged: onChanged == null ? null : (_) => onChanged(),
+      decoration: InputDecoration(
+        labelText: label,
+        border: const OutlineInputBorder(),
+      ),
     );
   }
 }

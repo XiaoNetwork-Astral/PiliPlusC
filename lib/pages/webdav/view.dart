@@ -1,9 +1,10 @@
+import 'package:PiliPlus/common/widgets/dialog/text_input_dialog.dart';
 import 'package:PiliPlus/common/widgets/flutter/pop_scope.dart';
 import 'package:PiliPlus/common/widgets/scaffold/simple_scaffold.dart';
-import 'package:PiliPlus/common/widgets/view_insets_safe_area.dart';
+import 'package:PiliPlus/common/widgets/view_safe_area.dart';
 import 'package:PiliPlus/pages/backup/widgets/backup_dialogs.dart';
 import 'package:PiliPlus/pages/backup/widgets/encryption_setting.dart';
-import 'package:PiliPlus/pages/backup/widgets/error_text_field.dart';
+import 'package:PiliPlus/pages/cognitive_filter/widgets.dart';
 import 'package:PiliPlus/pages/webdav/webdav.dart';
 import 'package:PiliPlus/utils/backup/backup.dart';
 import 'package:PiliPlus/utils/storage.dart';
@@ -26,82 +27,102 @@ class WebDavSettingPage extends StatefulWidget {
 }
 
 class _WebDavSettingPageState extends State<WebDavSettingPage> {
-  final _uriCtr = TextEditingController(text: Pref.webdavUri);
-  final _usernameCtr = TextEditingController(text: Pref.webdavUsername);
-  final _passwordCtr = TextEditingController(text: Pref.webdavPassword);
-  final _directoryCtr = TextEditingController(text: Pref.webdavDirectory);
+  String _uri = Pref.webdavUri;
+  String _username = Pref.webdavUsername;
+  String _password = Pref.webdavPassword;
+  String _directory = Pref.webdavDirectory;
 
   String _savedUri = Pref.webdavUri;
   String _savedUsername = Pref.webdavUsername;
   String _savedPassword = Pref.webdavPassword;
   String _savedDirectory = Pref.webdavDirectory;
 
-  bool _obscureText = true;
   bool _testing = false;
   bool _encryptionDirty = false;
-  String? _uriError;
 
   bool get _infoDirty =>
-      _uriCtr.text != _savedUri ||
-      _usernameCtr.text != _savedUsername ||
-      _passwordCtr.text != _savedPassword ||
-      _directoryCtr.text != _savedDirectory;
+      _uri != _savedUri ||
+      _username != _savedUsername ||
+      _password != _savedPassword ||
+      _directory != _savedDirectory;
 
   bool get _dirty => _infoDirty || _encryptionDirty;
 
-  @override
-  void dispose() {
-    _uriCtr.dispose();
-    _usernameCtr.dispose();
-    _passwordCtr.dispose();
-    _directoryCtr.dispose();
-    super.dispose();
-  }
-
   String? _validateUri(String uri) {
-    final trimmed = uri.trim();
-    if (trimmed.isEmpty) return '地址不能为空';
-    if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+    if (uri.isEmpty) return '地址不能为空';
+    if (!uri.startsWith('http://') && !uri.startsWith('https://')) {
       return '地址需以 http:// 或 https:// 开头';
     }
     return null;
   }
 
+  Future<void> _editUri() async {
+    final result = await showTextInputDialog(
+      context: context,
+      title: '地址',
+      initialValue: _uri,
+      keyboardType: TextInputType.url,
+      validator: _validateUri,
+    );
+    if (result != null) setState(() => _uri = result);
+  }
+
+  Future<void> _editUsername() async {
+    final result = await showTextInputDialog(
+      context: context,
+      title: '用户',
+      initialValue: _username,
+    );
+    if (result != null) setState(() => _username = result);
+  }
+
+  Future<void> _editPassword() async {
+    final result = await showTextInputDialog(
+      context: context,
+      title: '密码',
+      initialValue: _password,
+      obscureText: true,
+    );
+    if (result != null) setState(() => _password = result);
+  }
+
+  Future<void> _editDirectory() async {
+    final result = await showTextInputDialog(
+      context: context,
+      title: '路径',
+      initialValue: _directory,
+    );
+    if (result != null) setState(() => _directory = result);
+  }
+
   Future<void> _saveInfo() async {
-    final uri = _uriCtr.text;
-    final error = _validateUri(uri);
+    final error = _validateUri(_uri);
     if (error != null) {
-      setState(() => _uriError = error);
+      SmartDialog.showToast(error);
       return;
     }
-
     await GStorage.setting.putAll({
-      SettingBoxKey.webdavUri: uri,
-      SettingBoxKey.webdavUsername: _usernameCtr.text,
-      SettingBoxKey.webdavPassword: _passwordCtr.text,
-      SettingBoxKey.webdavDirectory: _directoryCtr.text,
+      SettingBoxKey.webdavUri: _uri,
+      SettingBoxKey.webdavUsername: _username,
+      SettingBoxKey.webdavPassword: _password,
+      SettingBoxKey.webdavDirectory: _directory,
     });
     if (!mounted) return;
     setState(() {
-      _savedUri = uri;
-      _savedUsername = _usernameCtr.text;
-      _savedPassword = _passwordCtr.text;
-      _savedDirectory = _directoryCtr.text;
-      _uriError = null;
+      _savedUri = _uri;
+      _savedUsername = _username;
+      _savedPassword = _password;
+      _savedDirectory = _directory;
     });
-    SmartDialog.showToast('已保存');
   }
 
   Future<void> _testConnection() async {
-    final error = _validateUri(_uriCtr.text);
+    final error = _validateUri(_uri);
     if (error != null) {
-      setState(() => _uriError = error);
+      SmartDialog.showToast(error);
       return;
     }
-    setState(() {
-      _uriError = null;
-      _testing = true;
-    });
+    setState(() => _testing = true);
 
     final origin = {
       SettingBoxKey.webdavUri: Pref.webdavUri,
@@ -110,10 +131,10 @@ class _WebDavSettingPageState extends State<WebDavSettingPage> {
       SettingBoxKey.webdavDirectory: Pref.webdavDirectory,
     };
     final target = {
-      SettingBoxKey.webdavUri: _uriCtr.text,
-      SettingBoxKey.webdavUsername: _usernameCtr.text,
-      SettingBoxKey.webdavPassword: _passwordCtr.text,
-      SettingBoxKey.webdavDirectory: _directoryCtr.text,
+      SettingBoxKey.webdavUri: _uri,
+      SettingBoxKey.webdavUsername: _username,
+      SettingBoxKey.webdavPassword: _password,
+      SettingBoxKey.webdavDirectory: _directory,
     };
     String message;
     try {
@@ -147,10 +168,10 @@ class _WebDavSettingPageState extends State<WebDavSettingPage> {
     final discard = await showUnsavedChangesDialog(context);
     if (!discard || !mounted) return;
     setState(() {
-      _savedUri = _uriCtr.text;
-      _savedUsername = _usernameCtr.text;
-      _savedPassword = _passwordCtr.text;
-      _savedDirectory = _directoryCtr.text;
+      _savedUri = _uri;
+      _savedUsername = _username;
+      _savedPassword = _password;
+      _savedDirectory = _directory;
       _encryptionDirty = false;
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -164,81 +185,64 @@ class _WebDavSettingPageState extends State<WebDavSettingPage> {
     final padding = MediaQuery.viewPaddingOf(context);
     final page = SimpleScaffold(
       appBar: showAppBar ? AppBar(title: const Text('WebDAV 设置')) : null,
-      body: ViewInsetsSafeArea(
+      body: ViewSafeArea(
         child: ListView(
-          padding: EdgeInsets.only(
-            top: 20,
-            left: 20 + (showAppBar ? padding.left : 0),
-            right: 20 + (showAppBar ? padding.right : 0),
-            bottom: padding.bottom + 40,
-          ),
+          padding: EdgeInsets.only(bottom: padding.bottom + 100),
           children: [
-            ErrorTextField(
-              controller: _uriCtr,
-              label: '地址',
-              keyboardType: TextInputType.url,
-              errorText: _uriError,
-              onChanged: (_) => setState(() => _uriError = null),
+            CfTile(
+              icon: Icons.link,
+              title: '地址',
+              subtitle: _uri.isEmpty ? null : _uri,
+              onTap: _editUri,
             ),
-            const SizedBox(height: 20),
-            TextField(
-              controller: _usernameCtr,
-              onChanged: (_) => setState(() {}),
-              decoration: const InputDecoration(
-                labelText: '用户',
-                border: OutlineInputBorder(),
+            CfTile(
+              icon: Icons.person_outline,
+              title: '用户',
+              subtitle: _username.isEmpty ? null : _username,
+              onTap: _editUsername,
+            ),
+            CfTile(
+              icon: Icons.key,
+              title: '密码',
+              subtitle: _password.isEmpty ? null : '••••••••',
+              onTap: _editPassword,
+            ),
+            CfTile(
+              icon: Icons.folder_outlined,
+              title: '路径',
+              subtitle: _directory.isEmpty ? null : _directory,
+              onTap: _editDirectory,
+            ),
+            CfTile(
+              icon: Icons.wifi_tethering,
+              title: '测试连接',
+              enabled: !_testing,
+              trailing: _testing
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : null,
+              onTap: _testConnection,
+            ),
+            CfTile(
+              icon: Icons.save_outlined,
+              title: '保存',
+              enabled: _infoDirty,
+              onTap: _saveInfo,
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+              child: EncryptionSetting(
+                initialEncrypt: BackupService.webdavEncrypt,
+                initialPassword: BackupService.webdavArchivePassword,
+                onDirtyChanged: (value) {
+                  if (_encryptionDirty == value || !mounted) return;
+                  setState(() => _encryptionDirty = value);
+                },
+                onSave: _saveEncryption,
               ),
-            ),
-            const SizedBox(height: 20),
-            TextField(
-              controller: _passwordCtr,
-              autofillHints: const [AutofillHints.password],
-              obscureText: _obscureText,
-              onChanged: (_) => setState(() {}),
-              decoration: InputDecoration(
-                labelText: '密码',
-                border: const OutlineInputBorder(),
-                suffixIcon: IconButton(
-                  onPressed: () => setState(() => _obscureText = !_obscureText),
-                  icon: _obscureText
-                      ? const Icon(Icons.visibility)
-                      : const Icon(Icons.visibility_off),
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-            TextField(
-              controller: _directoryCtr,
-              onChanged: (_) => setState(() {}),
-              decoration: const InputDecoration(
-                labelText: '路径',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                FilledButton.tonal(
-                  onPressed: _testing ? null : _testConnection,
-                  child: const Text('测试连接'),
-                ),
-                const SizedBox(width: 12),
-                FilledButton(
-                  onPressed: _infoDirty ? _saveInfo : null,
-                  child: const Text('保存'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 28),
-            EncryptionSetting(
-              initialEncrypt: BackupService.webdavEncrypt,
-              initialPassword: BackupService.webdavArchivePassword,
-              onDirtyChanged: (value) {
-                if (_encryptionDirty == value || !mounted) return;
-                setState(() => _encryptionDirty = value);
-              },
-              onSave: _saveEncryption,
             ),
           ],
         ),

@@ -117,6 +117,7 @@ class _AiFilterTabState extends State<AiFilterTab> {
           CfTile(
             icon: Icons.category_outlined,
             title: '类别规则',
+            subtitle: '调整每个类别的开关、阈值与适用面',
             onTap: _openCategories,
           ),
       ],

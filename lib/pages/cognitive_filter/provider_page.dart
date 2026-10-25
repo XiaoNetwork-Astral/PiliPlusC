@@ -1,5 +1,8 @@
+import 'package:PiliPlus/common/widgets/dialog/text_input_dialog.dart';
+import 'package:PiliPlus/common/widgets/flutter/pop_scope.dart';
 import 'package:PiliPlus/common/widgets/scaffold/simple_scaffold.dart';
 import 'package:PiliPlus/common/widgets/view_safe_area.dart';
+import 'package:PiliPlus/pages/backup/widgets/backup_dialogs.dart';
 import 'package:PiliPlus/pages/cognitive_filter/widgets.dart';
 import 'package:PiliPlus/utils/cognitive_filter/jev_client.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
@@ -10,7 +13,8 @@ import 'package:material_ui/material_ui.dart';
 
 /// AI 提供商设置
 ///
-/// 目前只接 Jev 判定接口，API Key 只读写存储，不出现在界面与日志里
+/// 先在页面里修改，测试连接用的是当前填写的内容，点保存才会写入。
+/// API Key 只读写存储，不出现在界面与日志里。
 class FilterProviderPage extends StatefulWidget {
   const FilterProviderPage({super.key});
 
@@ -19,273 +23,200 @@ class FilterProviderPage extends StatefulWidget {
 }
 
 class _FilterProviderPageState extends State<FilterProviderPage> {
-  late String _baseUrl;
-  late String _model;
-  late int _timeout;
+  String _baseUrl = Pref.cfApiBaseUrl;
+  String _apiKey = Pref.cfApiKey;
+  String _model = Pref.cfApiModel;
+  int _timeout = Pref.cfApiTimeout;
+
+  String _savedBaseUrl = Pref.cfApiBaseUrl;
+  String _savedApiKey = Pref.cfApiKey;
+  String _savedModel = Pref.cfApiModel;
+  int _savedTimeout = Pref.cfApiTimeout;
+
   bool _testing = false;
 
-  @override
-  void initState() {
-    super.initState();
-    _baseUrl = Pref.cfApiBaseUrl;
-    _model = Pref.cfApiModel;
-    _timeout = Pref.cfApiTimeout;
+  bool get _dirty =>
+      _baseUrl != _savedBaseUrl ||
+      _apiKey != _savedApiKey ||
+      _model != _savedModel ||
+      _timeout != _savedTimeout;
+
+  String? _validateUrl(String value) {
+    if (value.isEmpty) return '地址不能为空';
+    if (!value.startsWith('http://') && !value.startsWith('https://')) {
+      return '地址需以 http:// 或 https:// 开头';
+    }
+    return null;
   }
 
   Future<void> _editBaseUrl() async {
-    var value = _baseUrl;
-    final result = await showDialog<String>(
+    final result = await showTextInputDialog(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('接口地址'),
-        content: TextFormField(
-          autofocus: true,
-          initialValue: _baseUrl,
-          keyboardType: TextInputType.url,
-          onChanged: (text) => value = text,
-          decoration: const InputDecoration(
-            hintText: '以 http 或 https 开头',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: Get.back,
-            child: Text(
-              '取消',
-              style: TextStyle(color: ColorScheme.of(dialogContext).outline),
-            ),
-          ),
-          TextButton(
-            onPressed: () {
-              final url = value.trim();
-              if (!(url.startsWith('http://') ||
-                  url.startsWith('https://'))) {
-                SmartDialog.showToast('接口地址需以 http 或 https 开头');
-                return;
-              }
-              Get.back(result: url);
-            },
-            child: const Text('保存'),
-          ),
-        ],
-      ),
+      title: '接口地址',
+      initialValue: _baseUrl,
+      keyboardType: TextInputType.url,
+      validator: _validateUrl,
     );
-    if (result == null) return;
-    Pref.cfApiBaseUrl = result;
-    if (!mounted) return;
-    setState(() => _baseUrl = result);
+    if (result != null) setState(() => _baseUrl = result);
   }
 
   Future<void> _editApiKey() async {
-    var obscure = true;
-    var value = '';
-    final result = await showDialog<String>(
+    final result = await showTextInputDialog(
       context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, setDialogState) => AlertDialog(
-          title: const Text('API Key'),
-          content: TextField(
-            autofocus: true,
-            obscureText: obscure,
-            onChanged: (text) => value = text,
-            decoration: InputDecoration(
-              hintText: Pref.cfApiKey.isEmpty
-                  ? '输入 API Key'
-                  : '输入新的 API Key，留空则清除',
-              suffixIcon: IconButton(
-                icon: Icon(
-                  obscure
-                      ? Icons.visibility_outlined
-                      : Icons.visibility_off_outlined,
-                ),
-                onPressed: () => setDialogState(() => obscure = !obscure),
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: Get.back,
-              child: Text(
-                '取消',
-                style: TextStyle(
-                  color: ColorScheme.of(dialogContext).outline,
-                ),
-              ),
-            ),
-            TextButton(
-              onPressed: () => Get.back(result: value.trim()),
-              child: const Text('保存'),
-            ),
-          ],
-        ),
-      ),
+      title: 'API Key',
+      initialValue: _apiKey,
+      obscureText: true,
     );
-    if (result == null) return;
-    Pref.cfApiKey = result;
-    if (!mounted) return;
-    setState(() {});
+    if (result != null) setState(() => _apiKey = result);
   }
 
   Future<void> _editModel() async {
-    var value = _model;
-    final result = await showDialog<String>(
+    final result = await showTextInputDialog(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('模型名'),
-        content: TextFormField(
-          autofocus: true,
-          initialValue: _model,
-          onChanged: (text) => value = text,
-          decoration: const InputDecoration(hintText: '输入模型名'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: Get.back,
-            child: Text(
-              '取消',
-              style: TextStyle(color: ColorScheme.of(dialogContext).outline),
-            ),
-          ),
-          TextButton(
-            onPressed: () {
-              final model = value.trim();
-              if (model.isEmpty) {
-                SmartDialog.showToast('模型名不能为空');
-                return;
-              }
-              Get.back(result: model);
-            },
-            child: const Text('保存'),
-          ),
-        ],
-      ),
+      title: '模型名',
+      initialValue: _model,
+      validator: (value) => value.isEmpty ? '模型名不能为空' : null,
     );
-    if (result == null) return;
-    Pref.cfApiModel = result;
-    if (!mounted) return;
-    setState(() => _model = result);
+    if (result != null) setState(() => _model = result);
   }
 
   Future<void> _editTimeout() async {
-    var value = _timeout.toString();
-    final result = await showDialog<String>(
+    final result = await showTextInputDialog(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('等待超时'),
-        content: TextFormField(
-          autofocus: true,
-          initialValue: value,
-          keyboardType: TextInputType.number,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          onChanged: (text) => value = text,
-          decoration: const InputDecoration(suffixText: '秒'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: Get.back,
-            child: Text(
-              '取消',
-              style: TextStyle(color: ColorScheme.of(dialogContext).outline),
-            ),
-          ),
-          TextButton(
-            onPressed: () {
-              final seconds = int.tryParse(value);
-              if (seconds == null || seconds < 2 || seconds > 30) {
-                SmartDialog.showToast('请输入 2 到 30 之间的秒数');
-                return;
-              }
-              Get.back(result: seconds.toString());
-            },
-            child: const Text('保存'),
-          ),
-        ],
-      ),
+      title: '等待超时',
+      initialValue: _timeout.toString(),
+      keyboardType: TextInputType.number,
+      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+      suffixText: '秒',
+      validator: (value) {
+        final seconds = int.tryParse(value);
+        if (seconds == null || seconds < 2 || seconds > 30) {
+          return '请输入 2 到 30 之间的秒数';
+        }
+        return null;
+      },
     );
-    if (result == null) return;
-    final seconds = int.parse(result);
-    Pref.cfApiTimeout = seconds;
-    if (!mounted) return;
-    setState(() => _timeout = seconds);
+    if (result != null) setState(() => _timeout = int.parse(result));
+  }
+
+  void _save() {
+    Pref.cfApiBaseUrl = _baseUrl;
+    Pref.cfApiKey = _apiKey;
+    Pref.cfApiModel = _model;
+    Pref.cfApiTimeout = _timeout;
+    setState(() {
+      _savedBaseUrl = _baseUrl;
+      _savedApiKey = _apiKey;
+      _savedModel = _model;
+      _savedTimeout = _timeout;
+    });
   }
 
   Future<void> _testConnection() async {
-    final apiKey = Pref.cfApiKey;
-    if (apiKey.isEmpty) {
+    final error = _validateUrl(_baseUrl);
+    if (error != null) {
+      SmartDialog.showToast(error);
+      return;
+    }
+    if (_apiKey.isEmpty) {
       SmartDialog.showToast('请先填写 API Key');
       return;
     }
-
     setState(() => _testing = true);
+    String message;
     try {
       final result = await JevClient.testConnection(
-        endpoint: Pref.cfApiBaseUrl,
-        apiKey: apiKey,
-        model: Pref.cfApiModel,
-        timeout: Duration(seconds: Pref.cfApiTimeout),
+        endpoint: _baseUrl,
+        apiKey: _apiKey,
+        model: _model,
+        timeout: Duration(seconds: _timeout),
       );
-      if (!mounted) return;
-      final message = result.message.isEmpty
+      message = result.message.isEmpty
           ? (result.ok ? '连接成功' : '连接失败')
           : result.message;
-      SmartDialog.showToast(message.replaceAll(apiKey, '***'));
+      message = message.replaceAll(_apiKey, '***');
     } catch (_) {
-      if (!mounted) return;
-      SmartDialog.showToast('测试失败，请检查接口地址与网络');
+      message = '连接失败，请检查接口地址与网络';
     } finally {
       if (mounted) setState(() => _testing = false);
     }
+    SmartDialog.showToast(message);
+  }
+
+  Future<void> _onBack() async {
+    final discard = await showUnsavedChangesDialog(context);
+    if (!discard || !mounted) return;
+    setState(() {
+      _savedBaseUrl = _baseUrl;
+      _savedApiKey = _apiKey;
+      _savedModel = _model;
+      _savedTimeout = _timeout;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) Get.back();
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final bottomPadding = MediaQuery.viewPaddingOf(context).bottom + 100;
-    return SimpleScaffold(
-      appBar: AppBar(title: const Text('AI 提供商')),
-      body: ViewSafeArea(
-        child: ListView(
-          padding: EdgeInsets.only(bottom: bottomPadding),
-          children: [
-            CfTile(
-              icon: Icons.link,
-              title: '接口地址',
-              subtitle: _baseUrl,
-              onTap: _editBaseUrl,
-            ),
-            CfTile(
-              icon: Icons.key,
-              title: 'API Key',
-              onTap: _editApiKey,
-            ),
-            CfTile(
-              icon: Icons.memory,
-              title: '模型名',
-              subtitle: _model,
-              onTap: _editModel,
-            ),
-            CfTile(
-              icon: Icons.timer_outlined,
-              title: '等待超时',
-              subtitle: '$_timeout 秒',
-              onTap: _editTimeout,
-            ),
-            CfTile(
-              icon: Icons.wifi_tethering,
-              title: '测试连接',
-              trailing: _testing
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Text(
-                      '测试',
-                      style: TextStyle(color: theme.colorScheme.primary),
-                    ),
-              onTap: _testing ? null : _testConnection,
-            ),
-          ],
+    return popScope(
+      canPop: !_dirty,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _onBack();
+      },
+      child: SimpleScaffold(
+        appBar: AppBar(title: const Text('AI 提供商')),
+        body: ViewSafeArea(
+          child: ListView(
+            padding: EdgeInsets.only(bottom: bottomPadding),
+            children: [
+              CfTile(
+                icon: Icons.link,
+                title: '接口地址',
+                subtitle: _baseUrl,
+                onTap: _editBaseUrl,
+              ),
+              CfTile(
+                icon: Icons.key,
+                title: 'API Key',
+                subtitle: _apiKey.isEmpty ? null : '••••••••',
+                onTap: _editApiKey,
+              ),
+              CfTile(
+                icon: Icons.memory,
+                title: '模型名',
+                subtitle: _model,
+                onTap: _editModel,
+              ),
+              CfTile(
+                icon: Icons.timer_outlined,
+                title: '等待超时',
+                subtitle: '$_timeout 秒',
+                onTap: _editTimeout,
+              ),
+              CfTile(
+                icon: Icons.wifi_tethering,
+                title: '测试连接',
+                enabled: !_testing,
+                trailing: _testing
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : null,
+                onTap: _testConnection,
+              ),
+              CfTile(
+                icon: Icons.save_outlined,
+                title: '保存',
+                enabled: _dirty,
+                onTap: _save,
+              ),
+            ],
+          ),
         ),
       ),
     );

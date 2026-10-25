@@ -57,21 +57,25 @@ class _RuleFilterTabState extends State<RuleFilterTab> {
         CfTile(
           icon: Icons.subtitles_outlined,
           title: '弹幕屏蔽',
+          subtitle: '智能云屏蔽等级、按类型屏蔽',
           onTap: () => _open(() => const DanmakuBlockSubPage()),
         ),
         CfTile(
           icon: Icons.comment_outlined,
           title: '评论屏蔽',
+          subtitle: '带货、@ 数量、复制简介等',
           onTap: () => _open(() => const ReplyRuleSubPage()),
         ),
         CfTile(
           icon: Icons.dynamic_feed_outlined,
           title: '动态屏蔽',
+          subtitle: '带货动态',
           onTap: () => _open(() => const DynRuleSubPage()),
         ),
         CfTile(
           icon: Icons.ondemand_video_outlined,
           title: '视频屏蔽',
+          subtitle: '点赞率、时长、播放量等',
           onTap: () => _open(() => const VideoRuleSubPage()),
         ),
       ],

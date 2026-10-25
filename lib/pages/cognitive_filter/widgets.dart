@@ -10,6 +10,7 @@ class CfTile extends StatelessWidget {
     this.subtitle,
     this.trailing,
     this.onTap,
+    this.enabled = true,
   });
 
   final String title;
@@ -18,13 +19,22 @@ class CfTile extends StatelessWidget {
   final Widget? trailing;
   final VoidCallback? onTap;
 
+  /// 为 false 时整行置灰且不响应点击
+  final bool enabled;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return ListTile(
-      onTap: onTap,
+      onTap: enabled ? onTap : null,
+      enabled: enabled,
       leading: icon == null ? null : Icon(icon),
-      title: Text(title, style: theme.textTheme.titleMedium),
+      title: Text(
+        title,
+        style: theme.textTheme.titleMedium!.copyWith(
+          color: enabled ? null : theme.colorScheme.outline,
+        ),
+      ),
       subtitle: subtitle == null
           ? null
           : Text(

@@ -162,7 +162,7 @@ class _RuleListPageState extends State<RuleListPage> {
     final outline = theme.colorScheme.outline;
     final deleteButton = IconButton(
       tooltip: '删除',
-      icon: Icon(Icons.delete_outline, color: outline),
+      icon: Icon(Icons.delete_outline, color: theme.colorScheme.error),
       onPressed: () => _confirmDelete(rule),
     );
     // B 站云端只给出发送者哈希，没有 UID，所以只能删除，不能启停或修改
@@ -208,6 +208,7 @@ class _RuleListPageState extends State<RuleListPage> {
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
+          deleteButton,
           Transform.scale(
             scale: 0.8,
             child: Switch(
@@ -216,7 +217,6 @@ class _RuleListPageState extends State<RuleListPage> {
                   RuleStore.instance.setEnabled(rule.id, value),
             ),
           ),
-          deleteButton,
         ],
       ),
       onTap: () => _openEdit(rule),

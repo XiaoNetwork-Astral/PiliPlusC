@@ -1,3 +1,4 @@
+import 'package:PiliPlus/common/widgets/dialog/dialog.dart';
 import 'package:PiliPlus/common/widgets/scaffold/simple_scaffold.dart';
 import 'package:PiliPlus/common/widgets/view_safe_area.dart';
 import 'package:PiliPlus/models/cognitive_filter/config.dart';
@@ -62,6 +63,18 @@ class _CategoryRulesPageState extends State<CategoryRulesPage> {
     _reload();
   }
 
+  Future<void> _delete(FilterCategory category) async {
+    final confirmed = await showConfirmDialog(
+      context: context,
+      title: const Text('确定删除该类别？'),
+    );
+    if (!confirmed) return;
+    Pref.cfCustomCategories = Pref.cfCustomCategories
+        .where((item) => item.id != category.id)
+        .toList();
+    _reload();
+  }
+
   @override
   Widget build(BuildContext context) {
     final bottomPadding = MediaQuery.viewPaddingOf(context).bottom + 100;
@@ -77,13 +90,26 @@ class _CategoryRulesPageState extends State<CategoryRulesPage> {
                 subtitle: category.id == 'mock'
                     ? '${category.summary}，误伤偏高'
                     : category.summary,
-                trailing: Transform.scale(
-                  scale: 0.8,
-                  alignment: Alignment.centerRight,
-                  child: Switch(
-                    value: category.enabled,
-                    onChanged: (value) => _toggle(category, value),
-                  ),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (!category.builtin)
+                      IconButton(
+                        tooltip: '删除',
+                        icon: Icon(
+                          Icons.delete_outline,
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                        onPressed: () => _delete(category),
+                      ),
+                    Transform.scale(
+                      scale: 0.8,
+                      child: Switch(
+                        value: category.enabled,
+                        onChanged: (value) => _toggle(category, value),
+                      ),
+                    ),
+                  ],
                 ),
                 onTap: () => _openEdit(category),
               ),
