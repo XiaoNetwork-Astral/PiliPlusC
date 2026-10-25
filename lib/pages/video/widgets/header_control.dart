@@ -16,6 +16,9 @@ import 'package:PiliPlus/http/init.dart';
 import 'package:PiliPlus/http/live.dart';
 import 'package:PiliPlus/http/loading_state.dart';
 import 'package:PiliPlus/http/video.dart';
+import 'package:PiliPlus/models/cognitive_filter/filter_rule.dart';
+import 'package:PiliPlus/models/cognitive_filter/rule_scope.dart';
+import 'package:PiliPlus/models/cognitive_filter/rule_type.dart';
 import 'package:PiliPlus/models/common/super_resolution_type.dart';
 import 'package:PiliPlus/models/common/video/base_quality.dart';
 import 'package:PiliPlus/models/common/video/video_decode_type.dart';
@@ -42,6 +45,7 @@ import 'package:PiliPlus/services/shutdown_timer_service.dart'
 import 'package:PiliPlus/utils/accounts.dart';
 import 'package:PiliPlus/utils/accounts/account.dart';
 import 'package:PiliPlus/utils/android/android_helper.dart';
+import 'package:PiliPlus/utils/cognitive_filter/rule_store.dart';
 import 'package:PiliPlus/utils/connectivity_utils.dart';
 import 'package:PiliPlus/utils/debug_export.dart';
 import 'package:PiliPlus/utils/extension/num_ext.dart';
@@ -260,10 +264,28 @@ class HeaderControl extends StatefulWidget {
         contentRequired: ReportOptions.danmakuReportCheck,
         (reasonType, reasonDesc, banUid) {
           if (banUid) {
-            final filter = ctr.filters;
-            if (filter.dmUid.add(extra.mid)) {
-              filter.count++;
-              GStorage.localCache.put(LocalCacheKey.danmakuFilterRules, filter);
+            // 只有哈希的弹幕用户规则，与引擎 blocksHash 的口径一致
+            final hash = extra.mid.toLowerCase();
+            final exists = RuleStore.instance.rules.any(
+              (rule) =>
+                  rule.isHashOnly &&
+                  (rule.midHash ?? '').toLowerCase() == hash,
+            );
+            if (hash.isNotEmpty && !exists) {
+              RuleStore.instance.add(
+                FilterRule(
+                  id: FilterRule.stableId(
+                    type: RuleType.user,
+                    scopes: const {RuleScope.danmaku},
+                    content: '',
+                    midHash: hash,
+                  ),
+                  type: RuleType.user,
+                  content: '',
+                  scopes: const {RuleScope.danmaku},
+                  midHash: hash,
+                ),
+              );
             }
             DanmakuFilterHttp.danmakuFilterAdd(filter: extra.mid, type: 2);
           }

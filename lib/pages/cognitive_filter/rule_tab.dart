@@ -1,6 +1,8 @@
-import 'package:PiliPlus/pages/cognitive_filter/danmaku_rule_pages.dart';
+import 'package:PiliPlus/pages/cognitive_filter/danmaku_block_page.dart';
+import 'package:PiliPlus/pages/cognitive_filter/rule_list_page.dart';
 import 'package:PiliPlus/pages/cognitive_filter/rule_sub_pages.dart';
 import 'package:PiliPlus/pages/cognitive_filter/widgets.dart';
+import 'package:PiliPlus/utils/cognitive_filter/rule_store.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
 import 'package:get/get.dart';
 import 'package:material_ui/material_ui.dart';
@@ -29,6 +31,11 @@ class _RuleFilterTabState extends State<RuleFilterTab> {
     setState(() => _enabled = value);
   }
 
+  Future<void> _open(Widget Function() page) async {
+    await Get.to(page);
+    if (mounted) setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
     final bottomPadding = MediaQuery.viewPaddingOf(context).bottom + 100;
@@ -45,40 +52,34 @@ class _RuleFilterTabState extends State<RuleFilterTab> {
           onChanged: _toggle,
         ),
         CfTile(
+          icon: Icons.rule,
+          title: '规则',
+          subtitle: '关键词、正则、分区与用户，共 ${RuleStore.instance.rules.length} 条',
+          onTap: () => _open(() => const RuleListPage()),
+        ),
+        CfTile(
           icon: Icons.subtitles_outlined,
           title: '弹幕屏蔽',
-          subtitle: '关键词、正则、云屏蔽等级与类型',
-          onTap: () => Get.to(() => const DanmakuRuleSubPage()),
+          subtitle: '智能云屏蔽等级、按类型屏蔽',
+          onTap: () => _open(() => const DanmakuBlockSubPage()),
         ),
         CfTile(
           icon: Icons.comment_outlined,
           title: '评论屏蔽',
-          subtitle: '关键词、带货、@ 数量等',
-          onTap: () => Get.to(() => const ReplyRuleSubPage()),
+          subtitle: '带货、@ 数量、复制简介等',
+          onTap: () => _open(() => const ReplyRuleSubPage()),
         ),
         CfTile(
           icon: Icons.dynamic_feed_outlined,
           title: '动态屏蔽',
-          subtitle: '动态关键词与带货动态',
-          onTap: () => Get.to(() => const DynRuleSubPage()),
+          subtitle: '带货动态',
+          onTap: () => _open(() => const DynRuleSubPage()),
         ),
         CfTile(
           icon: Icons.ondemand_video_outlined,
           title: '视频屏蔽',
-          subtitle: '标题、分区、时长、播放量等',
-          onTap: () => Get.to(() => const VideoRuleSubPage()),
-        ),
-        CfTile(
-          icon: Icons.block,
-          title: '黑名单',
-          subtitle: '屏蔽后其弹幕、评论、动态、视频一并隐藏',
-          onTap: () => Get.toNamed('/blackListPage'),
-        ),
-        CfTile(
-          icon: Icons.forum_outlined,
-          title: '私信与直播',
-          subtitle: '私信里的消息屏蔽词',
-          onTap: () => Get.to(() => const MessageRuleSubPage()),
+          subtitle: '点赞率、时长、播放量等',
+          onTap: () => _open(() => const VideoRuleSubPage()),
         ),
       ],
     );

@@ -22,7 +22,9 @@ class BackupPage extends StatefulWidget {
 
 class _BackupPageState extends State<BackupPage> {
   BackupMethod _method = BackupService.lastMethod;
-  final Set<BackupItem> _selected = {...BackupItem.defaultSelected};
+  final Set<BackupItem> _selected = {
+    ...BackupItem.defaultSelectedFor(BackupService.lastMethod),
+  };
 
   @override
   void initState() {
@@ -40,6 +42,8 @@ class _BackupPageState extends State<BackupPage> {
         return Icons.archive_outlined;
       case BackupMethod.clipboard:
         return Icons.content_paste_outlined;
+      case BackupMethod.cloud:
+        return Icons.cloud_sync_outlined;
     }
   }
 
@@ -54,8 +58,12 @@ class _BackupPageState extends State<BackupPage> {
     if (method == null || !mounted) return;
     setState(() {
       _method = method;
-      if (!method.supportsCustomFont) {
-        _selected.remove(BackupItem.customFont);
+      if (method == BackupMethod.cloud) {
+        _selected
+          ..clear()
+          ..addAll(BackupItem.defaultSelectedFor(method));
+      } else {
+        _selected.removeWhere((item) => !item.isSupportedBy(method));
       }
     });
     BackupService.lastMethod = method;
@@ -68,6 +76,8 @@ class _BackupPageState extends State<BackupPage> {
       case BackupMethod.archive:
         await Get.to(() => const ArchiveSettingPage());
       case BackupMethod.clipboard:
+        break;
+      case BackupMethod.cloud:
         break;
     }
   }
@@ -139,11 +149,12 @@ class _BackupPageState extends State<BackupPage> {
     SmartDialog.showLoading();
     String message;
     try {
-      await BackupService.export(_method, _selected);
-      message = switch (_method) {
+      final summary = await BackupService.export(_method, _selected);
+      message = summary ?? switch (_method) {
         BackupMethod.webdav => '上传成功',
         BackupMethod.archive => '导出成功',
         BackupMethod.clipboard => '已复制到剪贴板',
+        BackupMethod.cloud => '同步完成',
       };
     } on BackupCancelledException {
       message = '已取消';
@@ -299,11 +310,19 @@ class _BackupPageState extends State<BackupPage> {
           BackupService.webdavArchivePassword = enteredPassword;
         case BackupMethod.clipboard:
           break;
+        case BackupMethod.cloud:
+          break;
       }
     }
 
     if (!mounted) return;
-    if (!await showConfirmImportDialog(context) || !mounted) return;
+    if (!await showConfirmImportDialog(
+          context,
+          merge: _method == BackupMethod.cloud,
+        ) ||
+        !mounted) {
+      return;
+    }
 
     String message;
     try {
@@ -316,7 +335,7 @@ class _BackupPageState extends State<BackupPage> {
           return showImportWarningDialog(context, warning);
         },
       );
-      message = note == null ? '导入成功' : '导入失败：$note';
+      message = note ?? '导入成功';
     } on BackupCancelledException {
       message = '已取消';
     } on BackupException catch (e) {

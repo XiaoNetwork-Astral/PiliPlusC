@@ -8,6 +8,8 @@ import 'package:PiliPlus/utils/backup/backup_exception.dart';
 import 'package:PiliPlus/utils/backup/backup_item.dart';
 import 'package:PiliPlus/utils/backup/backup_method.dart';
 import 'package:PiliPlus/utils/backup/clipboard_codec.dart';
+import 'package:PiliPlus/utils/cognitive_filter/cloud_sync.dart';
+import 'package:PiliPlus/utils/cognitive_filter/rule_store.dart';
 import 'package:PiliPlus/utils/config_archive.dart';
 import 'package:PiliPlus/utils/date_utils.dart';
 import 'package:PiliPlus/utils/extension/file_ext.dart';
@@ -109,6 +111,8 @@ abstract final class BackupService {
         return webdavEncrypt && webdavArchivePassword.isNotEmpty;
       case BackupMethod.clipboard:
         return false;
+      case BackupMethod.cloud:
+        return false;
     }
   }
 
@@ -126,6 +130,8 @@ abstract final class BackupService {
       case BackupMethod.webdav:
         return webdavArchivePassword;
       case BackupMethod.clipboard:
+        return '';
+      case BackupMethod.cloud:
         return '';
     }
   }
@@ -190,6 +196,12 @@ abstract final class BackupService {
           throw const BackupClipboardEmptyException();
         }
         return BackupSource._(method, text);
+      case BackupMethod.cloud:
+        // 云端方式没有本地备份来源，恢复时直接读取云端
+        if (!Accounts.main.isLogin) {
+          throw const BackupException('导入屏蔽规则需要先登录账号，请登录后重试');
+        }
+        return BackupSource._(method, const _CloudSource());
     }
   }
 
@@ -238,14 +250,23 @@ abstract final class BackupService {
           warning: null,
           data: backup,
         );
+      case BackupMethod.cloud:
+        return const BackupPreview(
+          method: BackupMethod.cloud,
+          items: BackupItem.cloudItems,
+          warning: null,
+          data: _CloudSource(),
+        );
     }
   }
 
   /// 导出
   ///
   /// 压缩包方式沿用现有的平台保存/分享流程，WebDAV 上传压缩包，
-  /// 剪贴板编码成一串字符串并复制
-  static Future<void> export(
+  /// 剪贴板编码成一串字符串并复制，云端方式把所选项上传到 B 站
+  ///
+  /// 返回可展示的补充说明，没有时返回 null
+  static Future<String?> export(
     BackupMethod method,
     Set<BackupItem> items,
   ) async {
@@ -259,17 +280,17 @@ abstract final class BackupService {
       throw const BackupSelectionEmptyException();
     }
 
+    String? summary;
     try {
       switch (method) {
         case BackupMethod.archive:
           await _exportArchive(supported);
-          break;
         case BackupMethod.webdav:
           await _exportWebDav(supported);
-          break;
         case BackupMethod.clipboard:
           await _exportClipboard(supported);
-          break;
+        case BackupMethod.cloud:
+          summary = await _exportCloud(supported);
       }
     } on BackupException {
       rethrow;
@@ -277,13 +298,16 @@ abstract final class BackupService {
       throw BackupException('导出失败：$e');
     }
     lastMethod = method;
+    return summary;
   }
 
   /// 导入
   ///
   /// 只恢复已勾选且备份中存在的项，缺项静默跳过
   /// [preview] 为 [inspect] 的返回值，传入后可避免重复选择文件或下载
-  /// 返回部分项目导入失败的说明，全部成功时返回 null
+  /// 返回可直接展示的补充说明，全部成功且无需说明时返回 null
+  ///
+  /// 导入屏蔽规则前要求已登录；导入完成后会把这几项合并结果上传到云端
   static Future<String?> import(
     BackupMethod method,
     Set<BackupItem> items, {
@@ -303,17 +327,41 @@ abstract final class BackupService {
     if (selected.isEmpty) {
       return null;
     }
+
+    final syncItems = selected.where((item) => item.syncWithCloud).toSet();
+    if (syncItems.isNotEmpty && !Accounts.main.isLogin) {
+      throw const BackupException('导入屏蔽规则需要先登录账号，请登录后重试');
+    }
+
+    if (method == BackupMethod.cloud) {
+      return _importCloud(selected);
+    }
+
     final pwd = password == null || password.isEmpty
         ? source.password
         : password;
 
+    final String? note;
     switch (method) {
       case BackupMethod.archive:
       case BackupMethod.webdav:
-        return _importArchiveLike(source, selected, pwd, onWarning);
+        note = await _importArchiveLike(source, selected, pwd, onWarning);
       case BackupMethod.clipboard:
-        return _importClipboard(source, selected);
+        note = await _importClipboard(source, selected);
+      case BackupMethod.cloud:
+        return _importCloud(selected);
     }
+
+    final failure = note == null || note.isEmpty ? null : '导入失败：$note';
+    if (syncItems.isEmpty) return failure;
+
+    final report = await CloudSync.push(_kindsOf(syncItems));
+    if (failure == null) {
+      return report.hasFailure
+          ? '导入完成，云端同步部分失败\n${report.summary}'
+          : '导入成功\n${report.summary}';
+    }
+    return '$failure\n${report.summary}';
   }
 
   /// 单个备份项在列表右侧显示的体积或条数
@@ -327,6 +375,9 @@ abstract final class BackupService {
         return (countOf(item) ?? 0) > 0 ? '已填写' : '未填写';
       case BackupItem.blacklist:
         return '${countOf(item) ?? 0} 个';
+      case BackupItem.danmakuRules:
+      case BackupItem.whisperRules:
+        return '${countOf(item) ?? 0} 条';
       case BackupItem.reply:
         return '${countOf(item) ?? 0} 条';
       case BackupItem.search:
@@ -347,6 +398,9 @@ abstract final class BackupService {
       case BackupItem.filterKey:
         return utf8.encode(Pref.cfApiKey).length;
       case BackupItem.blacklist:
+        return null;
+      case BackupItem.danmakuRules:
+      case BackupItem.whisperRules:
         return null;
       case BackupItem.reply:
         return null;
@@ -370,6 +424,10 @@ abstract final class BackupService {
         return Pref.cfApiKey.isEmpty ? 0 : 1;
       case BackupItem.blacklist:
         return Pref.blackMids.length;
+      case BackupItem.danmakuRules:
+        return danmakuRulesOf(RuleStore.instance.rules).length;
+      case BackupItem.whisperRules:
+        return whisperRulesOf(RuleStore.instance.rules).length;
       case BackupItem.reply:
         return GStorage.reply?.length ?? 0;
       case BackupItem.search:
@@ -467,6 +525,38 @@ abstract final class BackupService {
     }
   }
 
+  static Future<String> _exportCloud(Set<BackupItem> items) async {
+    final report = await CloudSync.push(_kindsOf(items));
+    return report.hasFailure
+        ? '上传完成，部分失败\n${report.summary}'
+        : '上传完成\n${report.summary}';
+  }
+
+  static Future<String> _importCloud(Set<BackupItem> items) async {
+    final report = await CloudSync.pull(_kindsOf(items));
+    return report.hasFailure
+        ? '下载完成，部分失败\n${report.summary}'
+        : '下载完成\n${report.summary}';
+  }
+
+  static Set<CloudSyncKind> _kindsOf(Iterable<BackupItem> items) {
+    final selected = <CloudSyncKind>{};
+    for (final item in items) {
+      final kind = switch (item) {
+        BackupItem.danmakuRules => CloudSyncKind.danmakuRules,
+        BackupItem.whisperRules => CloudSyncKind.whisperRules,
+        BackupItem.blacklist => CloudSyncKind.blacklist,
+        _ => null,
+      };
+      if (kind != null) selected.add(kind);
+    }
+    // 黑名单最慢，固定放在最后
+    return {
+      for (final kind in CloudSyncKind.values)
+        if (selected.contains(kind)) kind,
+    };
+  }
+
   static Future<String?> _importArchiveLike(
     BackupPreview preview,
     Set<BackupItem> items,
@@ -538,6 +628,12 @@ abstract final class BackupService {
             break;
           case BackupItem.blacklist:
             ConfigArchive.applyBlacklist(entry.value);
+            break;
+          case BackupItem.danmakuRules:
+            ConfigArchive.applyDanmakuRules(entry.value);
+            break;
+          case BackupItem.whisperRules:
+            ConfigArchive.applyWhisperRules(entry.value);
             break;
           case BackupItem.reply:
             ConfigArchive.applyReply(entry.value);
@@ -641,4 +737,9 @@ abstract final class BackupService {
     }
     return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
   }
+}
+
+/// 云端方式的内部标记，页面不要解析
+class _CloudSource {
+  const _CloudSource();
 }

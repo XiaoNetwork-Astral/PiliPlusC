@@ -146,6 +146,7 @@ abstract class ReplyController<R> extends CommonListController<R, ReplyInfo> {
   String? intro;
   @pragma('vm:prefer-inline')
   void _removeIntro(MainListReply data) {
+    if (!Pref.cfRuleFilterEnabled) return;
     final intro = this.intro;
     if (intro != null &&
         intro.isNotEmpty &&

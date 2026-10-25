@@ -1,4 +1,3 @@
-import 'package:PiliPlus/http/video.dart';
 import 'package:PiliPlus/pages/rcmd/controller.dart';
 import 'package:PiliPlus/pages/setting/models/model.dart';
 import 'package:PiliPlus/utils/recommend_filter.dart';
@@ -48,6 +47,10 @@ List<SettingsModel> get recommendSettings => [
       }
     },
   ),
+];
+
+/// 视频屏蔽相关的设置项，放在认知滤网里，不再出现在推荐流设置页
+List<SettingsModel> get videoBlockSettings => [
   getVideoFilterSelectModel(
     title: '点赞率',
     suffix: '%',
@@ -55,24 +58,6 @@ List<SettingsModel> get recommendSettings => [
     values: [0, 1, 2, 3, 4],
     onChanged: (value) => RecommendFilter.minLikeRatioForRecommend = value,
     filterScope: 'Web推荐、热门、分区',
-  ),
-  getBanWordModel(
-    title: '标题关键词过滤',
-    key: SettingBoxKey.banWordForRecommend,
-    onChanged: (value) {
-      RecommendFilter.rcmdRegExp = value;
-      RecommendFilter.enableFilter = value.pattern.isNotEmpty;
-    },
-    banScope: '推荐、热门、分区、相关视频',
-  ),
-  getBanWordModel(
-    title: '分区关键词过滤',
-    key: SettingBoxKey.banWordForZone,
-    onChanged: (value) {
-      VideoHttp.zoneRegExp = value;
-      VideoHttp.enableFilter = value.pattern.isNotEmpty;
-    },
-    banScope: 'App推荐、热门、分区',
   ),
   getVideoFilterSelectModel(
     title: '视频时长',

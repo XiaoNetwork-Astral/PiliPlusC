@@ -4,11 +4,12 @@ import 'dart:io' show File;
 import 'package:PiliPlus/grpc/bilibili/community/service/dm/v1.pb.dart';
 import 'package:PiliPlus/grpc/dm.dart';
 import 'package:PiliPlus/http/loading_state.dart';
+import 'package:PiliPlus/models/cognitive_filter/rule_scope.dart';
 import 'package:PiliPlus/plugin/pl_player/controller.dart';
 import 'package:PiliPlus/plugin/pl_player/models/data_source.dart';
 import 'package:PiliPlus/utils/accounts.dart';
+import 'package:PiliPlus/utils/cognitive_filter/rule_engine.dart';
 import 'package:PiliPlus/utils/danmaku_utils.dart';
-import 'package:PiliPlus/utils/global_data.dart';
 import 'package:PiliPlus/utils/path_utils.dart';
 import 'package:PiliPlus/utils/utils.dart';
 import 'package:path/path.dart' as path;
@@ -61,14 +62,9 @@ class PlDanmakuController {
 
   void handleDanmaku(List<DanmakuElem> elems) {
     if (elems.isEmpty) return;
+    final snap = RuleEngine.instance.snapshot(RuleScope.danmaku);
     final uniques = HashMap<String, DanmakuElem>();
 
-    final filters = _plPlayerController.filters;
-    final shouldFilter = filters.count != 0;
-    // 本地黑名单里的用户，其弹幕一并屏蔽
-    final blackHashes = {
-      for (final mid in GlobalData().blackMids) DmUtils.midToHash(mid),
-    };
     for (final element in elems) {
       if (_isLogin) {
         element.isSelf = element.midHash == _plPlayerController.midHash;
@@ -85,10 +81,8 @@ class PlDanmakuController {
           }
         }
 
-        if (shouldFilter && filters.remove(element)) {
-          continue;
-        }
-        if (blackHashes.contains(element.midHash)) {
+        if (snap.matchText(element.content) ||
+            snap.hashBlocked(element.midHash)) {
           continue;
         }
       }

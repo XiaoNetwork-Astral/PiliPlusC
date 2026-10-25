@@ -8,6 +8,7 @@ import 'package:PiliPlus/http/browser_ua.dart';
 import 'package:PiliPlus/http/constants.dart';
 import 'package:PiliPlus/http/init.dart';
 import 'package:PiliPlus/http/loading_state.dart';
+import 'package:PiliPlus/models/cognitive_filter/rule_scope.dart';
 import 'package:PiliPlus/models/common/account_type.dart';
 import 'package:PiliPlus/models/common/video/video_type.dart';
 import 'package:PiliPlus/models/home/rcmd/result.dart';
@@ -29,8 +30,8 @@ import 'package:PiliPlus/models_new/video/video_relation/data.dart';
 import 'package:PiliPlus/models_new/video/video_shot/data.dart';
 import 'package:PiliPlus/utils/accounts.dart';
 import 'package:PiliPlus/utils/app_sign.dart';
+import 'package:PiliPlus/utils/cognitive_filter/rule_engine.dart';
 import 'package:PiliPlus/utils/extension/string_ext.dart';
-import 'package:PiliPlus/utils/global_data.dart';
 import 'package:PiliPlus/utils/id_utils.dart';
 import 'package:PiliPlus/utils/recommend_filter.dart';
 import 'package:PiliPlus/utils/request_utils.dart';
@@ -45,8 +46,12 @@ import 'package:protobuf/protobuf.dart';
 
 /// view层根据 status 判断渲染逻辑
 abstract final class VideoHttp {
-  static RegExp zoneRegExp = RegExp(Pref.banWordForZone, caseSensitive: false);
-  static bool enableFilter = zoneRegExp.pattern.isNotEmpty;
+  // 仅兼容旧版设置页的写入，分区过滤已统一读规则引擎
+  static RegExp zoneRegExp = RegExp('');
+  static bool enableFilter = false;
+
+  static bool _blocked(dynamic mid, RuleSnapshot snap) =>
+      mid is int && snap.userBlocked(mid);
 
   // 首页推荐视频
   static Future<LoadingState<List<RcmdVideoItemModel>>> rcmdVideoList({
@@ -66,12 +71,18 @@ abstract final class VideoHttp {
       }),
     );
     if (res.data['code'] == 0) {
+      final snap = RuleEngine.instance.snapshot(RuleScope.video);
+      final enabled = Pref.cfRuleFilterEnabled;
       List<RcmdVideoItemModel> list = <RcmdVideoItemModel>[];
       for (final i in res.data['data']['item']) {
         //过滤掉live与ad，以及拉黑用户
-        if (_filterWebRcmd(i)) continue;
+        if (_filterWebRcmd(i, snap)) continue;
         final videoItem = RcmdVideoItemModel.fromJson(i);
-        if (!RecommendFilter.filterWithExempt(videoItem)) {
+        if (!RecommendFilter.filterWithExempt(
+          videoItem,
+          snap,
+          enabled: enabled,
+        )) {
           list.add(videoItem);
         }
       }
@@ -81,29 +92,22 @@ abstract final class VideoHttp {
     }
   }
 
-  static bool _filterWebRcmd(dynamic i) {
+  static bool _filterWebRcmd(dynamic i, RuleSnapshot snap) {
     if (i['goto'] != 'av') return true;
-    if (i['owner'] != null &&
-        GlobalData().blackMids.contains(i['owner']['mid'])) {
-      return true;
-    }
+    if (_blocked(i['owner']?['mid'], snap)) return true;
     return false;
   }
 
-  static bool _filterAppRcmd(dynamic i) {
+  static bool _filterAppRcmd(dynamic i, RuleSnapshot snap) {
     if (i['card_goto'] == 'ad_av' ||
         i['card_goto'] == 'ad_web_s' ||
         i['ad_info'] != null ||
         i['can_play'] != 1) {
       return true;
     }
-    if (i['args'] != null &&
-        GlobalData().blackMids.contains(i['args']['up_id'])) {
-      return true;
-    }
-    if (enableFilter &&
-        i['args']?['tname'] != null &&
-        zoneRegExp.hasMatch(i['args']['tname'])) {
+    if (_blocked(i['args']?['up_id'], snap)) return true;
+    if (i['args']?['tname'] case final String tname
+        when snap.matchZone(tname)) {
       return true;
     }
     return false;
@@ -162,12 +166,18 @@ abstract final class VideoHttp {
       ),
     );
     if (res.data['code'] == 0) {
+      final snap = RuleEngine.instance.snapshot(RuleScope.video);
+      final enabled = Pref.cfRuleFilterEnabled;
       final list = <RcmdVideoItemAppModel>[];
       for (final i in res.data['data']['items']) {
         // 屏蔽推广和拉黑用户
-        if (_filterAppRcmd(i)) continue;
+        if (_filterAppRcmd(i, snap)) continue;
         final videoItem = RcmdVideoItemAppModel.fromJson(i);
-        if (!RecommendFilter.filterWithExempt(videoItem)) {
+        if (!RecommendFilter.filterWithExempt(
+          videoItem,
+          snap,
+          enabled: enabled,
+        )) {
           list.add(videoItem);
         }
       }
@@ -177,13 +187,24 @@ abstract final class VideoHttp {
     }
   }
 
-  static bool _filterHotAndRank(dynamic i) {
-    if (GlobalData().blackMids.contains(i['owner']['mid'])) return false;
-    if (RecommendFilter.filterTitle(i['title'])) return false;
-    if (RecommendFilter.filterLikeRatio(i['stat']['like'], i['stat']['view'])) {
+  static bool _filterHotAndRank(
+    dynamic i,
+    RuleSnapshot snap,
+    bool enabled,
+  ) {
+    if (_blocked(i['owner']?['mid'], snap)) return false;
+    if (i['title'] case final String title
+        when RecommendFilter.filterTitle(title, snap)) {
       return false;
     }
-    if (enableFilter && i['tname'] != null && zoneRegExp.hasMatch(i['tname'])) {
+    if (RecommendFilter.filterLikeRatio(
+      i['stat']['like'],
+      i['stat']['view'],
+      enabled: enabled,
+    )) {
+      return false;
+    }
+    if (i['tname'] case final String tname when snap.matchZone(tname)) {
       return false;
     }
     return true;
@@ -199,9 +220,11 @@ abstract final class VideoHttp {
       queryParameters: {'pn': pn, 'ps': ps},
     );
     if (res.data['code'] == 0) {
+      final snap = RuleEngine.instance.snapshot(RuleScope.video);
+      final enabled = Pref.cfRuleFilterEnabled;
       return Success(
         (res.data['data']['list'] as List)
-            .where(_filterHotAndRank)
+            .where((e) => _filterHotAndRank(e, snap, enabled))
             .map((e) => HotVideoItemModel.fromJson(e))
             .toList(),
       );
@@ -384,12 +407,21 @@ abstract final class VideoHttp {
       queryParameters: {'bvid': bvid},
     );
     if (res.data['code'] == 0) {
+      final snap = RuleEngine.instance.snapshot(RuleScope.video);
+      final enabled = Pref.cfRuleFilterEnabled;
       final items = (res.data['data'] as List?)
-          ?.whereNotBlocked((e) => e['owner']?['mid'])
+          ?.where((e) => !_blocked(e['owner']?['mid'], snap))
           .map((i) => HotVideoItemModel.fromJson(i));
-      final list = RecommendFilter.applyFilterToRelatedVideos
-          ? items?.where((i) => !RecommendFilter.filterAll(i)).toList()
-          : items?.toList();
+      final List<HotVideoItemModel>? list;
+      if (enabled && RecommendFilter.applyFilterToRelatedVideos) {
+        list = items
+            ?.where(
+              (i) => !RecommendFilter.filterAll(i, snap, enabled: enabled),
+            )
+            .toList();
+      } else {
+        list = items?.toList();
+      }
       return Success(list);
     } else {
       return Error(res.data['message']);
@@ -943,9 +975,11 @@ abstract final class VideoHttp {
       queryParameters: await WbiSign.makSign({'rid': rid, 'type': 'all'}),
     );
     if (res.data['code'] == 0) {
+      final snap = RuleEngine.instance.snapshot(RuleScope.video);
+      final enabled = Pref.cfRuleFilterEnabled;
       return Success(
         (res.data['data']['list'] as List)
-            .where(_filterHotAndRank)
+            .where((e) => _filterHotAndRank(e, snap, enabled))
             .map((e) => HotVideoItemModel.fromJson(e))
             .toList(),
       );

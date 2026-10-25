@@ -8,6 +8,7 @@ import 'package:PiliPlus/http/error_msg.dart';
 import 'package:PiliPlus/http/init.dart';
 import 'package:PiliPlus/http/loading_state.dart';
 import 'package:PiliPlus/http/reply.dart';
+import 'package:PiliPlus/models/cognitive_filter/rule_scope.dart';
 import 'package:PiliPlus/models/common/dynamic/dynamics_type.dart';
 import 'package:PiliPlus/models/common/reply/reply_option_type.dart';
 import 'package:PiliPlus/models/dynamics/result.dart';
@@ -27,7 +28,7 @@ import 'package:PiliPlus/models_new/dynamic/dyn_topic_top/top_details.dart';
 import 'package:PiliPlus/models_new/dynamic/dyn_topic_top/topic_item.dart';
 import 'package:PiliPlus/models_new/followee_votes/vote.dart';
 import 'package:PiliPlus/utils/accounts.dart';
-import 'package:PiliPlus/utils/global_data.dart';
+import 'package:PiliPlus/utils/cognitive_filter/rule_engine.dart';
 import 'package:PiliPlus/utils/utils.dart';
 import 'package:PiliPlus/utils/wbi_sign.dart';
 import 'package:dio/dio.dart';
@@ -64,10 +65,9 @@ abstract final class DynamicsHttp {
         );
         // 本地黑名单只过滤顶层作者（不递归转发原文）；UP 页是主动查看，不过滤
         if (type != .up) {
+          final snap = RuleEngine.instance.snapshot(RuleScope.dynamic);
           data.items?.removeWhere(
-            (item) => GlobalData().blackMids.contains(
-              item.modules.moduleAuthor?.mid,
-            ),
+            (item) => snap.userBlocked(item.modules.moduleAuthor?.mid ?? 0),
           );
           if (data.items?.isEmpty ?? true) data.loadNext = data.hasMore;
         }

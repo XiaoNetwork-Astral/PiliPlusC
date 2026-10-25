@@ -4,7 +4,11 @@ import 'package:PiliPlus/grpc/bilibili/pagination.pb.dart';
 import 'package:PiliPlus/grpc/grpc_req.dart';
 import 'package:PiliPlus/grpc/url.dart';
 import 'package:PiliPlus/http/loading_state.dart';
-import 'package:PiliPlus/utils/global_data.dart';
+import 'package:PiliPlus/models/cognitive_filter/filter_rule.dart';
+import 'package:PiliPlus/models/cognitive_filter/rule_scope.dart';
+import 'package:PiliPlus/models/cognitive_filter/rule_type.dart';
+import 'package:PiliPlus/utils/cognitive_filter/rule_engine.dart';
+import 'package:PiliPlus/utils/cognitive_filter/rule_store.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
 import 'package:fixnum/fixnum.dart';
 
@@ -12,11 +16,9 @@ abstract final class ReplyGrpc {
   static bool antiGoodsReply = Pref.antiGoodsReply;
   static var blockAtOnlyReply = Pref.blockAtOnlyReply;
   static var blockReplyAtCount = Pref.blockReplyAtCount;
-  static RegExp replyRegExp = RegExp(
-    Pref.banWordForReply,
-    caseSensitive: false,
-  );
-  static bool enableFilter = replyRegExp.pattern.isNotEmpty;
+  // 仅兼容旧版设置页的写入，评论过滤已统一读规则引擎
+  static RegExp replyRegExp = RegExp('');
+  static bool enableFilter = false;
 
   // static Future replyInfo({required int rpid}) {
   //   return _request(
@@ -96,12 +98,32 @@ abstract final class ReplyGrpc {
         reply.content.atNameToMid.length >= blockReplyAtCount!;
   }
 
-  static bool needRemoveGrpc(ReplyInfo reply) {
-    return GlobalData().blackMids.contains(reply.mid.toInt()) ||
+  /// 判断单条评论是否剔除；快照与总开关由调用方按页只取一次
+  static bool needRemoveGrpc(
+    ReplyInfo reply,
+    RuleSnapshot snap,
+    bool enabled,
+  ) {
+    if (!enabled) return false;
+    return snap.userBlocked(reply.mid.toInt()) ||
         _blockReplyAtCount(reply) ||
         _blockAtOnlyReply(reply) ||
         (antiGoodsReply && _needRemoveGoodGrpc(reply)) ||
-        (enableFilter && replyRegExp.hasMatch(reply.content.message));
+        snap.matchText(reply.content.message);
+  }
+
+  /// 把选中文本添加为 reply 范围的关键词规则
+  static bool addKeywordReplyRule(String text) {
+    if (text.trim().isEmpty) return false;
+    RuleStore.instance.add(
+      FilterRule(
+        id: FilterRule.nextId(),
+        type: RuleType.keyword,
+        content: text,
+        scopes: const {RuleScope.reply},
+      ),
+    );
+    return true;
   }
 
   static Future<LoadingState<MainListReply>> mainList({
@@ -128,16 +150,20 @@ abstract final class ReplyGrpc {
       MainListReply.fromBuffer,
     );
     if (res case Success(:final response)) {
-      // keyword filter
-      if (response.hasUpTop() && needRemoveGrpc(response.upTop)) {
+      final snap = RuleEngine.instance.snapshot(RuleScope.reply);
+      final enabled = Pref.cfRuleFilterEnabled;
+      if (response.hasUpTop() &&
+          needRemoveGrpc(response.upTop, snap, enabled)) {
         response.clearUpTop();
       }
 
       if (response.replies.isNotEmpty) {
         response.replies.removeWhere((item) {
-          final hasMatch = needRemoveGrpc(item);
+          final hasMatch = needRemoveGrpc(item, snap, enabled);
           if (!hasMatch && item.replies.isNotEmpty) {
-            item.replies.removeWhere(needRemoveGrpc);
+            item.replies.removeWhere(
+              (e) => needRemoveGrpc(e, snap, enabled),
+            );
           }
           return hasMatch;
         });
@@ -167,7 +193,12 @@ abstract final class ReplyGrpc {
       ),
       DetailListReply.fromBuffer,
     );
-    return res..dataOrNull?.root.replies.removeWhere(needRemoveGrpc);
+    if (res.dataOrNull?.root.replies case final replies?) {
+      final snap = RuleEngine.instance.snapshot(RuleScope.reply);
+      final enabled = Pref.cfRuleFilterEnabled;
+      replies.removeWhere((e) => needRemoveGrpc(e, snap, enabled));
+    }
+    return res;
   }
 
   static Future<LoadingState<DialogListReply>> dialogList({
@@ -188,7 +219,12 @@ abstract final class ReplyGrpc {
       ),
       DialogListReply.fromBuffer,
     );
-    return res..dataOrNull?.replies.removeWhere(needRemoveGrpc);
+    if (res.dataOrNull?.replies case final replies?) {
+      final snap = RuleEngine.instance.snapshot(RuleScope.reply);
+      final enabled = Pref.cfRuleFilterEnabled;
+      replies.removeWhere((e) => needRemoveGrpc(e, snap, enabled));
+    }
+    return res;
   }
 
   static Future<LoadingState<SearchItemReply>> searchItem({

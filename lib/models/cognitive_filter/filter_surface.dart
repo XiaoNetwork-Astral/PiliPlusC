@@ -3,7 +3,8 @@ enum FilterSurface {
   danmaku('弹幕', '弹幕'),
   reply('评论', '评论'),
   dynamic('动态', '动态'),
-  video('视频', '视频');
+  video('视频', '视频'),
+  live('直播', '直播间');
 
   const FilterSurface(this.label, this.objectName);
 

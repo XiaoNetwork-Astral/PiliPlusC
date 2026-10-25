@@ -353,11 +353,11 @@ void main() {
     test('中文名与发请求的对象名', () {
       expect(
         FilterSurface.values.map((surface) => surface.label),
-        ['弹幕', '评论', '动态', '视频'],
+        ['弹幕', '评论', '动态', '视频', '直播'],
       );
       expect(
         FilterSurface.values.map((surface) => surface.objectName),
-        ['弹幕', '评论', '动态', '视频'],
+        ['弹幕', '评论', '动态', '视频', '直播间'],
       );
     });
   });

@@ -135,11 +135,18 @@ class _ExportWarningDialogState extends State<_ExportWarningDialog> {
 }
 
 /// 确认导入
-Future<bool> showConfirmImportDialog(BuildContext context) async {
+Future<bool> showConfirmImportDialog(
+  BuildContext context, {
+  bool merge = false,
+}) async {
   final result = await showAppDialog<bool>(
     context: context,
     title: '确认导入',
-    content: const Text('将使用备份覆盖当前数据，此操作无法撤销！'),
+    content: Text(
+      merge
+          ? '将从 B 站云端下载并合并到本地，不会删除本地已有数据！'
+          : '将使用备份覆盖当前数据，此操作无法撤销！',
+    ),
     actions: [
       AppDialogAction(
         label: () => '取消',

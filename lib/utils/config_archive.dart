@@ -7,11 +7,17 @@ import 'package:PiliPlus/build_config.dart';
 import 'package:PiliPlus/common/constants.dart';
 import 'package:PiliPlus/grpc/bilibili/main/community/reply/v1.pb.dart'
     show ReplyInfo;
+import 'package:PiliPlus/models/cognitive_filter/filter_rule.dart';
+import 'package:PiliPlus/models/cognitive_filter/rule_scope.dart';
+import 'package:PiliPlus/models/cognitive_filter/rule_type.dart';
+import 'package:PiliPlus/models/cognitive_filter/user_rule_extra.dart';
 import 'package:PiliPlus/pages/my_reply/view.dart';
 import 'package:PiliPlus/pages/search/controller.dart';
 import 'package:PiliPlus/utils/accounts.dart';
 import 'package:PiliPlus/utils/backup/backup_exception.dart';
 import 'package:PiliPlus/utils/backup/backup_item.dart';
+import 'package:PiliPlus/utils/cognitive_filter/cloud_sync.dart';
+import 'package:PiliPlus/utils/cognitive_filter/rule_store.dart';
 import 'package:PiliPlus/utils/device_utils.dart';
 import 'package:PiliPlus/utils/font_utils.dart';
 import 'package:PiliPlus/utils/global_data.dart';
@@ -56,6 +62,8 @@ abstract final class ConfigArchive {
   static const String accountFileName = 'account.json';
   static const String filterKeyFileName = 'filter_key.json';
   static const String blacklistFileName = 'blacklist.json';
+  static const String danmakuRulesFileName = 'danmaku_rules.json';
+  static const String whisperRulesFileName = 'whisper_rules.json';
   static const String replyFileName = 'reply.json';
   static const String searchFileName = 'search.json';
   static const String fontFileName = FontUtils.kFontName;
@@ -104,6 +112,20 @@ abstract final class ConfigArchive {
     if (want(BackupItem.blacklist)) {
       zip.add(ArchiveFile.string(blacklistFileName, _exportBlacklist()));
       files.add(blacklistFileName);
+    }
+
+    if (want(BackupItem.danmakuRules)) {
+      zip.add(
+        ArchiveFile.string(danmakuRulesFileName, _exportDanmakuRules()),
+      );
+      files.add(danmakuRulesFileName);
+    }
+
+    if (want(BackupItem.whisperRules)) {
+      zip.add(
+        ArchiveFile.string(whisperRulesFileName, _exportWhisperRules()),
+      );
+      files.add(whisperRulesFileName);
     }
 
     if (want(BackupItem.reply)) {
@@ -212,6 +234,16 @@ abstract final class ConfigArchive {
       (data) async => applyBlacklist(data),
     );
     await applyItem(
+      BackupItem.danmakuRules,
+      danmakuRulesFileName,
+      (data) async => applyDanmakuRules(data),
+    );
+    await applyItem(
+      BackupItem.whisperRules,
+      whisperRulesFileName,
+      (data) async => applyWhisperRules(data),
+    );
+    await applyItem(
       BackupItem.reply,
       replyFileName,
       (data) async => applyReply(data),
@@ -264,6 +296,16 @@ abstract final class ConfigArchive {
         return key.isEmpty ? null : key;
       case BackupItem.blacklist:
         return Pref.blackMids.toList();
+      case BackupItem.danmakuRules:
+        return [
+          for (final rule in danmakuRulesOf(RuleStore.instance.rules))
+            rule.toJson(),
+        ];
+      case BackupItem.whisperRules:
+        return [
+          for (final rule in whisperRulesOf(RuleStore.instance.rules))
+            rule.toJson(),
+        ];
       case BackupItem.reply:
         final reply = _exportReply();
         return reply == null ? const <Object?>[] : jsonDecode(reply);
@@ -300,12 +342,47 @@ abstract final class ConfigArchive {
     Pref.cfApiKey = data;
   }
 
-  /// 写入黑名单
+  /// 写入黑名单，只补不删
   static void applyBlacklist(Object? data) {
     if (data is! List) {
       throw const BackupException('黑名单数据格式不正确');
     }
     _importBlacklist(data);
+  }
+
+  /// 写入弹幕屏蔽规则，只补不删
+  static void applyDanmakuRules(Object? data) {
+    if (data is! List) {
+      throw const BackupException('弹幕屏蔽规则格式不正确');
+    }
+    final rules = FilterRule.listFromJson(data)
+        .where(
+          (rule) =>
+              !rule.isUidRule &&
+              rule.scopes.contains(RuleScope.danmaku) &&
+              (rule.type == RuleType.keyword ||
+                  rule.type == RuleType.regex ||
+                  rule.isHashOnly) &&
+              rule.validate() == null,
+        )
+        .toList();
+    if (rules.isNotEmpty) RuleStore.instance.addAll(rules);
+  }
+
+  /// 写入私信屏蔽词，只补不删
+  static void applyWhisperRules(Object? data) {
+    if (data is! List) {
+      throw const BackupException('私信屏蔽词格式不正确');
+    }
+    final rules = FilterRule.listFromJson(data)
+        .where(
+          (rule) =>
+              rule.type == RuleType.keyword &&
+              rule.scopes.contains(RuleScope.whisper) &&
+              rule.validate() == null,
+        )
+        .toList();
+    if (rules.isNotEmpty) RuleStore.instance.addAll(rules);
   }
 
   /// 写入历史评论
@@ -335,6 +412,10 @@ abstract final class ConfigArchive {
         return BackupItem.filterKey;
       case blacklistFileName:
         return BackupItem.blacklist;
+      case danmakuRulesFileName:
+        return BackupItem.danmakuRules;
+      case whisperRulesFileName:
+        return BackupItem.whisperRules;
       case replyFileName:
         return BackupItem.reply;
       case searchFileName:
@@ -497,6 +578,16 @@ abstract final class ConfigArchive {
 
   static String _exportBlacklist() => jsonEncode(Pref.blackMids.toList());
 
+  static String _exportDanmakuRules() => jsonEncode([
+    for (final rule in danmakuRulesOf(RuleStore.instance.rules))
+      rule.toJson(),
+  ]);
+
+  static String _exportWhisperRules() => jsonEncode([
+    for (final rule in whisperRulesOf(RuleStore.instance.rules))
+      rule.toJson(),
+  ]);
+
   static String? _exportReply() {
     final box = GStorage.reply;
     if (box == null) return null;
@@ -527,11 +618,28 @@ abstract final class ConfigArchive {
   });
 
   static void _importBlacklist(List<dynamic> list) {
-    // 就地覆盖，保持已有引用
-    final set = GlobalData().blackMids
-      ..clear()
-      ..addAll(Set<int>.from(list));
-    Pref.blackMids = set;
+    // 只补不删，已有的 UID 连附加信息一起保持原样
+    final existing = GlobalData().blackMids;
+    final rules = <FilterRule>[];
+    final seen = <int>{};
+    for (final value in list) {
+      final mid = value is int ? value : (value is num ? value.toInt() : null);
+      if (mid == null ||
+          mid <= 0 ||
+          existing.contains(mid) ||
+          !seen.add(mid)) {
+        continue;
+      }
+      rules.add(
+        FilterRule(
+          id: FilterRule.userRuleId(mid),
+          type: RuleType.user,
+          content: '$mid',
+          scopes: UserRuleExtra.defaultScopes,
+        ),
+      );
+    }
+    if (rules.isNotEmpty) RuleStore.instance.addAll(rules);
   }
 
   static void _importReply(List<dynamic> list) {

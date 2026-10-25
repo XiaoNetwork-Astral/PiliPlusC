@@ -33,38 +33,26 @@ void showReplyCopyDialog(
               buttonItems.add(
                 ContextMenuButtonItem(
                   onPressed: () {
-                    String text = RegExp.escape(state.selectedText!);
-                    if (ReplyGrpc.enableFilter) text = '|$text';
+                    final text = state.selectedText;
+                    if (text == null || text.trim().isEmpty) return;
+                    final keyword = text;
 
                     showConfirmDialog(
                       context: context,
                       title: const Text('是否确认评论过滤的变更：'),
                       content: Text.rich(
                         TextSpan(
-                          text: ReplyGrpc.replyRegExp.pattern,
-                          children: [
-                            TextSpan(
-                              text: text,
-                              style: const TextStyle(
-                                color: Colors.green,
-                                fontWeight: .bold,
-                              ),
-                            ),
-                          ],
+                          text: keyword,
+                          style: const TextStyle(
+                            color: Colors.green,
+                            fontWeight: .bold,
+                          ),
                         ),
                       ),
                       onConfirm: () {
-                        final filter = ReplyGrpc.replyRegExp.pattern + text;
-                        ReplyGrpc.replyRegExp = RegExp(
-                          filter,
-                          caseSensitive: true,
-                        );
-                        ReplyGrpc.enableFilter = true;
-                        GStorage.setting.put(
-                          SettingBoxKey.banWordForReply,
-                          filter,
-                        );
-                        SmartDialog.showToast('已保存');
+                        if (ReplyGrpc.addKeywordReplyRule(keyword)) {
+                          SmartDialog.showToast('已保存');
+                        }
                       },
                     );
                   },

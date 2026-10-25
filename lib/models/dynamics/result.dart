@@ -1,11 +1,13 @@
 import 'dart:convert';
 
 import 'package:PiliPlus/common/widgets/pendant_avatar.dart';
+import 'package:PiliPlus/models/cognitive_filter/rule_scope.dart';
 import 'package:PiliPlus/models/common/dynamic/dynamics_type.dart';
 import 'package:PiliPlus/models/dynamics/article_content_model.dart';
 import 'package:PiliPlus/models/model_avatar.dart';
 import 'package:PiliPlus/models/model_owner.dart';
 import 'package:PiliPlus/models_new/live/live_feed_index/watched_show.dart';
+import 'package:PiliPlus/utils/cognitive_filter/rule_engine.dart';
 import 'package:PiliPlus/utils/extension/iterable_ext.dart';
 import 'package:PiliPlus/utils/parse_bool.dart';
 import 'package:PiliPlus/utils/parse_int.dart';
@@ -41,11 +43,9 @@ class DynamicsDataModel {
     return title ?? '';
   }
 
-  static RegExp banWordForDyn = RegExp(
-    Pref.banWordForDyn,
-    caseSensitive: false,
-  );
-  static bool enableFilter = banWordForDyn.pattern.isNotEmpty;
+  // 仅兼容旧版设置页的写入，动态过滤已统一读规则引擎
+  static RegExp banWordForDyn = RegExp('');
+  static bool enableFilter = false;
 
   static bool antiGoodsDyn = Pref.antiGoodsDyn;
 
@@ -54,6 +54,8 @@ class DynamicsDataModel {
     DynamicsTabType type = DynamicsTabType.all,
     Set<int>? tempBannedList,
   }) {
+    final enabled = Pref.cfRuleFilterEnabled;
+    final snap = RuleEngine.instance.snapshot(RuleScope.dynamic);
     hasMore = json['has_more'];
 
     List? list = json['items'] as List?;
@@ -63,22 +65,21 @@ class DynamicsDataModel {
           type != DynamicsTabType.up && tempBannedList?.isNotEmpty == true;
       for (final e in list) {
         DynamicItemModel item = DynamicItemModel.fromJson(e);
-        if (antiGoodsDyn &&
+        if (enabled &&
+            antiGoodsDyn &&
             (item.orig?.modules.moduleDynamic?.additional?.type ==
                     'ADDITIONAL_TYPE_GOODS' ||
                 item.modules.moduleDynamic?.additional?.type ==
                     'ADDITIONAL_TYPE_GOODS')) {
           continue;
         }
-        if (enableFilter) {
-          if (item.orig case final orig?) {
-            if (banWordForDyn.hasMatch(_getMatchText(orig))) {
-              continue;
-            }
-          }
-          if (banWordForDyn.hasMatch(_getMatchText(item))) {
+        if (item.orig case final orig?) {
+          if (snap.matchText(_getMatchText(orig))) {
             continue;
           }
+        }
+        if (snap.matchText(_getMatchText(item))) {
+          continue;
         }
         if (filterBan &&
             tempBannedList!.contains(item.modules.moduleAuthor?.mid)) {

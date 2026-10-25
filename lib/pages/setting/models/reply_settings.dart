@@ -63,39 +63,6 @@ List<SettingsModel> get replySettings => [
       defaultVal: false,
     ),
   SwitchModel(
-    title: '屏蔽带货评论',
-    leading: const Icon(CustomIcons.shopping_bag_not_interested),
-    setKey: SettingBoxKey.antiGoodsReply,
-    defaultVal: false,
-    onChanged: (value) => ReplyGrpc.antiGoodsReply = value,
-  ),
-  const NormalModel(
-    title: '屏蔽评论@数量',
-    getSubtitle: _replyAtBlockSubtitle,
-    leading: Icon(Icons.pin_outlined),
-    onTap: _showReplyAtBlockDialog,
-  ),
-  const SwitchModel(
-    title: '屏蔽只包含@的评论',
-    leading: Icon(Icons.alternate_email),
-    setKey: SettingBoxKey.blockAtOnlyReply,
-    onChanged: _onBlockAtOnlyReplyChanged,
-  ),
-  const SwitchModel(
-    title: '屏蔽复制简介评论',
-    leading: Icon(Icons.summarize),
-    setKey: SettingBoxKey.filterIntro,
-    defaultVal: false,
-  ),
-  getBanWordModel(
-    title: '评论关键词过滤',
-    key: SettingBoxKey.banWordForReply,
-    onChanged: (value) {
-      ReplyGrpc.replyRegExp = value;
-      ReplyGrpc.enableFilter = value.pattern.isNotEmpty;
-    },
-  ),
-  SwitchModel(
     title: '评论区搜索关键词',
     subtitle: '展示评论区搜索关键词',
     leading: const Icon(Icons.search_outlined),
@@ -127,6 +94,35 @@ List<SettingsModel> get replySettings => [
     onSelected: (value, setState) => GStorage.setting
         .put(SettingBoxKey.reply2SortType, value.index)
         .whenComplete(setState),
+  ),
+];
+
+/// 评论屏蔽相关的设置项，放在认知滤网里，不再出现在评论设置页
+List<SettingsModel> get replyBlockSettings => [
+  SwitchModel(
+    title: '屏蔽带货评论',
+    leading: const Icon(CustomIcons.shopping_bag_not_interested),
+    setKey: SettingBoxKey.antiGoodsReply,
+    defaultVal: false,
+    onChanged: (value) => ReplyGrpc.antiGoodsReply = value,
+  ),
+  const NormalModel(
+    title: '屏蔽评论@数量',
+    getSubtitle: _replyAtBlockSubtitle,
+    leading: Icon(Icons.pin_outlined),
+    onTap: _showReplyAtBlockDialog,
+  ),
+  const SwitchModel(
+    title: '屏蔽只包含@的评论',
+    leading: Icon(Icons.alternate_email),
+    setKey: SettingBoxKey.blockAtOnlyReply,
+    onChanged: _onBlockAtOnlyReplyChanged,
+  ),
+  const SwitchModel(
+    title: '屏蔽复制简介评论',
+    leading: Icon(Icons.summarize),
+    setKey: SettingBoxKey.filterIntro,
+    defaultVal: false,
   ),
 ];
 

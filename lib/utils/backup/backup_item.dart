@@ -5,7 +5,9 @@ enum BackupItem {
   setting('设置', '所有可导出的设置项'),
   account('登录信息', '已登录账户的 cookie 信息等，属于敏感信息，慎重选择'),
   filterKey('AI 屏蔽密钥', 'AI 屏蔽接口的 API Key，属于敏感信息，慎重选择'),
-  blacklist('黑名单', '已屏蔽的用户'),
+  blacklist('黑名单', '已屏蔽的用户，恢复时会同步到 B 站在线黑名单'),
+  danmakuRules('弹幕屏蔽规则', '统一规则中用于弹幕的关键词、正则和用户哈希规则'),
+  whisperRules('私信屏蔽词', '统一规则中用于私信的关键词规则'),
   reply('历史评论', '已登录账户的评论（仅本机）'),
   search('搜索记录', '已登录账户的搜索历史（仅本机）'),
   customFont('自定义字体', '已导入的字体文件');
@@ -18,6 +20,13 @@ enum BackupItem {
   /// 界面显示的说明
   final String description;
 
+  /// 云端同步支持的备份项
+  static const Set<BackupItem> cloudItems = {
+    BackupItem.danmakuRules,
+    BackupItem.whisperRules,
+    BackupItem.blacklist,
+  };
+
   /// 默认勾选项
   static const Set<BackupItem> defaultSelected = {
     BackupItem.setting,
@@ -26,6 +35,10 @@ enum BackupItem {
     BackupItem.search,
   };
 
+  /// 指定备份方式的默认勾选项，云端同步默认只勾选可同步项
+  static Set<BackupItem> defaultSelectedFor(BackupMethod method) =>
+      method == BackupMethod.cloud ? cloudItems : defaultSelected;
+
   /// 被禁用项的说明
   static const String unsupportedTip = '目前选择的备份方式不支持备份此项目';
 
@@ -33,7 +46,13 @@ enum BackupItem {
   bool get sensitive =>
       this == BackupItem.account || this == BackupItem.filterKey;
 
+  /// 导入或恢复时是否需要触发云端同步
+  bool get syncWithCloud => cloudItems.contains(this);
+
   /// 当前备份方式是否支持该项
-  bool isSupportedBy(BackupMethod method) =>
-      this != BackupItem.customFont || method != BackupMethod.clipboard;
+  bool isSupportedBy(BackupMethod method) {
+    if (method == BackupMethod.cloud) return syncWithCloud;
+    if (this == BackupItem.customFont) return method != BackupMethod.clipboard;
+    return true;
+  }
 }

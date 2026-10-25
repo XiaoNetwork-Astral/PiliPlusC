@@ -6,6 +6,7 @@ const Set<FilterSurface> _allSurfaces = {
   FilterSurface.reply,
   FilterSurface.dynamic,
   FilterSurface.video,
+  FilterSurface.live,
 };
 
 /// 内置类别，id 固定不变，存储里只记录对它们的覆盖

@@ -3,6 +3,7 @@ import 'package:PiliPlus/http/api.dart';
 import 'package:PiliPlus/http/browser_ua.dart';
 import 'package:PiliPlus/http/init.dart';
 import 'package:PiliPlus/http/loading_state.dart';
+import 'package:PiliPlus/models/cognitive_filter/rule_scope.dart';
 import 'package:PiliPlus/models/common/account_type.dart';
 import 'package:PiliPlus/models/common/live/live_contribution_rank_type.dart';
 import 'package:PiliPlus/models/common/live/live_search_type.dart';
@@ -27,11 +28,25 @@ import 'package:PiliPlus/models_new/live/live_superchat/data.dart';
 import 'package:PiliPlus/utils/accounts.dart';
 import 'package:PiliPlus/utils/accounts/account.dart';
 import 'package:PiliPlus/utils/app_sign.dart';
+import 'package:PiliPlus/utils/cognitive_filter/rule_engine.dart';
 import 'package:PiliPlus/utils/wbi_sign.dart';
 import 'package:dio/dio.dart';
 
 abstract final class LiveHttp {
   static Account get recommend => Accounts.get(AccountType.recommend);
+
+  /// 直播间卡片：标题、主播名、分区名任一命中文本规则，或主播 UID 被屏蔽
+  static bool _blocked(
+    RuleSnapshot snap, {
+    String? title,
+    String? uname,
+    String? areaName,
+    int? uid,
+  }) =>
+      snap.matchText(title ?? '') ||
+      snap.matchText(uname ?? '') ||
+      snap.matchText(areaName ?? '') ||
+      snap.userBlocked(uid ?? 0);
 
   static Future<LoadingState<void>> sendLiveMsg({
     required Object roomId,
@@ -237,7 +252,30 @@ abstract final class LiveHttp {
       ),
     );
     if (res.data['code'] == 0) {
-      return Success(LiveIndexData.fromJson(res.data['data']));
+      final data = LiveIndexData.fromJson(res.data['data']);
+      final snap = RuleEngine.instance.snapshot(RuleScope.live);
+      data.cardList?.removeWhere((e) {
+        final item = e.cardData?.smallCardV1;
+        return item != null &&
+            _blocked(
+              snap,
+              title: item.title,
+              uname: item.uname,
+              areaName: item.areaName,
+              uid: item.uid,
+            );
+      });
+      // 顶部关注直播行同样是直播间列表
+      data.followItem?.cardData?.myIdolV1?.list?.removeWhere(
+        (e) => _blocked(
+          snap,
+          title: e.title,
+          uname: e.uname,
+          areaName: e.areaName,
+          uid: e.uid,
+        ),
+      );
+      return Success(data);
     } else {
       return Error(res.data['message']);
     }
@@ -254,7 +292,18 @@ abstract final class LiveHttp {
       },
     );
     if (res.data['code'] == 0) {
-      return Success(LiveFollowData.fromJson(res.data['data']));
+      final data = LiveFollowData.fromJson(res.data['data']);
+      final snap = RuleEngine.instance.snapshot(RuleScope.live);
+      data.list?.removeWhere(
+        (e) => _blocked(
+          snap,
+          title: e.title,
+          uname: e.uname,
+          areaName: e.areaName,
+          uid: e.uid,
+        ),
+      );
+      return Success(data);
     } else {
       return Error(res.data['message']);
     }
@@ -315,7 +364,18 @@ abstract final class LiveHttp {
       ),
     );
     if (res.data['code'] == 0) {
-      return Success(LiveSecondData.fromJson(res.data['data']));
+      final data = LiveSecondData.fromJson(res.data['data']);
+      final snap = RuleEngine.instance.snapshot(RuleScope.live);
+      data.cardList?.removeWhere(
+        (e) => _blocked(
+          snap,
+          title: e.title,
+          uname: e.uname,
+          areaName: e.areaName,
+          uid: e.uid,
+        ),
+      );
+      return Success(data);
     } else {
       return Error(res.data['message']);
     }
@@ -480,7 +540,18 @@ abstract final class LiveHttp {
       queryParameters: params,
     );
     if (res.data['code'] == 0) {
-      return Success(LiveSearchData.fromJson(res.data['data']));
+      final data = LiveSearchData.fromJson(res.data['data']);
+      final snap = RuleEngine.instance.snapshot(RuleScope.live);
+      data.room?.list?.removeWhere(
+        (e) => _blocked(
+          snap,
+          title: e.title,
+          uname: e.name,
+          areaName: e.areaName,
+          uid: e.uid,
+        ),
+      );
+      return Success(data);
     } else {
       return Error(res.data['message']);
     }

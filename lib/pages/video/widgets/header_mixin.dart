@@ -1,7 +1,9 @@
 import 'package:PiliPlus/common/widgets/button/icon_button.dart';
+import 'package:PiliPlus/models/cognitive_filter/rule_scope.dart';
 import 'package:PiliPlus/pages/video/introduction/ugc/widgets/menu_row.dart';
 import 'package:PiliPlus/plugin/pl_player/controller.dart';
 import 'package:PiliPlus/plugin/pl_player/utils/danmaku_options.dart';
+import 'package:PiliPlus/utils/cognitive_filter/rule_store.dart';
 import 'package:PiliPlus/utils/extension/num_ext.dart';
 import 'package:PiliPlus/utils/page_utils.dart';
 import 'package:PiliPlus/utils/theme_utils.dart';
@@ -198,7 +200,7 @@ mixin HeaderMixin<T extends StatefulWidget> on State<T> {
                                 arguments: plPlayerController,
                               ),
                             child: Text(
-                              "屏蔽管理(${plPlayerController.filters.count})",
+                              "屏蔽管理(${RuleStore.instance.rules.where((rule) => rule.scopes.contains(RuleScope.danmaku)).length})",
                             ),
                           ),
                         ],
