@@ -552,8 +552,9 @@ class _JudgeHistoryDetailPageState extends State<JudgeHistoryDetailPage>
   List<Widget> _buildJudgeTiles() {
     final entry = _entry;
     final tiles = <Widget>[
-      CfTile(title: '来源', subtitle: entry.isRule ? '规则屏蔽' : 'AI 屏蔽'),
+      CfTile(icon: Icons.shield_outlined, title: '来源', subtitle: entry.isRule ? '规则屏蔽' : 'AI 屏蔽'),
       CfTile(
+        icon: Icons.apps,
         title: '适用面',
         subtitle: entry.surface.isEmpty ? '未记录' : entry.surface,
       ),
@@ -561,12 +562,14 @@ class _JudgeHistoryDetailPageState extends State<JudgeHistoryDetailPage>
     if (entry.isRule) {
       tiles.add(
         CfTile(
+          icon: Icons.rule,
           title: '规则类型',
           subtitle: entry.ruleType.isEmpty ? '未记录' : entry.ruleType,
         ),
       );
       tiles.add(
         CfTile(
+          icon: Icons.text_fields,
           title: '规则内容',
           subtitle: entry.label.isEmpty ? '未记录' : entry.label,
         ),
@@ -574,19 +577,20 @@ class _JudgeHistoryDetailPageState extends State<JudgeHistoryDetailPage>
     } else {
       tiles.add(
         CfTile(
+          icon: Icons.category_outlined,
           title: '判定类别',
           subtitle: entry.label.isEmpty ? '未记录' : entry.label,
         ),
       );
       tiles.add(
-        CfTile(title: '得分', subtitle: entry.score.toStringAsFixed(2)),
+        CfTile(icon: Icons.speed, title: '得分', subtitle: entry.score.toStringAsFixed(2)),
       );
       final scoreText = _scoreText(entry.scores);
       if (scoreText != null) {
-        tiles.add(CfTile(title: '各类别概率', subtitle: scoreText));
+        tiles.add(CfTile(icon: Icons.bar_chart, title: '各类别概率', subtitle: scoreText));
       }
     }
-    tiles.add(CfTile(title: '时间', subtitle: _formatTime(entry.time)));
+    tiles.add(CfTile(icon: Icons.schedule, title: '时间', subtitle: _formatTime(entry.time)));
     return tiles;
   }
 
@@ -594,6 +598,7 @@ class _JudgeHistoryDetailPageState extends State<JudgeHistoryDetailPage>
     final entry = _entry;
     return [
       CfTile(
+        icon: Icons.copy_outlined,
         title: '复制文字',
         onTap: () {
           Clipboard.setData(ClipboardData(text: entry.text));
@@ -601,6 +606,7 @@ class _JudgeHistoryDetailPageState extends State<JudgeHistoryDetailPage>
       ),
       if (!entry.isRule)
         CfTile(
+          icon: Icons.verified_user_outlined,
           title: '加入白名单',
           onTap: () {
             AiWhitelist.instance.addKeywordFromText(
@@ -611,6 +617,7 @@ class _JudgeHistoryDetailPageState extends State<JudgeHistoryDetailPage>
         ),
       if (entry.isRule && entry.ruleId != null)
         CfTile(
+          icon: Icons.delete_outline,
           title: '删除这条规则',
           onTap: () {
             RuleStore.instance.remove(entry.ruleId!);

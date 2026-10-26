@@ -1036,16 +1036,16 @@ class OpusContent extends StatelessWidget {
               return const SizedBox.shrink();
           }
         } catch (e, s) {
-          if (kDebugMode) {
-            return Text(
-              '错误的类型 $e\n$s',
-              style: const TextStyle(
-                fontWeight: .bold,
-                color: Colors.red,
-              ),
-            );
-          }
-          return const SizedBox.shrink();
+          // 排查期间发布版也显示错误和调用栈开头几行，方便截图定位
+          final frames = s.toString().split('\n').take(6).join('\n');
+          return SelectableText(
+            '错误的类型（段落 ${element.paraType}） $e\n$frames',
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: .bold,
+              color: Colors.red,
+            ),
+          );
         }
       },
       separatorBuilder: (context, index) => const SizedBox(height: 10),

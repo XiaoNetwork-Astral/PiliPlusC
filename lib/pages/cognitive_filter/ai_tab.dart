@@ -1,15 +1,12 @@
 import 'package:PiliPlus/common/widgets/dialog/dialog.dart';
 import 'package:PiliPlus/pages/cognitive_filter/ai_surface_page.dart';
-import 'package:PiliPlus/pages/cognitive_filter/calibration_page.dart';
 import 'package:PiliPlus/pages/cognitive_filter/category_list_page.dart';
-import 'package:PiliPlus/pages/cognitive_filter/judge_trial_dialog.dart';
 import 'package:PiliPlus/pages/cognitive_filter/provider_page.dart';
 import 'package:PiliPlus/pages/cognitive_filter/rule_list_page.dart';
 import 'package:PiliPlus/pages/cognitive_filter/widgets.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/ai_runtime.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/ai_whitelist.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/ai_whitelist_core.dart';
-import 'package:PiliPlus/utils/cognitive_filter/ai/calibration/guard_rules_source.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
@@ -124,6 +121,11 @@ class _AiFilterTabState extends State<AiFilterTab> {
           onTap: _openProvider,
         ),
         CfTile(
+          icon: Icons.category_outlined,
+          title: '类别规则',
+          onTap: _openCategories,
+        ),
+        CfTile(
           icon: Icons.apps,
           title: '生效范围',
           onTap: () => Get.to(() => const AiSurfacePage()),
@@ -140,36 +142,9 @@ class _AiFilterTabState extends State<AiFilterTab> {
           ),
         ),
         CfTile(
-          icon: Icons.tune_outlined,
-          title: '校准向导',
-          onTap: () => Get.to(() => const CalibrationPage()),
-        ),
-        CfTile(
-          icon: Icons.shield_outlined,
-          title: '不外传规则',
-          onTap: () => Get.to(
-            () => RuleListPage(
-              source: GuardRulesSource.instance,
-              title: '不外传规则',
-              allowedScopes: aiWhitelistScopes,
-            ),
-          ),
-        ),
-        CfTile(
           icon: Icons.cleaning_services_outlined,
           title: '清除缓存',
           onTap: _clearCache,
-        ),
-        CfTile(
-          icon: Icons.category_outlined,
-          title: '类别规则',
-          subtitle: '调整每个类别的开关、阈值与适用面',
-          onTap: _openCategories,
-        ),
-        CfTile(
-          icon: Icons.science_outlined,
-          title: '试判定',
-          onTap: () => showJudgeTrialDialog(context),
         ),
       ],
     );

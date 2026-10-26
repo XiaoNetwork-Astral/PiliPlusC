@@ -52,6 +52,10 @@ class RoundResult {
 }
 
 /// 跑一轮整理：过滤不该上传的内容，分批交给模型归类，攒出题目
+///
+/// [outputRetries] 是模型输出不合格（解析不了、被拒绝）时的重试次数，
+/// [otherRetries] 是网络/超时/服务端/限流这类与输出无关问题的重试次数；
+/// 总尝试次数均为 1 + 次数。
 Future<RoundResult> runRound({
   required List<PoolItem> pool,
   required LlmChat chat,
@@ -64,6 +68,8 @@ Future<RoundResult> runRound({
   void Function(int done, int total)? onProgress,
   bool Function()? shouldStop,
   Duration retryDelay = const Duration(seconds: 2),
+  int outputRetries = 1,
+  int otherRetries = 2,
 }) async {
   final droppedIds = <String>{};
   final candidates = <PoolItem>[];
@@ -82,6 +88,9 @@ Future<RoundResult> runRound({
   final size = chunkSize <= 0 ? 1 : chunkSize;
   final minSize = minClusterSize <= 0 ? 1 : minClusterSize;
   final questionLimit = maxQuestions <= 0 ? 0 : maxQuestions;
+  // 重试次数由调用方按设置传入，总尝试次数 = 1 + 次数
+  final maxOutputAttempts = outputRetries < 0 ? 1 : outputRetries + 1;
+  final maxOtherAttempts = otherRetries < 0 ? 1 : otherRetries + 1;
   final chunks = <List<PoolItem>>[
     for (var start = 0; start < selected.length; start += size)
       selected.sublist(
@@ -117,8 +126,8 @@ Future<RoundResult> runRound({
     var abort = false;
     var batchFailed = false;
     // 失败按原因分开数：模型输出的问题（解析不了、被拒绝）重试也多半一样，
-    // 再试一次就够，免得白花钱；网络、超时、服务端、限流这类与输出无关的问题
-    // 整理在后台跑，用户愿意等，最多试三次
+    // 默认只再试一次，免得白花钱；网络、超时、服务端、限流这类与输出无关的
+    // 问题默认最多试三次，整理在后台跑，用户愿意等
     var outputFailures = 0;
     var otherFailures = 0;
     while (true) {
@@ -141,13 +150,13 @@ Future<RoundResult> runRound({
         }
         if (_isOutputProblem(kind)) {
           outputFailures++;
-          if (outputFailures >= _maxOutputAttempts) {
+          if (outputFailures >= maxOutputAttempts) {
             batchFailed = true;
             break;
           }
         } else {
           otherFailures++;
-          if (otherFailures >= _maxOtherAttempts) {
+          if (otherFailures >= maxOtherAttempts) {
             // 与模型输出无关，说明网络或服务有问题：停掉整轮，池里条目不动
             abortedBy = kind;
             abortMessage = _errorMessage(error);
@@ -185,12 +194,6 @@ Future<RoundResult> runRound({
     processedChunks: processedChunks,
   );
 }
-
-/// 模型输出问题：同一批最多发送的次数
-const int _maxOutputAttempts = 2;
-
-/// 与模型输出无关的问题：同一批最多发送的次数
-const int _maxOtherAttempts = 3;
 
 /// 是不是模型输出本身的问题（解析不了或被拒绝）
 bool _isOutputProblem(LlmErrorKind kind) =>

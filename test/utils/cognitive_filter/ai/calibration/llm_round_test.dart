@@ -321,6 +321,87 @@ void main() {
     expect(result.abortedBy, isNull);
   });
 
+  test('outputRetries 为 0 时解析失败不重试，整批直接丢弃', () async {
+    final fake = _FakeChat((_, __) async => '这不是 JSON');
+
+    final result = await runRound(
+      pool: _pool(3),
+      chat: fake.call,
+      isBlockedForUpload: (_) => false,
+      random: Random(8),
+      chunkSize: 3,
+      outputRetries: 0,
+    );
+
+    expect(fake.calls, hasLength(1));
+    expect(result.questions, isEmpty);
+    expect(result.droppedIds, hasLength(3));
+    expect(result.refusedChunks, 1);
+    expect(result.abortedBy, isNull);
+  });
+
+  test('outputRetries 为 2 时解析失败最多发三次', () async {
+    final fake = _FakeChat(
+      (_, __) async =>
+          throw const LlmException(LlmErrorKind.refused, '拒绝了'),
+    );
+
+    final result = await runRound(
+      pool: _pool(3),
+      chat: fake.call,
+      isBlockedForUpload: (_) => false,
+      random: Random(8),
+      chunkSize: 3,
+      outputRetries: 2,
+    );
+
+    expect(fake.calls, hasLength(3));
+    expect(result.questions, isEmpty);
+    expect(result.droppedIds, hasLength(3));
+    expect(result.refusedChunks, 1);
+  });
+
+  test('otherRetries 为 0 时网络错误不重试，直接中止整轮', () async {
+    final fake = _FakeChat(
+      (_, __) async => throw const LlmException(LlmErrorKind.network, '断了'),
+    );
+
+    final result = await runRound(
+      pool: _pool(3),
+      chat: fake.call,
+      isBlockedForUpload: (_) => false,
+      random: Random(10),
+      chunkSize: 3,
+      retryDelay: Duration.zero,
+      otherRetries: 0,
+    );
+
+    expect(fake.calls, hasLength(1));
+    expect(result.abortedBy, LlmErrorKind.network);
+    expect(result.abortMessage, '断了');
+    expect(result.droppedIds, isEmpty);
+    expect(result.usedIds, isEmpty);
+  });
+
+  test('otherRetries 为 1 时网络错误最多发两次', () async {
+    final fake = _FakeChat(
+      (_, __) async => throw const LlmException(LlmErrorKind.server, '挂了'),
+    );
+
+    final result = await runRound(
+      pool: _pool(3),
+      chat: fake.call,
+      isBlockedForUpload: (_) => false,
+      random: Random(11),
+      chunkSize: 3,
+      retryDelay: Duration.zero,
+      otherRetries: 1,
+    );
+
+    expect(fake.calls, hasLength(2));
+    expect(result.abortedBy, LlmErrorKind.server);
+  });
+
   test('timeout 中止整轮并保留已得到的题目', () async {
     final fake = _FakeChat((call, _) async {
       if (call == 1) {

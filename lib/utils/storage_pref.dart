@@ -1569,19 +1569,57 @@ abstract final class Pref {
   static set cfStatsSince(String value) =>
       _setting.put(SettingBoxKey.cfStatsSince, value);
 
-  /// 整理接口每日 token 上限，0 表示不限制；整理接口按量计费，和判定接口分开算
-  static int get cfLlmDailyCapTokens {
-    final value = _setting.get(SettingBoxKey.cfLlmDailyCapTokens);
+  /// 整理接口每日用量上限（人民币元），0 表示不限制；整理接口按量计费，和判定接口分开算
+  static double get cfLlmDailyCapCny {
+    final value = _setting.get(SettingBoxKey.cfLlmDailyCapCny);
     if (value is num && value.isFinite) {
-      final cap = value.toInt();
-      return cap < 0 ? 0 : cap;
+      final cap = value.toDouble();
+      return cap < 0 ? 0.0 : cap;
     }
-    return 500000;
+    return 1.0;
   }
 
-  static set cfLlmDailyCapTokens(int value) => _setting.put(
-    SettingBoxKey.cfLlmDailyCapTokens,
-    value < 0 ? 0 : value,
+  static set cfLlmDailyCapCny(double value) => _setting.put(
+    SettingBoxKey.cfLlmDailyCapCny,
+    value.isFinite && value > 0 ? value : 0.0,
+  );
+
+  /// 整理接口的等待超时（秒），开着思考时一批可能要几分钟
+  static int get cfLlmTimeout {
+    final value = _setting.get(SettingBoxKey.cfLlmTimeout);
+    if (value is num && value.isFinite) {
+      return value.toInt().clamp(10, 900).toInt();
+    }
+    return 240;
+  }
+
+  static set cfLlmTimeout(int value) => _setting.put(
+    SettingBoxKey.cfLlmTimeout,
+    value.clamp(10, 900).toInt(),
+  );
+
+  /// 模型输出不合格（解析不了、被拒绝）时的重试次数
+  static int get cfLlmOutputRetries {
+    final value = _setting.get(SettingBoxKey.cfLlmOutputRetries);
+    if (value is num && value.isFinite) return value.toInt().clamp(0, 5).toInt();
+    return 1;
+  }
+
+  static set cfLlmOutputRetries(int value) => _setting.put(
+    SettingBoxKey.cfLlmOutputRetries,
+    value.clamp(0, 5).toInt(),
+  );
+
+  /// 网络、超时、服务端、限流这类与输出无关的问题的重试次数
+  static int get cfLlmOtherRetries {
+    final value = _setting.get(SettingBoxKey.cfLlmOtherRetries);
+    if (value is num && value.isFinite) return value.toInt().clamp(0, 5).toInt();
+    return 2;
+  }
+
+  static set cfLlmOtherRetries(int value) => _setting.put(
+    SettingBoxKey.cfLlmOtherRetries,
+    value.clamp(0, 5).toInt(),
   );
 
   /// 整理接口用量所属的本地日期，格式 yyyy-MM-dd
@@ -1593,10 +1631,17 @@ abstract final class Pref {
   static set cfLlmUsageDay(String value) =>
       _setting.put(SettingBoxKey.cfLlmUsageDay, value);
 
-  static int get cfLlmUsageTokens => _usageInt(SettingBoxKey.cfLlmUsageTokens);
+  static int get cfLlmUsageInputTokens =>
+      _usageInt(SettingBoxKey.cfLlmUsageInputTokens);
 
-  static set cfLlmUsageTokens(int value) =>
-      _setting.put(SettingBoxKey.cfLlmUsageTokens, _nonNegative(value));
+  static set cfLlmUsageInputTokens(int value) =>
+      _setting.put(SettingBoxKey.cfLlmUsageInputTokens, _nonNegative(value));
+
+  static int get cfLlmUsageOutputTokens =>
+      _usageInt(SettingBoxKey.cfLlmUsageOutputTokens);
+
+  static set cfLlmUsageOutputTokens(int value) =>
+      _setting.put(SettingBoxKey.cfLlmUsageOutputTokens, _nonNegative(value));
 
   /// 校准向导对屏蔽门槛的累计调整量，加在总门槛上
   static double get cfAiThresholdDelta {

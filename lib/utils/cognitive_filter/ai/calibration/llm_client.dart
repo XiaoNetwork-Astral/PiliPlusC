@@ -27,7 +27,7 @@ enum LlmErrorKind {
   /// 返回结构不对或内容为空
   parse,
 
-  /// 已达整理接口的今日 token 用量上限
+  /// 已达整理接口的今日费用上限
   budget,
 }
 
@@ -95,8 +95,11 @@ class LlmClient {
   /// 是否要求服务商返回 JSON 对象
   final bool jsonMode;
 
-  /// 成功拿到响应后回调本次的 `usage.total_tokens`，取不到时不回调
-  final void Function(int totalTokens)? onUsage;
+  /// 成功拿到响应后回调本次的输入/输出 token 数，取不到时不回调
+  ///
+  /// 优先用 `usage.prompt_tokens` 与 `usage.completion_tokens`；只有
+  /// `usage.total_tokens` 时按输入 0、输出=总数上报，避免漏记。
+  final void Function(int inputTokens, int outputTokens)? onUsage;
 
   final Dio _dio;
 
@@ -117,14 +120,18 @@ class LlmClient {
   /// 发一次聊天请求，返回 `choices[0].message.content`
   Future<String> chat(List<LlmMessage> messages) => _request(messages);
 
-  /// 发一个最小请求测试连通性，失败抛 [LlmException]
-  Future<void> test() async {
+  /// 发一个最小请求测试连通性，返回从发请求到拿到有效响应的耗时
+  ///
+  /// 失败仍抛 [LlmException]。
+  Future<Duration> test() async {
+    final stopwatch = Stopwatch()..start();
     await _request(
       const <LlmMessage>[LlmMessage(role: 'user', content: '回复 ok')],
       maxTokens: 16,
       useJsonMode: false,
       think: false,
     );
+    return stopwatch.elapsed;
   }
 
   Future<String> _request(
@@ -274,7 +281,10 @@ class LlmClient {
     return content;
   }
 
-  /// 从成功响应里取 `usage.total_tokens` 上报；缺字段或结构不对就跳过
+  /// 从成功响应里取 `usage` 上报；缺字段或结构不对就跳过
+  ///
+  /// `prompt_tokens` 与 `completion_tokens` 都是整数时按两者上报；只有
+  /// `total_tokens` 时按输入 0、输出=总数上报，免得整次调用不计费。
   void _reportUsage(String? data) {
     final onUsage = this.onUsage;
     if (onUsage == null) {
@@ -293,9 +303,15 @@ class LlmClient {
     if (usage is! Map) {
       return;
     }
+    final inputTokens = usage['prompt_tokens'];
+    final outputTokens = usage['completion_tokens'];
+    if (inputTokens is int && outputTokens is int) {
+      onUsage(inputTokens, outputTokens);
+      return;
+    }
     final totalTokens = usage['total_tokens'];
     if (totalTokens is int) {
-      onUsage(totalTokens);
+      onUsage(0, totalTokens);
     }
   }
 

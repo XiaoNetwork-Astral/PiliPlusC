@@ -8,6 +8,7 @@ import 'package:PiliPlus/utils/cognitive_filter/ai/calibration/calibration_round
     as round;
 import 'package:PiliPlus/utils/cognitive_filter/ai/calibration/guard_rules_source.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/calibration/llm_client.dart';
+import 'package:PiliPlus/utils/cognitive_filter/ai/calibration/llm_pricing.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/calibration/threshold_fit.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/calibration/upload_guard.dart';
 import 'package:PiliPlus/utils/cognitive_filter/jev_proxy.dart';
@@ -123,8 +124,11 @@ class CalibrationService {
   }
 
   /// 跑一轮整理，结束后删掉已成为题目与确定处理不了的池条目
+  ///
+  /// [shouldCancel] 为真时在下一批开始前停止；停止时已整理出的题不算用掉，条目仍留在池里
   Future<RoundOutcome> runRound({
     void Function(int done, int total)? onProgress,
+    bool Function()? shouldCancel,
   }) async {
     final apiKey = Pref.cfLlmApiKey.trim();
     if (apiKey.isEmpty) {
@@ -136,7 +140,7 @@ class CalibrationService {
       );
     }
 
-    // 今日整理接口的 token 额度用完了，这一轮直接不发请求
+    // 今日整理接口的每日费用额度用完了，这一轮直接不发请求
     if (llmBudgetReached) {
       return const RoundOutcome(
         questions: <CalibrationQuestion>[],
@@ -161,8 +165,8 @@ class CalibrationService {
         baseUrl: Pref.cfLlmBaseUrl,
         apiKey: apiKey,
         model: Pref.cfLlmModel,
-        // 开着最高强度思考，一批可能要想一两分钟
-        timeout: const Duration(seconds: 240),
+        // 开着最高强度思考，一批可能要想一两分钟；超时由用户设置
+        timeout: Duration(seconds: Pref.cfLlmTimeout),
         proxy: _currentProxy(),
         onUsage: _recordLlmUsage,
       );
@@ -171,9 +175,15 @@ class CalibrationService {
         chat: client.chat,
         isBlockedForUpload: _isBlockedForUpload,
         onProgress: onProgress,
-        shouldStop: () => llmBudgetReached,
+        shouldStop: () => llmBudgetReached || (shouldCancel?.call() ?? false),
+        outputRetries: Pref.cfLlmOutputRetries,
+        otherRetries: Pref.cfLlmOtherRetries,
       );
-      pool.removeIds(<String>{...result.usedIds, ...result.droppedIds});
+      final cancelled = shouldCancel?.call() ?? false;
+      pool.removeIds(<String>{
+        if (!cancelled) ...result.usedIds,
+        ...result.droppedIds,
+      });
       await pool.flush();
       return RoundOutcome(
         questions: result.questions,
@@ -193,29 +203,45 @@ class CalibrationService {
     }
   }
 
-  /// 整理接口今天的 token 用量；跨天时把存储的日期改成今天并清零
-  int get llmTokensToday {
+  /// 整理接口今天的花费（人民币元）；跨天时把存储的日期改成今天并清零
+  ///
+  /// 价格见 `llm_pricing.dart`，按 DeepSeek 官方高峰时段价保守估算。
+  double get llmCostCnyToday {
+    final usage = _usageToday;
+    return llmCostCny(usage.input, usage.output);
+  }
+
+  /// 整理接口今天的费用是否已到上限；上限为 0 表示不限制
+  bool get llmBudgetReached {
+    final cap = Pref.cfLlmDailyCapCny;
+    return cap > 0 && llmCostCnyToday >= cap;
+  }
+
+  /// 今日累计的输入/输出 token；跨天时把存储日期改成今天并清零
+  ({int input, int output}) get _usageToday {
     final day = _dayKey(DateTime.now());
     if (Pref.cfLlmUsageDay != day) {
       Pref.cfLlmUsageDay = day;
-      Pref.cfLlmUsageTokens = 0;
-      return 0;
+      Pref.cfLlmUsageInputTokens = 0;
+      Pref.cfLlmUsageOutputTokens = 0;
+      return (input: 0, output: 0);
     }
-    return Pref.cfLlmUsageTokens;
+    return (
+      input: Pref.cfLlmUsageInputTokens,
+      output: Pref.cfLlmUsageOutputTokens,
+    );
   }
 
-  /// 整理接口今天的用量是否已到上限；上限为 0 表示不限制
-  bool get llmBudgetReached {
-    final cap = Pref.cfLlmDailyCapTokens;
-    return cap > 0 && llmTokensToday >= cap;
-  }
-
-  /// 累加整理接口的 token 用量，跨天时从 0 开始记
-  void _recordLlmUsage(int totalTokens) {
+  /// 累加整理接口的输入/输出 token，跨天时从 0 开始记
+  void _recordLlmUsage(int inputTokens, int outputTokens) {
     final day = _dayKey(DateTime.now());
-    final base = Pref.cfLlmUsageDay == day ? Pref.cfLlmUsageTokens : 0;
+    final sameDay = Pref.cfLlmUsageDay == day;
+    final input = sameDay ? Pref.cfLlmUsageInputTokens : 0;
+    final output = sameDay ? Pref.cfLlmUsageOutputTokens : 0;
     Pref.cfLlmUsageDay = day;
-    Pref.cfLlmUsageTokens = base + (totalTokens < 0 ? 0 : totalTokens);
+    Pref.cfLlmUsageInputTokens = input + (inputTokens < 0 ? 0 : inputTokens);
+    Pref.cfLlmUsageOutputTokens =
+        output + (outputTokens < 0 ? 0 : outputTokens);
   }
 
   /// 本地日期，格式 yyyy-MM-dd，与用量存储保持一致
@@ -224,6 +250,9 @@ class CalibrationService {
     final day = time.day.toString().padLeft(2, '0');
     return '${time.year}-$month-$day';
   }
+
+  /// 收集池里现在有多少条可整理的内容，还没初始化时为 0
+  int get poolSize => _pool?.length ?? 0;
 
   /// 把回答折算成门槛调整量并写入设置
   ///

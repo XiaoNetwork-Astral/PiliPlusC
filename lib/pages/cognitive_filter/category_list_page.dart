@@ -3,7 +3,9 @@ import 'package:PiliPlus/common/widgets/scaffold/simple_scaffold.dart';
 import 'package:PiliPlus/common/widgets/view_safe_area.dart';
 import 'package:PiliPlus/models/cognitive_filter/config.dart';
 import 'package:PiliPlus/models/cognitive_filter/filter_category.dart';
+import 'package:PiliPlus/pages/cognitive_filter/calibration_page.dart';
 import 'package:PiliPlus/pages/cognitive_filter/category_edit_page.dart';
+import 'package:PiliPlus/pages/cognitive_filter/judge_trial_dialog.dart';
 import 'package:PiliPlus/pages/cognitive_filter/widgets.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
 import 'package:get/get.dart';
@@ -39,6 +41,25 @@ class _CategoryRulesPageState extends State<CategoryRulesPage> {
 
   void _onSensitivityChangeEnd(double value) {
     Pref.cfProThreshold = 1.25 - value;
+  }
+
+  /// 内置类别按「默认开启的在前、拿不准的在后」显示，自定义类别排最后
+  static const List<String> _order = [
+    'attack',
+    'discrim',
+    'promo',
+    'vulgar',
+    'bait',
+    'mock',
+  ];
+
+  List<FilterCategory> _sorted(List<FilterCategory> list) {
+    int rank(FilterCategory c) {
+      final index = _order.indexOf(c.id);
+      return index < 0 ? _order.length : index;
+    }
+
+    return list.toList()..sort((a, b) => rank(a).compareTo(rank(b)));
   }
 
   void _reload() {
@@ -117,7 +138,7 @@ class _CategoryRulesPageState extends State<CategoryRulesPage> {
                 onChangeEnd: _onSensitivityChangeEnd,
               ),
             ),
-            for (final category in _categories)
+            for (final category in _sorted(_categories))
               CfTile(
                 contentPadding: const EdgeInsetsDirectional.only(
                   start: 16,
@@ -155,6 +176,19 @@ class _CategoryRulesPageState extends State<CategoryRulesPage> {
               icon: Icons.add,
               title: '添加自定义类别',
               onTap: _openEdit,
+            ),
+            const CfGroupHeader('校准'),
+            CfTile(
+              icon: Icons.science_outlined,
+              title: '试判定',
+              subtitle: '输入一句话，看各类别的得分',
+              onTap: () => showJudgeTrialDialog(context),
+            ),
+            CfTile(
+              icon: Icons.tune_outlined,
+              title: '校准向导',
+              subtitle: '根据你的判断微调屏蔽门槛',
+              onTap: () => Get.to(() => const CalibrationPage()),
             ),
           ],
         ),

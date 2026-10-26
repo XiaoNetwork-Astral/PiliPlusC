@@ -34,7 +34,8 @@ abstract final class GStorage {
     SettingBoxKey.cfAiUsageRequests,
     SettingBoxKey.cfAiUsageItems,
     SettingBoxKey.cfLlmUsageDay,
-    SettingBoxKey.cfLlmUsageTokens,
+    SettingBoxKey.cfLlmUsageInputTokens,
+    SettingBoxKey.cfLlmUsageOutputTokens,
     SettingBoxKey.cfStatsBlocked,
     SettingBoxKey.cfStatsSince,
   };

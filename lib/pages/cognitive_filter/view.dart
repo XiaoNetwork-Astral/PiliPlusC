@@ -57,21 +57,45 @@ class _CognitiveFilterPageState extends State<CognitiveFilterPage>
             SliverToBoxAdapter(
               child: ValueListenableBuilder<int>(
                 valueListenable: BlockStats.instance.version,
-                builder: (context, _, __) => CfTile(
-                  icon: Icons.shield_outlined,
-                  title: '累计屏蔽 ${BlockStats.instance.total} 条',
-                  trailing: Text(
-                    '已过滤 ${BlockStats.instance.days} 天',
-                    style: theme.textTheme.titleSmall,
+                builder: (context, _, __) => Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: IconButton(
+                          tooltip: '清零统计',
+                          visualDensity: VisualDensity.compact,
+                          icon: const Icon(Icons.restart_alt),
+                          onPressed: _resetStats,
+                        ),
+                      ),
+                      IntrinsicHeight(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Expanded(
+                              child: _StatCard(
+                                value: '${BlockStats.instance.total}',
+                                label: '累计屏蔽',
+                                unit: '条',
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _StatCard(
+                                value: '${BlockStats.instance.days}',
+                                label: '已过滤',
+                                unit: '天',
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ),
-            ),
-            SliverToBoxAdapter(
-              child: CfTile(
-                icon: Icons.restart_alt,
-                title: '清零统计',
-                onTap: _resetStats,
               ),
             ),
             SliverToBoxAdapter(
@@ -133,5 +157,58 @@ class _TabBarHeaderDelegate extends SliverPersistentHeaderDelegate {
   @override
   bool shouldRebuild(covariant _TabBarHeaderDelegate oldDelegate) {
     return tabBar != oldDelegate.tabBar || color != oldDelegate.color;
+  }
+}
+
+/// 首页统计用的数字卡片，不可点击
+class _StatCard extends StatelessWidget {
+  const _StatCard({
+    required this.value,
+    required this.label,
+    required this.unit,
+  });
+
+  final String value;
+  final String label;
+  final String unit;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      color: theme.colorScheme.surfaceContainerHighest,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: theme.colorScheme.outline,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Flexible(
+                  child: Text(
+                    value,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.headlineSmall,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Text(unit, style: theme.textTheme.bodyMedium),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

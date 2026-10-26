@@ -85,6 +85,7 @@ class FilterProviderPage extends StatefulWidget {
 
 class _FilterProviderPageState extends State<FilterProviderPage> {
   int _timeout = Pref.cfApiTimeout;
+  int _llmTimeout = Pref.cfLlmTimeout;
 
   Future<void> _editTimeout() async {
     final result = await showTextInputDialog(
@@ -132,13 +133,13 @@ class _FilterProviderPageState extends State<FilterProviderPage> {
   }
 
   Future<void> _editLlmCap() async {
-    final cap = Pref.cfLlmDailyCapTokens;
+    final cap = Pref.cfLlmDailyCapCny;
     final result = await showTextInputDialog(
       context: context,
       title: '每日用量上限',
-      initialValue: cap > 0 ? _formatWan(cap) : '0',
+      initialValue: cap > 0 ? _formatMoney(cap) : '0',
       hintText: '0 表示不限制',
-      suffixText: '万 token',
+      suffixText: '元',
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
       validator: (value) {
         final number = double.tryParse(value);
@@ -149,16 +150,63 @@ class _FilterProviderPageState extends State<FilterProviderPage> {
       },
     );
     if (result == null) return;
-    Pref.cfLlmDailyCapTokens = (double.parse(result) * 10000).round();
+    Pref.cfLlmDailyCapCny = double.parse(result);
     if (!mounted) return;
     setState(() {});
   }
 
-  String _formatWan(int tokens) =>
-      (tokens / 10000).toStringAsFixed(2).replaceFirst(RegExp(r'\.?0+$'), '');
+  Future<void> _editLlmTimeout() async {
+    final result = await showTextInputDialog(
+      context: context,
+      title: '等待超时',
+      initialValue: _llmTimeout.toString(),
+      keyboardType: TextInputType.number,
+      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+      suffixText: '秒',
+      validator: (value) {
+        final seconds = int.tryParse(value);
+        if (seconds == null || seconds < 10 || seconds > 900) {
+          return '请输入 10 到 900 之间的秒数';
+        }
+        return null;
+      },
+    );
+    if (result == null) return;
+    final seconds = int.parse(result);
+    Pref.cfLlmTimeout = seconds;
+    setState(() => _llmTimeout = seconds);
+  }
 
-  String _formatTokens(int tokens) =>
-      tokens < 10000 ? '$tokens token' : '${_formatWan(tokens)} 万 token';
+  Future<void> _editRetries({
+    required String title,
+    required int current,
+    required void Function(int) save,
+  }) async {
+    final result = await showTextInputDialog(
+      context: context,
+      title: title,
+      initialValue: current.toString(),
+      keyboardType: TextInputType.number,
+      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+      suffixText: '次',
+      validator: (value) {
+        final count = int.tryParse(value);
+        if (count == null || count < 0 || count > 5) {
+          return '请输入 0 到 5 之间的次数';
+        }
+        return null;
+      },
+    );
+    if (result == null) return;
+    save(int.parse(result));
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  String _formatMoney(double value) {
+    final text = value.toStringAsFixed(2);
+    return text.replaceFirst(RegExp(r'\.?0+$'), '');
+  }
 
   String _formatUsd(double value) {
     final text = value.toStringAsFixed(3);
@@ -206,13 +254,39 @@ class _FilterProviderPageState extends State<FilterProviderPage> {
               test: _testLlm,
               extra: [
                 CfTile(
+                  icon: Icons.timer_outlined,
+                  title: '等待超时',
+                  subtitle: '$_llmTimeout 秒',
+                  onTap: _editLlmTimeout,
+                ),
+                CfTile(
+                  icon: Icons.replay,
+                  title: '输出异常重试',
+                  subtitle: '${Pref.cfLlmOutputRetries} 次',
+                  onTap: () => _editRetries(
+                    title: '输出异常重试',
+                    current: Pref.cfLlmOutputRetries,
+                    save: (value) => Pref.cfLlmOutputRetries = value,
+                  ),
+                ),
+                CfTile(
+                  icon: Icons.sync_problem_outlined,
+                  title: '网络异常重试',
+                  subtitle: '${Pref.cfLlmOtherRetries} 次',
+                  onTap: () => _editRetries(
+                    title: '网络异常重试',
+                    current: Pref.cfLlmOtherRetries,
+                    save: (value) => Pref.cfLlmOtherRetries = value,
+                  ),
+                ),
+                CfTile(
                   icon: Icons.savings_outlined,
                   title: '每日用量上限',
                   subtitle:
-                      '今日已用 ${_formatTokens(CalibrationService.instance.llmTokensToday)}',
+                      '今日已用 ¥${_formatMoney(CalibrationService.instance.llmCostCnyToday)}',
                   trailing: Text(
-                    Pref.cfLlmDailyCapTokens > 0
-                        ? _formatTokens(Pref.cfLlmDailyCapTokens)
+                    Pref.cfLlmDailyCapCny > 0
+                        ? '¥${_formatMoney(Pref.cfLlmDailyCapCny)}'
                         : '不限制',
                     style: Theme.of(context).textTheme.titleSmall,
                   ),
@@ -249,14 +323,14 @@ class _FilterProviderPageState extends State<FilterProviderPage> {
   Future<String> _testLlm() async {
     final store = _llmStore;
     try {
-      await LlmClient(
+      final elapsed = await LlmClient(
         baseUrl: store.getBaseUrl(),
         apiKey: store.getApiKey(),
         model: store.getModel(),
-        timeout: const Duration(seconds: 30),
+        timeout: Duration(seconds: _llmTimeout),
         proxy: store.proxy,
       ).test();
-      return '连接成功';
+      return '连接成功，用时 ${elapsed.inMilliseconds} 毫秒';
     } on LlmException catch (error) {
       return error.message;
     } catch (error) {

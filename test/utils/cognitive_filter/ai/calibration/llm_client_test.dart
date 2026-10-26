@@ -34,7 +34,7 @@ ResponseBody _json(int status, Object body) => ResponseBody.fromString(
   },
 );
 
-ResponseBody _okContent(String content, {Object? totalTokens}) =>
+ResponseBody _okContent(String content, {Map<String, Object?>? usage}) =>
     _json(200, <String, dynamic>{
       'choices': <dynamic>[
         <String, dynamic>{
@@ -45,14 +45,13 @@ ResponseBody _okContent(String content, {Object? totalTokens}) =>
           'finish_reason': 'stop',
         },
       ],
-      if (totalTokens != null)
-        'usage': <String, dynamic>{'total_tokens': totalTokens},
+      if (usage != null) 'usage': usage,
     });
 
 LlmClient _client(
   _FakeAdapter adapter, {
   bool jsonMode = true,
-  void Function(int totalTokens)? onUsage,
+  void Function(int inputTokens, int outputTokens)? onUsage,
 }) {
   final dio = Dio();
   dio.httpClientAdapter = adapter;
@@ -157,6 +156,40 @@ void main() {
       expect((messages.single as Map<String, dynamic>)['content'], '回复 ok');
     });
 
+    test('test() 返回从发请求到拿到有效响应的耗时', () async {
+      final adapter = _FakeAdapter((_) async {
+        await Future<void>.delayed(const Duration(milliseconds: 60));
+        return _okContent('ok');
+      });
+
+      final elapsed = await _client(adapter).test();
+
+      expect(
+        elapsed,
+        greaterThanOrEqualTo(const Duration(milliseconds: 50)),
+      );
+      expect(adapter.requests, hasLength(1));
+    });
+
+    test('test() 失败仍抛 LlmException', () async {
+      final adapter = _FakeAdapter(
+        (_) async => _json(500, <String, dynamic>{
+          'error': <String, dynamic>{'message': '挂了'},
+        }),
+      );
+
+      await expectLater(
+        _client(adapter).test(),
+        throwsA(
+          isA<LlmException>().having(
+            (error) => error.kind,
+            'kind',
+            LlmErrorKind.server,
+          ),
+        ),
+      );
+    });
+
     test('DeepSeek 官方地址：整理开最高思考且不发 JSON 模式，测试关思考', () async {
       final chatAdapter = _FakeAdapter((_) async => _okContent('ok'));
       LlmClient deepseek(_FakeAdapter adapter) => LlmClient(
@@ -216,42 +249,98 @@ void main() {
   });
 
   group('用量上报', () {
-    test('响应带 usage.total_tokens 时回调一次', () async {
+    test('响应带 prompt_tokens 与 completion_tokens 时按两者回调', () async {
       final adapter = _FakeAdapter(
-        (_) async => _okContent('你好', totalTokens: 1234),
+        (_) async => _okContent(
+          '你好',
+          usage: <String, Object?>{
+            'prompt_tokens': 12,
+            'completion_tokens': 34,
+            'total_tokens': 46,
+          },
+        ),
       );
-      final usages = <int>[];
+      final usages = <List<int>>[];
 
-      final reply = await _client(adapter, onUsage: usages.add).chat(
-        const <LlmMessage>[LlmMessage(role: 'user', content: '你好')],
-      );
+      final reply = await _client(
+        adapter,
+        onUsage: (input, output) => usages.add(<int>[input, output]),
+      ).chat(const <LlmMessage>[LlmMessage(role: 'user', content: '你好')]);
 
       expect(reply, '你好');
-      expect(usages, <int>[1234]);
+      expect(usages, <List<int>>[
+        <int>[12, 34],
+      ]);
     });
 
-    test('缺少 usage 时不回调', () async {
-      final adapter = _FakeAdapter((_) async => _okContent('你好'));
-      final usages = <int>[];
-
-      await _client(adapter, onUsage: usages.add).chat(
-        const <LlmMessage>[LlmMessage(role: 'user', content: '你好')],
+    test('只有 total_tokens 时按输入 0、输出=总数回调', () async {
+      final adapter = _FakeAdapter(
+        (_) async => _okContent(
+          '你好',
+          usage: <String, Object?>{'total_tokens': 1234},
+        ),
       );
+      final usages = <List<int>>[];
+
+      await _client(
+        adapter,
+        onUsage: (input, output) => usages.add(<int>[input, output]),
+      ).chat(const <LlmMessage>[LlmMessage(role: 'user', content: '你好')]);
+
+      expect(usages, <List<int>>[
+        <int>[0, 1234],
+      ]);
+    });
+
+    test('缺 usage 时不回调', () async {
+      final adapter = _FakeAdapter((_) async => _okContent('你好'));
+      final usages = <List<int>>[];
+
+      await _client(
+        adapter,
+        onUsage: (input, output) => usages.add(<int>[input, output]),
+      ).chat(const <LlmMessage>[LlmMessage(role: 'user', content: '你好')]);
 
       expect(usages, isEmpty);
     });
 
     test('total_tokens 不是整数时不回调', () async {
       final adapter = _FakeAdapter(
-        (_) async => _okContent('你好', totalTokens: '1234'),
+        (_) async => _okContent(
+          '你好',
+          usage: <String, Object?>{'total_tokens': '1234'},
+        ),
       );
-      final usages = <int>[];
+      final usages = <List<int>>[];
 
-      await _client(adapter, onUsage: usages.add).chat(
-        const <LlmMessage>[LlmMessage(role: 'user', content: '你好')],
-      );
+      await _client(
+        adapter,
+        onUsage: (input, output) => usages.add(<int>[input, output]),
+      ).chat(const <LlmMessage>[LlmMessage(role: 'user', content: '你好')]);
 
       expect(usages, isEmpty);
+    });
+
+    test('两项 token 只有一项是整数时仍用 total 兜底', () async {
+      final adapter = _FakeAdapter(
+        (_) async => _okContent(
+          '你好',
+          usage: <String, Object?>{
+            'prompt_tokens': 12,
+            'total_tokens': 46,
+          },
+        ),
+      );
+      final usages = <List<int>>[];
+
+      await _client(
+        adapter,
+        onUsage: (input, output) => usages.add(<int>[input, output]),
+      ).chat(const <LlmMessage>[LlmMessage(role: 'user', content: '你好')]);
+
+      expect(usages, <List<int>>[
+        <int>[0, 46],
+      ]);
     });
   });
 
