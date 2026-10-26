@@ -173,8 +173,9 @@ class _JudgeHistoryPageState extends State<JudgeHistoryPage> {
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-              child: Row(
+              child: Wrap(
                 spacing: 8,
+                runSpacing: 4,
                 children: [
                   for (final filter in _HistoryFilter.values)
                     ChoiceChip(

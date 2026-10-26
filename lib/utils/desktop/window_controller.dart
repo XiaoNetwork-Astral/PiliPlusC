@@ -1,7 +1,8 @@
-import 'dart:async' show Timer;
+import 'dart:async' show Timer, unawaited;
 import 'dart:io' show Platform;
 
 import 'package:PiliPlus/plugin/pl_player/controller.dart';
+import 'package:PiliPlus/utils/cognitive_filter/ai/ai_runtime.dart';
 import 'package:PiliPlus/utils/desktop/tray_controller.dart';
 import 'package:PiliPlus/utils/device_utils.dart';
 import 'package:PiliPlus/utils/storage.dart';
@@ -78,6 +79,11 @@ class WindowController {
       case WindowEnteredFullScreenEvent():
         break;
       case WindowExitedFullScreenEvent():
+        // 用系统按钮或快捷键退出全屏时，播放器的全屏状态也要跟着退出
+        final controller = PlPlayerController.instance;
+        if (controller != null && controller.isFullScreen.value) {
+          unawaited(controller.triggerFullScreen(status: false));
+        }
         break;
       case WindowCloseRequestedEvent():
         event.request.cancel();
@@ -136,6 +142,11 @@ class WindowController {
   }
 
   Future<void> onClose() async {
+    try {
+      await AiFilterRuntime.instance.flush();
+    } catch (_) {
+      // 落盘失败不影响退出
+    }
     await GStorage.compact();
     await GStorage.close();
     TrayController.instance.dispose();

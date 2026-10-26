@@ -16,6 +16,8 @@ import 'package:PiliPlus/utils/cognitive_filter/jev_proxy.dart';
 import 'package:PiliPlus/utils/path_utils.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
 import 'package:flutter/foundation.dart' show ValueNotifier;
+import 'package:flutter/widgets.dart'
+    show AppLifecycleState, WidgetsBinding, WidgetsBindingObserver;
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:path/path.dart' as path;
 
@@ -38,8 +40,16 @@ class FileTextStore {
     }
   }
 
-  /// 先写临时文件再替换，避免写到一半损坏原文件
-  Future<void> write(String text) async {
+  Future<void> _queue = Future<void>.value();
+
+  /// 先写临时文件再替换，避免写到一半损坏原文件；同一个文件的写入排队执行
+  Future<void> write(String text) {
+    final next = _queue.then((_) => _writeNow(text));
+    _queue = next.catchError((Object _) {});
+    return next;
+  }
+
+  Future<void> _writeNow(String text) async {
     try {
       final file = File(path);
       await file.parent.create(recursive: true);
@@ -70,6 +80,17 @@ typedef RuleBlockDetail = ({
   Map<String, dynamic>? meta,
   Map<String, dynamic>? snapshot,
 });
+
+/// 进入后台或退出时把还没落盘的数据写下去
+class _FlushOnPause with WidgetsBindingObserver {
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      unawaited(AiFilterRuntime.instance.flush());
+    }
+  }
+}
 
 /// 认知滤网 AI 屏蔽的运行时接线
 class AiFilterRuntime {
@@ -153,6 +174,7 @@ class AiFilterRuntime {
       _budget = budget;
       _service = service;
       unawaited(CalibrationService.instance.init());
+      WidgetsBinding.instance.addObserver(_FlushOnPause());
     } catch (_) {
       _service = null;
       _cache = null;
@@ -557,6 +579,8 @@ class AiFilterRuntime {
     } catch (_) {
       // 缓存落盘失败下次再试
     }
+    BlockStats.instance.flush();
+    await CalibrationService.instance.flush();
     try {
       final history = _history;
       final store = _historyStore;

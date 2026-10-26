@@ -297,6 +297,9 @@ class CalibrationService {
     });
   }
 
+  /// 立即落盘，供退出或进入后台时调用
+  Future<void> flush() => _flushPool();
+
   Future<void> _flushPool() async {
     try {
       final pool = _pool;

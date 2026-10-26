@@ -86,6 +86,12 @@ class BlockStats {
     _bump();
   }
 
+  /// 立即落盘，供退出或进入后台时调用
+  void flush() {
+    _flushTimer?.cancel();
+    _flush();
+  }
+
   void _flush() {
     _flushTimer = null;
     try {

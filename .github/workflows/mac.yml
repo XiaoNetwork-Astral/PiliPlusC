@@ -48,7 +48,13 @@ jobs:
         continue-on-error: true
 
       - name: Rename DMG
-        run: mv PiliPlusC*.dmg PiliPlusC_macos_${{ env.TAG }}.dmg
+        run: |
+          if ls PiliPlusC*.dmg >/dev/null 2>&1; then
+            mv PiliPlusC*.dmg PiliPlusC_macos_${{ env.TAG }}.dmg
+          else
+            echo "create-dmg did not produce a dmg, falling back to hdiutil"
+            hdiutil create -volname PiliPlusC -srcfolder build/macos/Build/Products/Release/PiliPlusC.app -ov -format UDZO PiliPlusC_macos_${{ env.TAG }}.dmg
+          fi
 
       - name: Upload
         uses: actions/upload-artifact@v7

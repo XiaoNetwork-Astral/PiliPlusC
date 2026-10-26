@@ -55,7 +55,7 @@ jobs:
         run: |
           mkdir -p Release/PiliPlusC-Win
           mv build/windows/x64/runner/Release/* Release/PiliPlusC-Win/
-          mv dist/**/*.exe PiliPlusC_windows_${{ env.TAG }}_x64_setup.exe
+          Get-ChildItem -Path dist -Filter *.exe -Recurse | Select-Object -First 1 | Move-Item -Destination "PiliPlusC_windows_${{ env.TAG }}_x64_setup.exe"
 
       - name: Compress
         run: |
