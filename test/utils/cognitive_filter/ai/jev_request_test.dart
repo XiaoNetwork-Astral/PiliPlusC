@@ -210,6 +210,63 @@ void main() {
     });
   });
 
+  group('内置类别有效定义', () {
+    final factoryAttack = _builtinById('attack');
+
+    List<dynamic> notesOf(
+      List<FilterCategory>? builtinDefinitions, {
+      FilterSurface surface = FilterSurface.danmaku,
+    }) {
+      final body = JevRequest.buildRequest(
+        model: 'm',
+        surface: surface,
+        texts: const ['普通弹幕内容'],
+        builtinDefinitions: builtinDefinitions,
+      );
+      return _stateOf(body)['类别说明'] as List<dynamic>;
+    }
+
+    test('传入改过的内置定义后类别说明使用新文字', () {
+      final changed = factoryAttack.copyWith(
+        question: '它是否在恶意攻击他人？',
+        trueCriteria: '新的算作是',
+        falseCriteria: '新的不算',
+      );
+      final notes = notesOf(<FilterCategory>[
+        for (final category in builtinCategories)
+          if (category.id == 'attack') changed else category,
+      ]);
+      final attackNote =
+          (notes[1] as Map<String, dynamic>)['说明'] as String;
+      expect(attackNote, contains('它是否在恶意攻击他人？'));
+      expect(attackNote, contains('新的算作是'));
+      expect(attackNote, contains('新的不算'));
+      expect(attackNote, isNot(contains(factoryAttack.question)));
+    });
+
+    test('不传内置定义时与出厂定义逐字一致', () {
+      expect(
+        notesOf(null),
+        notesOf(builtinCategories, surface: FilterSurface.danmaku),
+      );
+    });
+
+    test('缺少某个内置 id 时该选项回落到出厂定义', () {
+      final changed = factoryAttack.copyWith(question: '改过的攻击题面？');
+      final notes = notesOf(<FilterCategory>[changed]);
+      expect(
+        (notes[1] as Map<String, dynamic>)['说明'],
+        contains('改过的攻击题面？'),
+      );
+      final mock = _builtinById('mock');
+      expect(
+        (notes[2] as Map<String, dynamic>)['说明'],
+        '只判断【弹幕】这一条：${mock.question}'
+        ' 算作是：${mock.trueCriteria} 不算：${mock.falseCriteria}',
+      );
+    });
+  });
+
   group('题数限制', () {
     test('无自定义类别时最多 160 条，超过抛 ArgumentError', () {
       final max = <String>[for (var i = 0; i < 160; i++) '文字$i'];

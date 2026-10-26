@@ -70,11 +70,15 @@ abstract final class JevRequest {
       };
 
   /// 构造一次 CH_min 请求；[customCategories] 只放自定义类别
+  ///
+  /// [builtinDefinitions] 是内置类别的有效定义（含用户改动），按 id 覆盖
+  /// 出厂常量生成「类别说明」；为 null 或缺少某个 id 时回落到出厂常量。
   static Map<String, dynamic> buildRequest({
     required String model,
     required FilterSurface surface,
     required List<String> texts,
     List<FilterCategory> customCategories = const <FilterCategory>[],
+    List<FilterCategory>? builtinDefinitions,
     String title = '',
     String? titleKey,
     String context = '',
@@ -115,6 +119,7 @@ abstract final class JevRequest {
           surface: surface,
           texts: texts,
           customCategories: customCategories,
+          builtinDefinitions: builtinDefinitions,
           title: title,
           titleKey: titleKey,
           context: context,
@@ -238,6 +243,7 @@ abstract final class JevRequest {
     required FilterSurface surface,
     required List<String> texts,
     required List<FilterCategory> customCategories,
+    required List<FilterCategory>? builtinDefinitions,
     required String title,
     required String? titleKey,
     required String context,
@@ -263,7 +269,11 @@ abstract final class JevRequest {
         for (var i = 0; i < texts.length; i++)
           <String, dynamic>{'编号': i + 1, objectName: texts[i]},
       ],
-      '类别说明': _categoryNotes(surface, customCategories),
+      '类别说明': _categoryNotes(
+        surface,
+        customCategories,
+        builtinDefinitions,
+      ),
     };
 
     final trimmedContext = context.trim();
@@ -278,12 +288,18 @@ abstract final class JevRequest {
   static List<Map<String, dynamic>> _categoryNotes(
     FilterSurface surface,
     List<FilterCategory> customCategories,
+    List<FilterCategory>? builtinDefinitions,
   ) {
+    final definitions = <String, FilterCategory>{
+      ..._builtinById,
+      for (final category in builtinDefinitions ?? const <FilterCategory>[])
+        category.id: category,
+    };
     return <Map<String, dynamic>>[
       for (final name in optionNames)
         <String, dynamic>{
           '类别': name,
-          '说明': _noteOfOption(surface, name),
+          '说明': _noteOfOption(surface, name, definitions),
         },
       for (final category in customCategories)
         <String, dynamic>{
@@ -293,14 +309,22 @@ abstract final class JevRequest {
     ];
   }
 
-  static String _noteOfOption(FilterSurface surface, String option) {
+  static String _noteOfOption(
+    FilterSurface surface,
+    String option,
+    Map<String, FilterCategory> definitions,
+  ) {
     if (option == normalOption) {
       return _normalNote;
     }
     if (option == junkOption) {
       return _junkNote;
     }
-    final category = _builtinById[_optionBuiltinIds[option]];
+    final id = _optionBuiltinIds[option];
+    if (id == null) {
+      return '';
+    }
+    final category = definitions[id];
     if (category == null) {
       return '';
     }

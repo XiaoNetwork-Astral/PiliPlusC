@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:PiliPlus/models/cognitive_filter/builtin_categories.dart';
 import 'package:PiliPlus/models/cognitive_filter/filter_category.dart';
 import 'package:PiliPlus/models/cognitive_filter/filter_surface.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/judge_cache.dart';
@@ -45,6 +46,59 @@ void main() {
       expect(
         JudgeCache.categoryFingerprint(changed),
         isNot(JudgeCache.categoryFingerprint(categoryA)),
+      );
+    });
+  });
+
+  group('内置定义指纹', () {
+    final changedBuiltins = <FilterCategory>[
+      for (final category in builtinCategories)
+        category.id == 'attack'
+            ? category.copyWith(question: '换了攻击题面？')
+            : category,
+    ];
+
+    test('内置题面变化后指纹变化，出厂定义稳定且与顺序无关', () {
+      final factory = JudgeCache.builtinDefinitionsFingerprint(
+        builtinCategories,
+      );
+      expect(
+        JudgeCache.builtinDefinitionsFingerprint(<FilterCategory>[
+          ...builtinCategories,
+        ]),
+        factory,
+      );
+      expect(
+        JudgeCache.builtinDefinitionsFingerprint(builtinCategories.reversed),
+        factory,
+      );
+      expect(
+        JudgeCache.builtinDefinitionsFingerprint(changedBuiltins),
+        isNot(factory),
+      );
+    });
+
+    test('指纹不同的缓存键不互相命中', () {
+      final cache = JudgeCache(store: MemoryJudgeCacheStore());
+      final oldKey = JudgeCache.cacheKey(
+        '同一段文本',
+        JudgeCache.builtinDefinitionsFingerprint(builtinCategories),
+      );
+      final newKey = JudgeCache.cacheKey(
+        '同一段文本',
+        JudgeCache.builtinDefinitionsFingerprint(changedBuiltins),
+      );
+      expect(newKey, isNot(oldKey));
+
+      cache.putOptions(oldKey, <String, double>{'正常': 0.9});
+      expect(
+        cache.lookup(newKey, customCategories: const <FilterCategory>[]),
+        isNull,
+      );
+      expect(
+        cache.lookup(oldKey, customCategories: const <FilterCategory>[])!
+            .options,
+        <String, double>{'正常': 0.9},
       );
     });
   });

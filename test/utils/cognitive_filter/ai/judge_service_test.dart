@@ -531,6 +531,53 @@ void main() {
       expect(third.verdicts['t0']!.source, JudgeSource.ai);
       expect(fake.calls.length, 2);
     });
+    test('内置定义变化后缓存键不同，旧定义的结果不再命中', () async {
+      final cache = JudgeCache(store: MemoryJudgeCacheStore());
+      final fake = _FakeTransport(
+        defaultOptions: <String, double>{'正常': 1.0},
+      );
+      final service = _service(fake, cache: cache);
+      final text = '内置定义缓存弹幕';
+      final categories = <FilterCategory>[_builtin('attack')];
+      final factory = builtinCategories;
+
+      final first = await service.judge(
+        surface: FilterSurface.danmaku,
+        items: _items(<String>[text]),
+        categories: categories,
+        builtinDefinitions: factory,
+      );
+      expect(first.verdicts['t0']!.source, JudgeSource.ai);
+
+      final second = await service.judge(
+        surface: FilterSurface.danmaku,
+        items: _items(<String>[text]),
+        categories: categories,
+        builtinDefinitions: factory,
+      );
+      expect(second.verdicts['t0']!.source, JudgeSource.cache);
+      expect(fake.calls.length, 1);
+
+      final changed = <FilterCategory>[
+        for (final category in factory)
+          category.id == 'attack'
+              ? category.copyWith(question: '换了内置题面？')
+              : category,
+      ];
+      final third = await service.judge(
+        surface: FilterSurface.danmaku,
+        items: _items(<String>[text]),
+        categories: categories,
+        builtinDefinitions: changed,
+      );
+      expect(third.verdicts['t0']!.source, JudgeSource.ai);
+      expect(fake.calls.length, 2);
+      final notes = _stateOf(fake.calls.last)['类别说明'] as List<dynamic>;
+      expect(
+        (notes[1] as Map<String, dynamic>)['说明'],
+        contains('换了内置题面？'),
+      );
+    });
   });
 
   group('分批与并发', () {

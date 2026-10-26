@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:PiliPlus/models/cognitive_filter/builtin_categories.dart';
 import 'package:PiliPlus/models/cognitive_filter/filter_category.dart';
 import 'package:PiliPlus/models/cognitive_filter/filter_surface.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/jev_request.dart';
@@ -108,9 +109,13 @@ class JudgeResult {
 }
 
 class _WorkItem {
-  _WorkItem({required this.key, required this.ids});
+  _WorkItem({required this.key, required this.cacheKey, required this.ids});
 
+  /// 规范化文本，用于去重与请求
   final String key;
+
+  /// 缓存键，已并入内置定义指纹
+  final String cacheKey;
   final List<String> ids;
 }
 
@@ -184,10 +189,14 @@ class JudgeService {
   }
 
   /// 判定一批文字，任何情况下都不向调用方抛异常
+  ///
+  /// [builtinDefinitions] 是全部内置类别的有效定义（含用户改动），用于生成
+  /// 请求里的类别说明并并入缓存键；为 null 时使用出厂常量。
   Future<JudgeResult> judge({
     required FilterSurface surface,
     required List<JudgeItem> items,
     required List<FilterCategory> categories,
+    List<FilterCategory>? builtinDefinitions,
     String title = '',
     String context = '',
     String? contextKey,
@@ -199,6 +208,7 @@ class JudgeService {
         surface: surface,
         items: items,
         categories: categories,
+        builtinDefinitions: builtinDefinitions,
         title: title,
         context: context,
         contextKey: contextKey,
@@ -225,6 +235,7 @@ class JudgeService {
     required FilterSurface surface,
     required List<JudgeItem> items,
     required List<FilterCategory> categories,
+    required List<FilterCategory>? builtinDefinitions,
     required String title,
     required String context,
     required String? contextKey,
@@ -245,6 +256,10 @@ class JudgeService {
       }
       return;
     }
+
+    final definitionFingerprint = JudgeCache.builtinDefinitionsFingerprint(
+      builtinDefinitions ?? builtinCategories,
+    );
 
     final builtins = <FilterCategory>[
       for (final category in enabled)
@@ -274,14 +289,18 @@ class JudgeService {
       if (existing != null) {
         existing.ids.add(item.id);
       } else {
-        work[key] = _WorkItem(key: key, ids: <String>[item.id]);
+        work[key] = _WorkItem(
+          key: key,
+          cacheKey: JudgeCache.cacheKey(key, definitionFingerprint),
+          ids: <String>[item.id],
+        );
       }
     }
 
     final pending = <_WorkItem>[];
     for (final item in work.values) {
       final hit = cache.lookup(
-        item.key,
+        item.cacheKey,
         customCategories: customs,
       );
       final options = hit?.options;
@@ -310,6 +329,7 @@ class JudgeService {
       items: pending,
       builtins: builtins,
       customs: customs,
+      builtinDefinitions: builtinDefinitions,
       surface: surface,
       title: title,
       context: context,
@@ -323,6 +343,7 @@ class JudgeService {
     required List<_WorkItem> items,
     required List<FilterCategory> builtins,
     required List<FilterCategory> customs,
+    required List<FilterCategory>? builtinDefinitions,
     required FilterSurface surface,
     required String title,
     required String context,
@@ -344,6 +365,7 @@ class JudgeService {
               surface: surface,
               texts: <String>[for (final item in batch) item.key],
               customCategories: customs,
+              builtinDefinitions: builtinDefinitions,
               title: title,
               context: context,
               contextKey: contextKey,
@@ -385,9 +407,9 @@ class JudgeService {
       for (var i = 0; i < batch.length; i++) {
         final item = batch[i];
         final score = scores[i];
-        cache.putOptions(item.key, score.options);
+        cache.putOptions(item.cacheKey, score.options);
         if (customs.isNotEmpty) {
-          cache.putCustomScores(item.key, score.custom, customs);
+          cache.putCustomScores(item.cacheKey, score.custom, customs);
         }
         _assign(
           verdicts,

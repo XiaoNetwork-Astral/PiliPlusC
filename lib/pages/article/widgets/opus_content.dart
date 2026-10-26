@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:PiliPlus/common/assets.dart';
@@ -369,6 +370,18 @@ class OpusContent extends StatelessWidget {
                 return const Divider();
               }
             case 5 when (element.list?.children?.isNotEmpty == true):
+              final textCount = element.list!.children!
+                  .expand((e) => e.children ?? const <ArticleContentModel>[])
+                  .expand((c) => c.text?.nodes ?? const <Node>[])
+                  .length;
+              if (textCount == 0) {
+                // 排查：列表里取不到文字时，把原始数据显示出来
+                final raw = jsonEncode(element.debugRaw);
+                return SelectableText(
+                  '列表没有文字：${raw.length > 600 ? raw.substring(0, 600) : raw}',
+                  style: const TextStyle(fontSize: 11, color: Colors.orange),
+                );
+              }
               return Text.rich(
                 TextSpan(
                   children: element.list!.children!.mapIndexed((i, e) {

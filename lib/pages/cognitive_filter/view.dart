@@ -50,7 +50,19 @@ class _CognitiveFilterPageState extends State<CognitiveFilterPage>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return SimpleScaffold(
-      appBar: widget.showAppBar ? AppBar(title: const Text('认知滤网')) : null,
+      appBar: widget.showAppBar
+          ? AppBar(
+              title: const Text('认知滤网'),
+              actions: [
+                IconButton(
+                  tooltip: '清零统计',
+                  icon: const Icon(Icons.restart_alt),
+                  onPressed: _resetStats,
+                ),
+                const SizedBox(width: 4),
+              ],
+            )
+          : null,
       body: ViewSafeArea(
         child: NestedScrollView(
           headerSliverBuilder: (context, innerBoxIsScrolled) => [
@@ -62,15 +74,16 @@ class _CognitiveFilterPageState extends State<CognitiveFilterPage>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: IconButton(
-                          tooltip: '清零统计',
-                          visualDensity: VisualDensity.compact,
-                          icon: const Icon(Icons.restart_alt),
-                          onPressed: _resetStats,
+                      if (!widget.showAppBar)
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: IconButton(
+                            tooltip: '清零统计',
+                            visualDensity: VisualDensity.compact,
+                            icon: const Icon(Icons.restart_alt),
+                            onPressed: _resetStats,
+                          ),
                         ),
-                      ),
                       IntrinsicHeight(
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.stretch,

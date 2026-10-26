@@ -131,7 +131,6 @@ class _CategoryRulesPageState extends State<CategoryRulesPage> {
               child: Slider(
                 min: 0.30,
                 max: 0.95,
-                divisions: 13,
                 value: (1.25 - _threshold).clamp(0.30, 0.95).toDouble(),
                 label: '$_sensitivityPercent%',
                 onChanged: _onSensitivityChanged,
@@ -145,9 +144,7 @@ class _CategoryRulesPageState extends State<CategoryRulesPage> {
                   end: 12,
                 ),
                 title: category.name,
-                subtitle: category.id == 'mock'
-                    ? '${category.summary}，误伤偏高'
-                    : category.summary,
+                subtitle: category.summary,
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [

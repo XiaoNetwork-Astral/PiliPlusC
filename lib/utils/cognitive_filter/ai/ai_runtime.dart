@@ -282,6 +282,10 @@ class AiFilterRuntime {
           surface: surface,
           items: whitelisted.isEmpty ? items : pending,
           categories: _enabledCategories(),
+          // 说明取全部内置类别的有效定义（含用户改动），不只是启用的
+          builtinDefinitions: CognitiveFilterConfig.effectiveCategories
+              .where((category) => category.builtin)
+              .toList(),
           title: title,
           context: context,
           contextKey: contextKey,

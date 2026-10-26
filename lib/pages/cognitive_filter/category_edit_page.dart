@@ -28,6 +28,7 @@ class _CategoryEditPageState extends State<CategoryEditPage> {
   late final bool _builtin;
   late final bool _enabled;
   late String _name;
+  late String _summary;
   late String _question;
   late String _trueCriteria;
   late String _falseCriteria;
@@ -42,6 +43,7 @@ class _CategoryEditPageState extends State<CategoryEditPage> {
     _enabled = category?.enabled ?? true;
     _id = category?.id ?? 'custom_${DateTime.now().millisecondsSinceEpoch}';
     _name = category?.name ?? '自定义类别';
+    _summary = category?.summary ?? '';
     _question = category?.question ?? '';
     _trueCriteria = category?.trueCriteria ?? '';
     _falseCriteria = category?.falseCriteria ?? '';
@@ -65,13 +67,10 @@ class _CategoryEditPageState extends State<CategoryEditPage> {
   void _persist() {
     if (_question.isEmpty) return;
     if (!_builtin) {
-      final summary = _question.length > 40
-          ? _question.substring(0, 40)
-          : _question;
       final category = FilterCategory(
         id: _id,
         name: _name,
-        summary: summary,
+        summary: _summary,
         question: _question,
         trueCriteria: _trueCriteria,
         falseCriteria: _falseCriteria,
@@ -99,6 +98,16 @@ class _CategoryEditPageState extends State<CategoryEditPage> {
       current.addAll(Map<String, dynamic>.from(existing));
     }
 
+    if (_name == factory.name) {
+      current.remove('name');
+    } else {
+      current['name'] = _name;
+    }
+    if (_summary == factory.summary) {
+      current.remove('summary');
+    } else {
+      current['summary'] = _summary;
+    }
     if (_question == factory.question) {
       current.remove('question');
     } else {
@@ -145,6 +154,18 @@ class _CategoryEditPageState extends State<CategoryEditPage> {
     );
     if (result == null) return;
     setState(() => _name = result);
+    _persist();
+  }
+
+  Future<void> _editSummary() async {
+    final result = await showTextInputDialog(
+      context: context,
+      title: '介绍',
+      initialValue: _summary,
+      maxLines: 3,
+    );
+    if (result == null) return;
+    setState(() => _summary = result);
     _persist();
   }
 
@@ -251,6 +272,8 @@ class _CategoryEditPageState extends State<CategoryEditPage> {
     final factory = builtinCategories.firstWhere((item) => item.id == _id);
     CognitiveFilterConfig.resetCategory(_id);
     setState(() {
+      _name = factory.name;
+      _summary = factory.summary;
       _question = factory.question;
       _trueCriteria = factory.trueCriteria;
       _falseCriteria = factory.falseCriteria;
@@ -270,13 +293,19 @@ class _CategoryEditPageState extends State<CategoryEditPage> {
         child: ListView(
           padding: EdgeInsets.only(bottom: bottomPadding),
           children: [
-            if (!_builtin)
-              CfTile(
-                icon: Icons.label_outline,
-                title: '名称',
-                subtitle: _name,
-                onTap: _editName,
-              ),
+            CfTile(
+              icon: Icons.label_outline,
+              title: '名称',
+              subtitle: _name,
+              onTap: _editName,
+            ),
+            CfTile(
+              icon: Icons.notes,
+              title: '介绍',
+              subtitle: _summary.isEmpty ? '未填写' : _summary,
+              subtitleMaxLines: 2,
+              onTap: _editSummary,
+            ),
             CfTile(
               icon: Icons.help_outline,
               title: '判定问题',

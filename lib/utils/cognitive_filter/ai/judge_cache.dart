@@ -64,8 +64,9 @@ class _CacheEntry {
 
 /// 判定分数缓存：容量与过期时间可调，按 LRU 淘汰，读取命中会刷新顺序
 ///
-/// 选项概率不依赖用户启用的类别与阈值，因此改开关后仍可复用；自定义类别
-/// 的答案按类别指纹单独校验。落盘版本变化时整份丢弃重建。
+/// 选项概率不依赖用户启用的类别与阈值，因此改开关后仍可复用；但说明里的
+/// 内置定义会变，所以键里并入内置定义指纹。自定义类别的答案按类别指纹
+/// 单独校验。落盘版本变化时整份丢弃重建。
 class JudgeCache {
   JudgeCache({
     required JudgeCacheStore store,
@@ -237,6 +238,29 @@ class JudgeCache {
         '${category.trueCriteria}${category.falseCriteria}',
       ),
     );
+  }
+
+  /// 内置定义指纹：按 id 排序后拼接 question + trueCriteria + falseCriteria
+  ///
+  /// 只依赖字符串内容，跨运行稳定；定义变了指纹就变，旧缓存自然失效。
+  static String builtinDefinitionsFingerprint(
+    Iterable<FilterCategory> definitions,
+  ) {
+    final sorted = <FilterCategory>[...definitions]
+      ..sort((a, b) => a.id.compareTo(b.id));
+    final buffer = StringBuffer();
+    for (final category in sorted) {
+      buffer
+        ..write(category.question)
+        ..write(category.trueCriteria)
+        ..write(category.falseCriteria);
+    }
+    return _hex(_fnv1a(buffer.toString()));
+  }
+
+  /// 判定缓存键：内置定义指纹 + 规范化文本，定义不同就不会互相命中
+  static String cacheKey(String normalizedText, String builtinFingerprint) {
+    return '$builtinFingerprint|$normalizedText';
   }
 
   void _touch(String key) {

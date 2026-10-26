@@ -19,7 +19,11 @@ class ArticleContentModel {
   Text? heading;
   Blockquote? blockquote;
 
+  /// 排查列表不显示的问题时临时保留的原始数据，只留列表段落
+  Map<String, dynamic>? debugRaw;
+
   ArticleContentModel.fromJson(Map<String, dynamic> json) {
+    if (json['para_type'] == 5) debugRaw = json;
     align = json['align'];
     paraType = json['para_type'];
     text = json['text'] == null ? null : Text.fromJson(json['text']);
