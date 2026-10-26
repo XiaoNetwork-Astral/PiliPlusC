@@ -648,45 +648,6 @@ void main() {
       );
     });
 
-    test('返回内容不合法时静默重发一次，第二次正常就当没出错', () async {
-      final fake = _FakeTransport(
-        failures: 1,
-        error: const JevException(JevErrorKind.parse, '模拟解析失败'),
-      );
-      final service = _service(fake);
-      final result = await service.judge(
-        surface: FilterSurface.danmaku,
-        items: _items(<String>['先坏后好的弹幕']),
-        categories: <FilterCategory>[_builtin('attack')],
-      );
-      expect(result.verdicts['t0']!.source, JudgeSource.ai);
-      expect(fake.calls.length, 2);
-      expect(result.stats.requests, 2);
-      expect(result.stats.failedRequests, 0);
-      expect(result.stats.lastError, isNull);
-    });
-
-    test('连续两次返回不合法才算失败，网络错误不重发', () async {
-      final badFake = _FakeTransport(badResponse: true);
-      final badResult = await _service(badFake).judge(
-        surface: FilterSurface.danmaku,
-        items: _items(<String>['一直坏的弹幕']),
-        categories: <FilterCategory>[_builtin('attack')],
-      );
-      expect(badFake.calls.length, 2);
-      expect(badResult.stats.failedRequests, 1);
-      expect(badResult.verdicts['t0']!.source, JudgeSource.failed);
-
-      final netFake = _FakeTransport(failures: 1);
-      final netResult = await _service(netFake).judge(
-        surface: FilterSurface.danmaku,
-        items: _items(<String>['网络错误的弹幕']),
-        categories: <FilterCategory>[_builtin('attack')],
-      );
-      expect(netFake.calls.length, 1);
-      expect(netResult.stats.failedRequests, 1);
-    });
-
     test('失败原因按 JevErrorKind 映射成人话', () async {
       final cases = <(Object, String)>[
         (const JevException(JevErrorKind.auth, 'x'), '密钥无效'),
@@ -705,14 +666,7 @@ void main() {
         (StateError('x'), '请求失败'),
       ];
       for (final item in cases) {
-        // 解析类错误会静默重发一次，所以要连续失败两次才算失败
-        final isParse =
-            item.$1 is JevException &&
-            (item.$1 as JevException).kind == JevErrorKind.parse;
-        final fake = _FakeTransport(
-          failures: isParse ? 2 : 1,
-          error: item.$1,
-        );
+        final fake = _FakeTransport(failures: 1, error: item.$1);
         final service = _service(fake);
         final result = await service.judge(
           surface: FilterSurface.danmaku,
