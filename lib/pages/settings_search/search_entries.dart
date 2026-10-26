@@ -137,11 +137,11 @@ List<SettingsSearchEntry> _entryOnlyEntries() => [
   ),
   SettingsSearchEntry(
     title: '认知滤网',
-    subtitle: '规则屏蔽、AI 屏蔽、档位与类别规则',
+    subtitle: '规则屏蔽、AI 屏蔽、屏蔽统计与类别规则',
     category: '设置',
     type: SettingType.cognitiveFilter,
     page: () => const CognitiveFilterPage(),
-    keywords: const ['屏蔽', '过滤', 'ai', 'jev', '档位', '专业模式', '类别规则'],
+    keywords: const ['屏蔽', '过滤', 'ai', 'jev', '统计', '类别规则'],
   ),
   SettingsSearchEntry(
     title: 'AI 提供商',

@@ -11,6 +11,7 @@ import 'package:PiliPlus/utils/cognitive_filter/ai/calibration/llm_client.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/calibration/threshold_fit.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/calibration/upload_guard.dart';
 import 'package:PiliPlus/utils/cognitive_filter/jev_proxy.dart';
+import 'package:PiliPlus/utils/cognitive_filter/raw_error.dart';
 import 'package:PiliPlus/utils/path_utils.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
 import 'package:path/path.dart' as path;
@@ -20,6 +21,7 @@ class RoundOutcome {
   const RoundOutcome({
     required this.questions,
     required this.abortedBy,
+    this.abortMessage,
     required this.refusedChunks,
   });
 
@@ -28,6 +30,9 @@ class RoundOutcome {
 
   /// 非空表示这一轮因密钥、网络、限流、服务端、超时或用量上限中止
   final LlmErrorKind? abortedBy;
+
+  /// 中止时最后那个异常的原始说明，供界面直接显示
+  final String? abortMessage;
 
   /// 服务商拒绝或返回无法解析而丢弃的批数
   final int refusedChunks;
@@ -126,6 +131,7 @@ class CalibrationService {
       return const RoundOutcome(
         questions: <CalibrationQuestion>[],
         abortedBy: LlmErrorKind.auth,
+        abortMessage: '未填写 API Key',
         refusedChunks: 0,
       );
     }
@@ -135,6 +141,7 @@ class CalibrationService {
       return const RoundOutcome(
         questions: <CalibrationQuestion>[],
         abortedBy: LlmErrorKind.budget,
+        abortMessage: '已达今日用量上限',
         refusedChunks: 0,
       );
     }
@@ -171,12 +178,16 @@ class CalibrationService {
       return RoundOutcome(
         questions: result.questions,
         abortedBy: result.abortedBy,
+        abortMessage: result.abortMessage,
         refusedChunks: result.refusedChunks,
       );
-    } catch (_) {
-      return const RoundOutcome(
-        questions: <CalibrationQuestion>[],
+    } catch (error) {
+      return RoundOutcome(
+        questions: const <CalibrationQuestion>[],
         abortedBy: LlmErrorKind.network,
+        abortMessage: error is LlmException
+            ? error.message
+            : truncateError(redactSecrets(error.toString())),
         refusedChunks: 0,
       );
     }
@@ -220,9 +231,7 @@ class CalibrationService {
   ({double before, double? after}) apply(
     List<({CalibrationAnswer answer, CalibrationQuestion question})> answers,
   ) {
-    final base = Pref.cfFilterProMode
-        ? Pref.cfProThreshold
-        : Pref.cfFilterTier.threshold;
+    final base = Pref.cfProThreshold;
     final current = base + Pref.cfAiThresholdDelta;
     final after = fitThreshold(
       current: current,

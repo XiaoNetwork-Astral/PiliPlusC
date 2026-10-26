@@ -637,7 +637,7 @@ void main() {
       expect(verdict.blocked, isFalse);
       expect(verdict.source, JudgeSource.failed);
       expect(result.stats.failedRequests, 1);
-      expect(result.stats.lastError, '返回内容无法解析');
+      expect(result.stats.lastError, '接口返回的结构不正确，缺少第 1 条答案');
       expect(cache.dirty, isFalse);
       expect(
         cache.lookup(
@@ -648,22 +648,18 @@ void main() {
       );
     });
 
-    test('失败原因按 JevErrorKind 映射成人话', () async {
+    test('失败原因直接取原始错误信息', () async {
       final cases = <(Object, String)>[
-        (const JevException(JevErrorKind.auth, 'x'), '密钥无效'),
-        (const JevException(JevErrorKind.rateLimit, 'x'), '请求太频繁'),
-        (const JevException(JevErrorKind.badRequest, 'x'), '请求被拒绝'),
         (
-          const JevException(JevErrorKind.timeout, 'x'),
-          '连接超时，可能需要配置代理',
+          const JevException(JevErrorKind.auth, 'HTTP 401 unauthorized'),
+          'HTTP 401 unauthorized',
         ),
         (
-          const JevException(JevErrorKind.network, 'x'),
-          '网络连接失败，可能需要配置代理',
+          const JevException(JevErrorKind.timeout, 'connectionTimeout: timeout'),
+          'connectionTimeout: timeout',
         ),
-        (const JevException(JevErrorKind.server, 'x'), '服务端出错'),
-        (const JevException(JevErrorKind.parse, 'x'), '返回内容无法解析'),
-        (StateError('x'), '请求失败'),
+        (const JevException(JevErrorKind.parse, '接口返回的内容不是合法 JSON'), '接口返回的内容不是合法 JSON'),
+        (StateError('boom'), 'Bad state: boom'),
       ];
       for (final item in cases) {
         final fake = _FakeTransport(failures: 1, error: item.$1);
@@ -676,6 +672,21 @@ void main() {
         expect(result.stats.failedRequests, 1);
         expect(result.stats.lastError, item.$2);
       }
+    });
+
+    test('非 JevException 的错误信息会脱敏', () async {
+      final fake = _FakeTransport(
+        failures: 1,
+        error: StateError('Bearer sk-abcdefgh123456'),
+      );
+      final service = _service(fake);
+      final result = await service.judge(
+        surface: FilterSurface.danmaku,
+        items: _items(<String>['脱敏测试弹幕']),
+        categories: <FilterCategory>[_builtin('attack')],
+      );
+      expect(result.stats.lastError, contains('Bearer ***'));
+      expect(result.stats.lastError, isNot(contains('sk-abcdefgh123456')));
     });
 
     test('连续失败达到阈值后熔断，冷却结束恢复', () async {

@@ -289,8 +289,6 @@ abstract final class SettingBoxKey {
   /// 认知滤网
   static const String cfRuleFilterEnabled = 'cfRuleFilterEnabled',
       cfAiFilterEnabled = 'cfAiFilterEnabled',
-      cfFilterTier = 'cfFilterTier',
-      cfFilterProMode = 'cfFilterProMode',
       cfApiBaseUrl = 'cfApiBaseUrl',
       cfApiModel = 'cfApiModel',
       cfApiTimeout = 'cfApiTimeout',
@@ -317,6 +315,8 @@ abstract final class SettingBoxKey {
       cfLlmProxyType = 'cfLlmProxyType',
       cfLlmProxyAddress = 'cfLlmProxyAddress',
       cfLlmDailyCapTokens = 'cfLlmDailyCapTokens',
+      cfStatsBlocked = 'cfStatsBlocked',
+      cfStatsSince = 'cfStatsSince',
       cfLlmUsageDay = 'cfLlmUsageDay',
       cfLlmUsageTokens = 'cfLlmUsageTokens',
       cfAiThresholdDelta = 'cfAiThresholdDelta',

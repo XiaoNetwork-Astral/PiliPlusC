@@ -279,6 +279,8 @@ void main() {
 
         expect(error.kind, entry.value);
         expect(error.statusCode, entry.key);
+        expect(error.message, startsWith('HTTP ${entry.key}'));
+        expect(error.message, contains('请求失败'));
         expect(error.message, isNot(contains('sk-test-secret')));
         expect(error.message, isNot(contains('Bearer')));
         expect(error.toString(), isNot(contains('sk-test-secret')));
@@ -302,6 +304,7 @@ void main() {
       final error = await _capture(_client(adapter));
 
       expect(error.kind, LlmErrorKind.refused);
+      expect(error.message, contains('content_filter'));
     });
 
     test('返回的不是 JSON 按 parse 处理', () async {
@@ -312,6 +315,7 @@ void main() {
       final error = await _capture(_client(adapter));
 
       expect(error.kind, LlmErrorKind.parse);
+      expect(error.message, contains('bad gateway'));
     });
 
     test('缺少 choices 按 parse 处理', () async {
@@ -322,6 +326,7 @@ void main() {
       final error = await _capture(_client(adapter));
 
       expect(error.kind, LlmErrorKind.parse);
+      expect(error.message, contains('foo'));
     });
 
     test('content 为空按 parse 处理', () async {
@@ -330,6 +335,7 @@ void main() {
       final error = await _capture(_client(adapter));
 
       expect(error.kind, LlmErrorKind.parse);
+      expect(error.message, contains('choices'));
     });
   });
 
@@ -346,6 +352,7 @@ void main() {
 
       expect(error.kind, LlmErrorKind.timeout);
       expect(error.statusCode, isNull);
+      expect(error.message, startsWith('connectionTimeout'));
     });
 
     test('连接失败映射为 network', () async {
@@ -359,6 +366,7 @@ void main() {
       final error = await _capture(_client(adapter));
 
       expect(error.kind, LlmErrorKind.network);
+      expect(error.message, startsWith('connectionError'));
     });
 
     test('证书错误映射为 network', () async {
@@ -372,24 +380,7 @@ void main() {
       final error = await _capture(_client(adapter));
 
       expect(error.kind, LlmErrorKind.network);
-      expect(error.message, contains('证书'));
-    });
-  });
-
-  group('llmErrorText', () {
-    test('每个类别都有中文提示且句中不用句号', () {
-      for (final kind in LlmErrorKind.values) {
-        final text = llmErrorText(kind);
-        expect(text, isNotEmpty);
-        expect(text.endsWith('。'), isFalse);
-      }
-    });
-
-    test('常见提示文案固定', () {
-      expect(llmErrorText(LlmErrorKind.auth), '密钥无效');
-      expect(llmErrorText(LlmErrorKind.rateLimit), '请求太频繁');
-      expect(llmErrorText(LlmErrorKind.timeout), '连接超时，可能需要配置代理');
-      expect(llmErrorText(LlmErrorKind.budget), '已达今日用量上限');
+      expect(error.message, startsWith('badCertificate'));
     });
   });
 }

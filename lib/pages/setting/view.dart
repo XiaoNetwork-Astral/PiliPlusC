@@ -84,7 +84,7 @@ class _SettingPageState extends State<SettingPage> {
     ),
     _SettingsModel(
       type: .cognitiveFilter,
-      subtitle: '规则屏蔽、AI 屏蔽、档位与类别规则',
+      subtitle: '规则屏蔽、AI 屏蔽、屏蔽统计与类别规则',
       icon: Icon(Icons.filter_alt_outlined),
     ),
     _SettingsModel(

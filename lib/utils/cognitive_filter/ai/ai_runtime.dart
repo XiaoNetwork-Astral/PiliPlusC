@@ -10,6 +10,7 @@ import 'package:PiliPlus/utils/cognitive_filter/ai/daily_budget.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/judge_cache.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/judge_history.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/judge_service.dart';
+import 'package:PiliPlus/utils/cognitive_filter/block_stats.dart';
 import 'package:PiliPlus/utils/cognitive_filter/jev_client.dart';
 import 'package:PiliPlus/utils/cognitive_filter/jev_proxy.dart';
 import 'package:PiliPlus/utils/path_utils.dart';
@@ -295,6 +296,14 @@ class AiFilterRuntime {
         result.verdicts[id] = _whitelistVerdict;
       }
 
+      if (recordHistory) {
+        var blocked = 0;
+        for (final verdict in result.verdicts.values) {
+          if (verdict.blocked) blocked++;
+        }
+        BlockStats.instance.add(blocked);
+      }
+
       final history = recordHistory ? _history : null;
       if (history != null) {
         final texts = <String, String>{
@@ -424,7 +433,7 @@ class AiFilterRuntime {
 
   /// 判定失败时提示用户；非试判定时同一文本 20 秒内只提示一次
   void _notifyFailure(String? error, {required bool trial}) {
-    final text = error ?? '请求失败';
+    final text = error == null || error.isEmpty ? '未知错误' : error;
     if (!trial) {
       final now = DateTime.now();
       final last = _lastFailureToastAt[text];
@@ -434,7 +443,7 @@ class AiFilterRuntime {
       _lastFailureToastAt[text] = now;
     }
     try {
-      SmartDialog.showToast('AI 判定失败：$text，已放行');
+      SmartDialog.showToast('AI 屏蔽失败：$text');
     } catch (_) {
       // 界面未就绪时不打断判定流程
     }
@@ -451,6 +460,8 @@ class AiFilterRuntime {
     required String content,
     String? ruleId,
   }) {
+    // 统计按命中次数算，不受历史去重和限速影响
+    BlockStats.instance.add();
     final history = _history;
     if (history == null) {
       return;

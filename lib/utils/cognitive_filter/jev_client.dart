@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:PiliPlus/utils/cognitive_filter/jev_proxy.dart';
+import 'package:PiliPlus/utils/cognitive_filter/raw_error.dart';
 import 'package:dio/dio.dart';
 
 /// Jev 请求失败的类别
@@ -27,7 +28,10 @@ enum JevErrorKind {
   parse,
 }
 
-/// Jev 调用异常，[message] 一定是中文且不含 API Key
+/// Jev 调用异常
+///
+/// [message] 是给用户看的简短说明，可能是接口/网络的原始信息（状态码、
+/// 响应正文片段、异常类型和消息），不含 API Key。
 class JevException implements Exception {
   const JevException(this.kind, this.message);
 
@@ -94,9 +98,9 @@ abstract final class JevClient {
           },
         ),
       );
-      return _decode(response.data);
+      return _decode(response.data, secrets: <String>[key]);
     } on DioException catch (error) {
-      throw _mapDioError(error);
+      throw _mapDioError(error, secrets: <String>[key]);
     } finally {
       dio.close(force: true);
     }
@@ -170,9 +174,13 @@ abstract final class JevClient {
         proxy: proxy,
       );
       if (response['answers'] is! Map) {
-        throw const JevException(
+        throw JevException(
           JevErrorKind.parse,
-          '接口返回的结构不正确，缺少 answers',
+          _parseMessage(
+            '接口返回的结构不正确，缺少 answers',
+            jsonEncode(response),
+            secrets: <String>[apiKey],
+          ),
         );
       }
       stopwatch.stop();
@@ -181,9 +189,14 @@ abstract final class JevClient {
         message: '连接成功，用时 ${stopwatch.elapsedMilliseconds} 毫秒',
       );
     } on JevException catch (error) {
-      return JevTestResult(ok: false, message: _testHint(error));
-    } catch (_) {
-      return const JevTestResult(ok: false, message: '连接失败，请检查接口地址与网络');
+      return JevTestResult(ok: false, message: error.message);
+    } catch (error) {
+      return JevTestResult(
+        ok: false,
+        message: truncateError(
+          redactSecrets(error.toString(), secrets: <String>[apiKey]),
+        ),
+      );
     }
   }
 
@@ -203,11 +216,17 @@ abstract final class JevClient {
   }
 
   /// 把响应文本解成 JSON 对象，失败按解析错误处理
-  static Map<String, dynamic> _decode(String? data) {
+  static Map<String, dynamic> _decode(
+    String? data, {
+    Iterable<String> secrets = const [],
+  }) {
     try {
       final parsed = jsonDecode(data ?? '');
       if (parsed is! Map) {
-        throw const JevException(JevErrorKind.parse, '接口返回的数据不是 JSON 对象');
+        throw JevException(
+          JevErrorKind.parse,
+          _parseMessage('接口返回的数据不是 JSON 对象', data, secrets: secrets),
+        );
       }
       final result = <String, dynamic>{};
       parsed.forEach((key, value) {
@@ -217,86 +236,71 @@ abstract final class JevClient {
       });
       return result;
     } on FormatException {
-      throw const JevException(JevErrorKind.parse, '接口返回的内容不是合法 JSON');
+      throw JevException(
+        JevErrorKind.parse,
+        _parseMessage('接口返回的内容不是合法 JSON', data, secrets: secrets),
+      );
     }
   }
 
-  /// 把 Dio 异常映射成带中文 message 的 [JevException]
-  static JevException _mapDioError(DioException error) {
+  /// 解析错误的中文说明后追加响应正文片段；取不到正文时只保留说明
+  static String _parseMessage(
+    String text,
+    String? body, {
+    Iterable<String> secrets = const [],
+  }) {
+    final fragment = body == null
+        ? ''
+        : truncateError(redactSecrets(body, secrets: secrets));
+    if (fragment.isEmpty) {
+      return text;
+    }
+    return '$text：$fragment';
+  }
+
+  /// 把 Dio 异常映射成带原始信息的 [JevException]
+  ///
+  /// 消息只描述接口/网络返回的原始信息，类别判定与消息文本无关。
+  static JevException _mapDioError(
+    DioException error, {
+    Iterable<String> secrets = const [],
+  }) {
+    final message = describeDioError(error, secrets: secrets);
     final status = error.response?.statusCode;
     if (status != null) {
       if (status == 401 || status == 403) {
-        return JevException(
-          JevErrorKind.auth,
-          'API Key 无效或没有权限（HTTP $status），请检查后重试',
-        );
+        return JevException(JevErrorKind.auth, message);
       }
       if (status == 429) {
-        return const JevException(
-          JevErrorKind.rateLimit,
-          '请求过于频繁（HTTP 429），请稍后再试',
-        );
+        return JevException(JevErrorKind.rateLimit, message);
       }
       if (status >= 500) {
-        return JevException(
-          JevErrorKind.server,
-          'Jev 服务端错误（HTTP $status），请稍后重试',
-        );
+        return JevException(JevErrorKind.server, message);
       }
       if (status == 404) {
-        return const JevException(
-          JevErrorKind.badRequest,
-          '请求被拒绝（HTTP 404），请检查接口地址是否正确',
-        );
+        return JevException(JevErrorKind.badRequest, message);
       }
       if (status == 400) {
-        return const JevException(
-          JevErrorKind.badRequest,
-          '请求被拒绝（HTTP 400），可能是内容或题数超出限制',
-        );
+        return JevException(JevErrorKind.badRequest, message);
       }
-      return JevException(
-        JevErrorKind.badRequest,
-        '请求被拒绝（HTTP $status），请检查接口地址、模型名与内容',
-      );
+      return JevException(JevErrorKind.badRequest, message);
     }
     switch (error.type) {
       case DioExceptionType.connectionTimeout:
       case DioExceptionType.sendTimeout:
       case DioExceptionType.receiveTimeout:
-        return const JevException(
-          JevErrorKind.timeout,
-          '请求超时，请检查网络或调大等待超时',
-        );
+        return JevException(JevErrorKind.timeout, message);
       case DioExceptionType.connectionError:
       case DioExceptionType.unknown:
-        return const JevException(
-          JevErrorKind.network,
-          '无法连接到接口地址，请检查网络与地址',
-        );
+        return JevException(JevErrorKind.network, message);
       case DioExceptionType.badCertificate:
-        return const JevException(
-          JevErrorKind.network,
-          '接口的 HTTPS 证书校验失败，请检查接口地址',
-        );
+        return JevException(JevErrorKind.network, message);
       case DioExceptionType.cancel:
-        return const JevException(JevErrorKind.network, '请求已取消');
+        return JevException(JevErrorKind.network, message);
       default:
-        return const JevException(
-          JevErrorKind.server,
-          '接口返回了异常响应，请稍后重试',
-        );
+        return JevException(JevErrorKind.server, message);
     }
   }
 
   /// 测试连接失败的简短提示
-  static String _testHint(JevException error) => switch (error.kind) {
-    JevErrorKind.auth => 'API Key 无效或没有权限，请检查后重试',
-    JevErrorKind.rateLimit => '请求过于频繁，请稍后再试',
-    JevErrorKind.badRequest => error.message,
-    JevErrorKind.timeout => '连接超时，请检查网络或调大等待超时',
-    JevErrorKind.network => '无法连接到接口地址，请检查网络与地址',
-    JevErrorKind.server => 'Jev 服务端错误，请稍后重试',
-    JevErrorKind.parse => '接口返回的内容无法识别，请确认地址是 Jev 接口',
-  };
 }

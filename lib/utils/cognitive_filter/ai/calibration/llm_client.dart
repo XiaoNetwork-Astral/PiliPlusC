@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:PiliPlus/utils/cognitive_filter/jev_proxy.dart';
+import 'package:PiliPlus/utils/cognitive_filter/raw_error.dart';
 import 'package:dio/dio.dart';
 
 /// 大模型调用失败的类别
@@ -30,7 +31,10 @@ enum LlmErrorKind {
   budget,
 }
 
-/// 大模型调用异常，[message] 是中文且不含 Authorization 头或密钥
+/// 大模型调用异常
+///
+/// [message] 是给用户看的简短说明，可能是接口/网络的原始信息（状态码、
+/// 响应正文片段、异常类型和消息），不含 Authorization 头或密钥。
 class LlmException implements Exception {
   const LlmException(this.kind, this.message, {this.statusCode});
 
@@ -177,16 +181,19 @@ class LlmClient {
           },
         ),
       );
-      final content = _extractContent(response.data);
+      final content = _extractContent(response.data, secrets: <String>[key]);
       _reportUsage(response.data);
       return content;
     } on DioException catch (error) {
-      throw _mapDioError(error);
+      throw _mapDioError(error, secrets: <String>[key]);
     } on LlmException {
       rethrow;
-    } catch (_) {
-      // 不拼接原始异常，避免把请求头或密钥带进日志
-      throw const LlmException(LlmErrorKind.network, '网络错误，请检查网络或代理');
+    } catch (error) {
+      // 原始异常可能带请求头或密钥，先脱敏再截断
+      throw LlmException(
+        LlmErrorKind.network,
+        truncateError(redactSecrets(error.toString(), secrets: <String>[key])),
+      );
     }
   }
 
@@ -205,40 +212,64 @@ class LlmClient {
     return '$base/chat/completions';
   }
 
-  static const LlmException _parseError = LlmException(
-    LlmErrorKind.parse,
-    '服务商返回的结构不正确',
-  );
+  /// 构造解析失败异常，说明后追加响应正文片段；取不到正文时只保留说明
+  static LlmException _parseError(
+    String? data, {
+    Iterable<String> secrets = const [],
+    String text = '服务商返回的结构不正确',
+  }) {
+    final fragment = data == null
+        ? ''
+        : truncateError(redactSecrets(data, secrets: secrets));
+    return LlmException(
+      LlmErrorKind.parse,
+      fragment.isEmpty ? text : '$text：$fragment',
+    );
+  }
 
   /// 从响应 JSON 里取出内容，结构不对或内容为空都算解析失败
-  static String _extractContent(String? data) {
+  static String _extractContent(
+    String? data, {
+    Iterable<String> secrets = const [],
+  }) {
     final Object? decoded;
     try {
       decoded = jsonDecode(data ?? '');
     } on FormatException {
-      throw const LlmException(LlmErrorKind.parse, '服务商返回的内容不是合法 JSON');
+      throw _parseError(
+        data,
+        secrets: secrets,
+        text: '服务商返回的内容不是合法 JSON',
+      );
     }
     if (decoded is! Map) {
-      throw _parseError;
+      throw _parseError(data, secrets: secrets);
     }
     final choices = decoded['choices'];
     if (choices is! List || choices.isEmpty) {
-      throw _parseError;
+      throw _parseError(data, secrets: secrets);
     }
     final choice = choices.first;
     if (choice is! Map) {
-      throw _parseError;
+      throw _parseError(data, secrets: secrets);
     }
     if (choice['finish_reason'] == 'content_filter') {
-      throw const LlmException(LlmErrorKind.refused, '服务商拒绝了这批内容');
+      throw const LlmException(
+        LlmErrorKind.refused,
+        '服务商拒绝了这批内容（finish_reason: content_filter）',
+      );
     }
     final message = choice['message'];
     if (message is! Map) {
-      throw _parseError;
+      throw _parseError(data, secrets: secrets);
     }
     final content = message['content'];
     if (content is! String || content.trim().isEmpty) {
-      throw _parseError;
+      throw _parseError(
+        data,
+        secrets: secrets,
+        text: '服务商返回的内容为空',
+      );
     }
     return content;
   }
@@ -268,28 +299,34 @@ class LlmClient {
     }
   }
 
-  /// 把 dio 异常映射成带中文 message 的 [LlmException]
-  static LlmException _mapDioError(DioException error) {
+  /// 把 dio 异常映射成带原始信息的 [LlmException]
+  ///
+  /// 消息只描述接口/网络返回的原始信息，类别判定与消息文本无关。
+  static LlmException _mapDioError(
+    DioException error, {
+    Iterable<String> secrets = const [],
+  }) {
+    final message = describeDioError(error, secrets: secrets);
     final status = error.response?.statusCode;
     if (status != null) {
       if (status == 401 || status == 403) {
         return LlmException(
           LlmErrorKind.auth,
-          '密钥无效或没有权限（HTTP $status）',
+          message,
           statusCode: status,
         );
       }
       if (status == 429) {
         return LlmException(
           LlmErrorKind.rateLimit,
-          '请求太频繁（HTTP 429）',
+          message,
           statusCode: status,
         );
       }
       if (status >= 500) {
         return LlmException(
           LlmErrorKind.server,
-          '服务端出错（HTTP $status）',
+          message,
           statusCode: status,
         );
       }
@@ -298,14 +335,14 @@ class LlmClient {
       if (status == 400 || status == 422 || status == 451) {
         return LlmException(
           LlmErrorKind.refused,
-          '服务商拒绝了这批内容（HTTP $status）',
+          message,
           statusCode: status,
         );
       }
       // 其余 4xx（例如接口路径写错）不当作内容被拒，避免误删收集池
       return LlmException(
         LlmErrorKind.network,
-        '接口地址或请求不正确（HTTP $status）',
+        message,
         statusCode: status,
       );
     }
@@ -313,36 +350,21 @@ class LlmClient {
       case DioExceptionType.connectionTimeout:
       case DioExceptionType.sendTimeout:
       case DioExceptionType.receiveTimeout:
-        return const LlmException(
-          LlmErrorKind.timeout,
-          '连接超时，可能需要配置代理',
-        );
+        return LlmException(LlmErrorKind.timeout, message);
       case DioExceptionType.badCertificate:
-        return const LlmException(
-          LlmErrorKind.network,
-          'HTTPS 证书校验失败，请检查接口地址或代理',
-        );
+        return LlmException(LlmErrorKind.network, message);
       case DioExceptionType.cancel:
-        return const LlmException(LlmErrorKind.network, '请求已取消');
+        return LlmException(LlmErrorKind.network, message);
       case DioExceptionType.connectionError:
       case DioExceptionType.unknown:
-        return const LlmException(LlmErrorKind.network, '网络错误，请检查网络或代理');
+        return LlmException(LlmErrorKind.network, message);
       case DioExceptionType.badResponse:
-        return _parseError;
+        return _parseError(
+          error.response?.data?.toString(),
+          secrets: secrets,
+        );
       default:
-        return const LlmException(LlmErrorKind.network, '网络错误，请检查网络或代理');
+        return LlmException(LlmErrorKind.network, message);
     }
   }
 }
-
-/// 把错误类别转成给用户看的中文提示，句中不用句号
-String llmErrorText(LlmErrorKind kind) => switch (kind) {
-  LlmErrorKind.auth => '密钥无效',
-  LlmErrorKind.rateLimit => '请求太频繁',
-  LlmErrorKind.refused => '服务商拒绝了这批内容',
-  LlmErrorKind.timeout => '连接超时，可能需要配置代理',
-  LlmErrorKind.network => '网络错误',
-  LlmErrorKind.server => '服务端出错',
-  LlmErrorKind.parse => '返回内容无法解析',
-  LlmErrorKind.budget => '已达今日用量上限',
-};

@@ -35,6 +35,7 @@ class _CalibrationPageState extends State<CalibrationPage> {
   int _batchDone = 0;
   int _batchTotal = 0;
   LlmErrorKind? _errorKind;
+  String? _errorMessage;
   ({double before, double? after})? _result;
 
   @override
@@ -56,6 +57,7 @@ class _CalibrationPageState extends State<CalibrationPage> {
       _batchDone = 0;
       _batchTotal = 0;
       _errorKind = null;
+      _errorMessage = null;
       _questions = const <CalibrationQuestion>[];
       _answers =
           const <({CalibrationAnswer answer, CalibrationQuestion question})>[];
@@ -80,6 +82,7 @@ class _CalibrationPageState extends State<CalibrationPage> {
     setState(() {
       _questions = outcome.questions;
       _errorKind = outcome.abortedBy;
+      _errorMessage = outcome.abortMessage;
       if (outcome.abortedBy != null || outcome.questions.isEmpty) {
         _phase = _Phase.error;
       } else {
@@ -142,6 +145,7 @@ class _CalibrationPageState extends State<CalibrationPage> {
       _batchDone = 0;
       _batchTotal = 0;
       _errorKind = null;
+      _errorMessage = null;
       _result = null;
     });
   }
@@ -227,12 +231,13 @@ class _CalibrationPageState extends State<CalibrationPage> {
 
   Widget _buildError(BuildContext context) {
     final kind = _errorKind;
+    final message = _errorMessage;
     return ListView(
       padding: _listPadding(context),
       children: [
         CfTile(
           icon: kind == null ? Icons.inbox_outlined : Icons.error_outline,
-          title: kind == null ? '这轮整理出的题不多，攒一些再试' : llmErrorText(kind),
+          title: message == null || message.isEmpty ? '整理失败' : message,
         ),
         CfTile(
           icon: Icons.arrow_back,

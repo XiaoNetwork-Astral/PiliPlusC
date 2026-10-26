@@ -8,7 +8,8 @@ import 'package:PiliPlus/http/constants.dart';
 import 'package:PiliPlus/models/cognitive_filter/filter_category.dart';
 import 'package:PiliPlus/models/cognitive_filter/filter_rule.dart';
 import 'package:PiliPlus/models/cognitive_filter/filter_surface.dart';
-import 'package:PiliPlus/models/cognitive_filter/filter_tier.dart';
+import 'package:PiliPlus/models/cognitive_filter/builtin_categories.dart'
+    show kDefaultBlockThreshold;
 import 'package:PiliPlus/models/cognitive_filter/user_rule_extra.dart';
 import 'package:PiliPlus/models/common/bar_hide_type.dart';
 import 'package:PiliPlus/models/common/danmaku/danmaku_font_sync_mode.dart';
@@ -1268,26 +1269,6 @@ abstract final class Pref {
   static set cfAiFilterEnabled(bool value) =>
       _setting.put(SettingBoxKey.cfAiFilterEnabled, value);
 
-  static FilterTier get cfFilterTier {
-    final index = _setting.get(
-      SettingBoxKey.cfFilterTier,
-      defaultValue: FilterTier.defaultTier.index,
-    );
-    if (index is int && index >= 0 && index < FilterTier.values.length) {
-      return FilterTier.values[index];
-    }
-    return FilterTier.defaultTier;
-  }
-
-  static set cfFilterTier(FilterTier value) =>
-      _setting.put(SettingBoxKey.cfFilterTier, value.index);
-
-  static bool get cfFilterProMode =>
-      _setting.get(SettingBoxKey.cfFilterProMode, defaultValue: false);
-
-  static set cfFilterProMode(bool value) =>
-      _setting.put(SettingBoxKey.cfFilterProMode, value);
-
   static String get cfApiBaseUrl => _setting.get(
     SettingBoxKey.cfApiBaseUrl,
     defaultValue: 'https://api.typesafe.ai/v1/systemone',
@@ -1419,14 +1400,14 @@ abstract final class Pref {
   static set cfAiUsageItems(int value) =>
       _setting.put(SettingBoxKey.cfAiUsageItems, _nonNegative(value));
 
-  /// 专业模式的总阈值，数值越小越敏感；没设过时取当前档位的阈值
+  /// 内置类别的总阈值，数值越小越敏感；没设过时取出厂门槛
   static double get cfProThreshold {
     final value = _setting.get(SettingBoxKey.cfProThreshold);
     if (value is num) {
       final threshold = value.toDouble();
       if (threshold.isFinite) return threshold.clamp(0.30, 0.95).toDouble();
     }
-    return cfFilterTier.threshold;
+    return kDefaultBlockThreshold;
   }
 
   static set cfProThreshold(double value) => _setting.put(
@@ -1573,6 +1554,21 @@ abstract final class Pref {
   static set cfLlmProxyAddress(String value) =>
       _setting.put(SettingBoxKey.cfLlmProxyAddress, value);
 
+  /// 屏蔽统计：累计屏蔽条数
+  static int get cfStatsBlocked => _usageInt(SettingBoxKey.cfStatsBlocked);
+
+  static set cfStatsBlocked(int value) =>
+      _setting.put(SettingBoxKey.cfStatsBlocked, _nonNegative(value));
+
+  /// 屏蔽统计的起始日期，格式 yyyy-MM-dd，还没开始统计时为空串
+  static String get cfStatsSince {
+    final value = _setting.get(SettingBoxKey.cfStatsSince);
+    return value is String ? value : '';
+  }
+
+  static set cfStatsSince(String value) =>
+      _setting.put(SettingBoxKey.cfStatsSince, value);
+
   /// 整理接口每日 token 上限，0 表示不限制；整理接口按量计费，和判定接口分开算
   static int get cfLlmDailyCapTokens {
     final value = _setting.get(SettingBoxKey.cfLlmDailyCapTokens);
@@ -1602,7 +1598,7 @@ abstract final class Pref {
   static set cfLlmUsageTokens(int value) =>
       _setting.put(SettingBoxKey.cfLlmUsageTokens, _nonNegative(value));
 
-  /// 校准向导对屏蔽门槛的累计调整量，加在档位或专业模式的门槛上
+  /// 校准向导对屏蔽门槛的累计调整量，加在总门槛上
   static double get cfAiThresholdDelta {
     final value = _setting.get(SettingBoxKey.cfAiThresholdDelta);
     if (value is num && value.isFinite) {

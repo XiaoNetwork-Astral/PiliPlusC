@@ -6,6 +6,7 @@ import 'package:PiliPlus/utils/cognitive_filter/ai/jev_request.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/judge_cache.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/judge_text.dart';
 import 'package:PiliPlus/utils/cognitive_filter/jev_client.dart';
+import 'package:PiliPlus/utils/cognitive_filter/raw_error.dart';
 
 /// 发一次请求并返回解码后的响应 Map，失败抛 [JevException]
 typedef JevTransport =
@@ -67,7 +68,7 @@ class JudgeStats {
   int outputTokens = 0;
   int failedRequests = 0;
 
-  /// 最近一次失败的人话说明，供界面提示
+  /// 最近一次失败的原始说明，供界面提示
   String? lastError;
 }
 
@@ -427,8 +428,8 @@ class JudgeService {
       } on JevException catch (error) {
         _onFailure(error, stats);
         return _BatchResult<T>.failed();
-      } catch (_) {
-        _onFailure(null, stats);
+      } catch (error) {
+        _onFailure(error, stats);
         return _BatchResult<T>.failed();
       }
     });
@@ -444,27 +445,22 @@ class JudgeService {
     return null;
   }
 
-  void _onFailure(JevException? error, JudgeStats stats) {
+  void _onFailure(Object? error, JudgeStats stats) {
     stats.failedRequests++;
-    stats.lastError = _errorText(error?.kind);
+    final jev = error is JevException ? error : null;
+    if (jev != null) {
+      stats.lastError = jev.message;
+    } else if (error == null) {
+      stats.lastError = '未知错误';
+    } else {
+      stats.lastError = truncateError(redactSecrets(error.toString()));
+    }
     _consecutiveFailures++;
-    final auth = error?.kind == JevErrorKind.auth;
+    final auth = jev?.kind == JevErrorKind.auth;
     if (auth || _consecutiveFailures >= breakerFailures) {
       _breakerUntil = _now().add(auth ? _authCooldown : breakerCooldown);
     }
   }
-
-  /// 把失败类别映射成给用户看的一句话
-  static String _errorText(JevErrorKind? kind) => switch (kind) {
-    JevErrorKind.auth => '密钥无效',
-    JevErrorKind.rateLimit => '请求太频繁',
-    JevErrorKind.badRequest => '请求被拒绝',
-    JevErrorKind.timeout => '连接超时，可能需要配置代理',
-    JevErrorKind.network => '网络连接失败，可能需要配置代理',
-    JevErrorKind.server => '服务端出错',
-    JevErrorKind.parse => '返回内容无法解析',
-    null => '请求失败',
-  };
 
   void _recordUsage(Map<String, dynamic> response, JudgeStats stats) {
     final usage = response['usage'];

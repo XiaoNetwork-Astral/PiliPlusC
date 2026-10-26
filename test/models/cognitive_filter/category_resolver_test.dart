@@ -2,10 +2,9 @@ import 'package:PiliPlus/models/cognitive_filter/builtin_categories.dart';
 import 'package:PiliPlus/models/cognitive_filter/category_resolver.dart';
 import 'package:PiliPlus/models/cognitive_filter/filter_category.dart';
 import 'package:PiliPlus/models/cognitive_filter/filter_surface.dart';
-import 'package:PiliPlus/models/cognitive_filter/filter_tier.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// 内置类别的出厂阈值：仅占位，统一为 0.55
+/// 内置类别常量里的阈值只是占位，统一为 0.55
 const _factoryThresholds = <String, double>{
   'attack': 0.55,
   'discrim': 0.55,
@@ -13,43 +12,6 @@ const _factoryThresholds = <String, double>{
   'mock': 0.55,
   'vulgar': 0.55,
   'promo': 0.55,
-};
-
-/// 规格要求的三档映射，逐项手写以便对照
-///
-/// 所有内置类别共用档位阈值；关闭的类别沿用同一阈值，便于开启时直接使用。
-const _expectedTierSettings = <FilterTier, Map<String, (bool, double)>>{
-  FilterTier.basic: {
-    'attack': (true, 0.90),
-    'discrim': (true, 0.90),
-    'bait': (false, 0.90),
-    'mock': (false, 0.90),
-    'vulgar': (false, 0.90),
-    'promo': (true, 0.90),
-  },
-  FilterTier.balanced: {
-    'attack': (true, 0.90),
-    'discrim': (true, 0.90),
-    'bait': (false, 0.90),
-    'mock': (false, 0.90),
-    'vulgar': (true, 0.90),
-    'promo': (true, 0.90),
-  },
-  FilterTier.strict: {
-    'attack': (true, 0.90),
-    'discrim': (true, 0.90),
-    'bait': (true, 0.90),
-    'mock': (false, 0.90),
-    'vulgar': (true, 0.90),
-    'promo': (true, 0.90),
-  },
-};
-
-/// 各档位的全局阈值，与 _expectedTierSettings 保持一致
-const _expectedTierThresholds = <FilterTier, double>{
-  FilterTier.basic: 0.90,
-  FilterTier.balanced: 0.90,
-  FilterTier.strict: 0.90,
 };
 
 FilterCategory _category({
@@ -78,189 +40,144 @@ FilterCategory _builtin(String id) =>
 FilterCategory _byId(List<FilterCategory> categories, String id) =>
     categories.firstWhere((category) => category.id == id);
 
+List<FilterCategory> _resolve({
+  double threshold = kDefaultBlockThreshold,
+  Map<String, dynamic> overrides = const <String, dynamic>{},
+  List<FilterCategory> custom = const <FilterCategory>[],
+  double calibrationDelta = 0,
+}) => resolveCategories(
+  threshold: threshold,
+  overrides: overrides,
+  custom: custom,
+  calibrationDelta: calibrationDelta,
+);
+
 void main() {
-  group('FilterTier', () {
-    test('三档阈值都是 0.90', () {
-      for (final tier in FilterTier.values) {
-        expect(
-          tier.threshold,
-          closeTo(_expectedTierThresholds[tier]!, 1e-9),
-          reason: '${tier.name} 的阈值',
-        );
-      }
-      expect(FilterTier.basic.threshold, closeTo(0.90, 1e-9));
-      expect(FilterTier.balanced.threshold, closeTo(0.90, 1e-9));
-      expect(FilterTier.strict.threshold, closeTo(0.90, 1e-9));
-    });
+  group('出厂默认', () {
+    test('空覆盖时只启用 attack、discrim 与 promo', () {
+      final categories = _resolve();
+      expect(
+        categories.map((category) => category.id),
+        builtinCategories.map((category) => category.id),
+      );
 
-    test('档位映射与规格逐项一致', () {
-      for (final tier in FilterTier.values) {
-        final settings = tier.builtinSettings;
-        final expected = _expectedTierSettings[tier]!;
-        expect(settings.keys.toSet(), expected.keys.toSet());
-        for (final entry in expected.entries) {
-          final actual = settings[entry.key]!;
-          expect(
-            actual.enabled,
-            entry.value.$1,
-            reason: '${tier.name}/${entry.key} 的开关',
-          );
-          expect(
-            actual.threshold,
-            closeTo(entry.value.$2, 1e-9),
-            reason: '${tier.name}/${entry.key} 的阈值',
-          );
-          // 所有内置类别共用档位阈值
-          expect(actual.threshold, closeTo(tier.threshold, 1e-9));
-        }
+      final enabled = {
+        for (final category in categories) category.id: category.enabled,
+      };
+      expect(enabled, {
+        'attack': true,
+        'discrim': true,
+        'bait': false,
+        'mock': false,
+        'vulgar': false,
+        'promo': true,
+      });
+
+      for (final category in categories) {
+        final factory = _builtin(category.id);
+        expect(category.builtin, isTrue);
+        expect(category.surfaces, FilterSurface.values.toSet());
+        expect(category.name, factory.name);
+        expect(category.summary, factory.summary);
+        expect(category.question, factory.question);
+        expect(category.trueCriteria, factory.trueCriteria);
+        expect(category.falseCriteria, factory.falseCriteria);
       }
     });
 
-    test('非专业模式按档位给出开关与阈值，题面与适用面用出厂值', () {
-      for (final tier in FilterTier.values) {
-        final categories = resolveCategories(
-          proMode: false,
-          tier: tier,
-          proThreshold: 0.42,
-          overrides: const <String, dynamic>{},
-          custom: const [],
-        );
-        expect(
-          categories.map((category) => category.id),
-          builtinCategories.map((category) => category.id),
-        );
+    test('内置类别阈值统一等于传入的 threshold', () {
+      for (final threshold in const [0.31, 0.55, 0.75, 0.95]) {
+        final categories = _resolve(threshold: threshold);
         for (final category in categories) {
-          final expected = _expectedTierSettings[tier]![category.id]!;
-          expect(category.enabled, expected.$1);
-          expect(category.threshold, closeTo(expected.$2, 1e-9));
-          expect(category.surfaces, FilterSurface.values.toSet());
-          expect(category.question, _builtin(category.id).question);
-          expect(category.name, _builtin(category.id).name);
-          expect(category.summary, _builtin(category.id).summary);
-          expect(category.trueCriteria, _builtin(category.id).trueCriteria);
-          expect(category.falseCriteria, _builtin(category.id).falseCriteria);
-          expect(category.builtin, isTrue);
+          expect(
+            category.threshold,
+            closeTo(threshold, 1e-9),
+            reason: 'threshold=$threshold 时 ${category.id} 的阈值',
+          );
         }
       }
-    });
-
-    test('默认档位为基础', () {
-      expect(FilterTier.defaultTier, FilterTier.basic);
-
-      final categories = resolveCategories(
-        proMode: false,
-        tier: FilterTier.defaultTier,
-        proThreshold: 0.42,
-        overrides: const <String, dynamic>{},
-        custom: const [],
-      );
-      expect(_byId(categories, 'attack').threshold, closeTo(0.90, 1e-9));
-      expect(_byId(categories, 'vulgar').enabled, isFalse);
-      expect(_byId(categories, 'bait').enabled, isFalse);
-      expect(_byId(categories, 'mock').enabled, isFalse);
-      expect(_byId(categories, 'mock').threshold, closeTo(0.90, 1e-9));
-    });
-
-    test('非专业模式忽略覆盖、proThreshold 和自定义类别', () {
-      final categories = resolveCategories(
-        proMode: false,
-        tier: FilterTier.basic,
-        proThreshold: 0.90,
-        overrides: {
-          'attack': {'threshold': 0.1, 'enabled': false},
-        },
-        custom: [_category(id: 'custom')],
-      );
-      expect(categories.length, builtinCategories.length);
-      expect(_byId(categories, 'attack').threshold, closeTo(0.90, 1e-9));
-      expect(_byId(categories, 'attack').enabled, isTrue);
-      expect(categories.any((category) => category.id == 'custom'), isFalse);
     });
   });
 
-  group('专业模式', () {
-    test('内置类别统一用 proThreshold，覆盖里其它字段照常叠加', () {
-      final categories = resolveCategories(
-        // 专业模式不使用档位，传严格档验证这一点
-        proMode: true,
-        tier: FilterTier.strict,
-        proThreshold: 0.62,
+  group('覆盖叠加', () {
+    test('覆盖里的 enabled、适用面、名称、摘要、题面与标准都照常叠加', () {
+      final categories = _resolve(
+        threshold: 0.62,
         overrides: {
-          'attack': {'threshold': 0.42},
-          'mock': {
-            'enabled': true,
-            'question': '自定义问句？',
-            'surfaces': ['danmaku'],
+          'attack': {
+            'threshold': 0.42,
+            'enabled': false,
+            'surfaces': ['reply', 'video'],
+            'name': '覆盖后的名称',
+            'summary': '覆盖后的摘要',
+            'question': '覆盖后的问句？',
+            'trueCriteria': '覆盖后的算作是',
+            'falseCriteria': '覆盖后的算作否',
           },
         },
-        custom: const [],
       );
-      expect(categories.length, builtinCategories.length);
-
       final attack = _byId(categories, 'attack');
-      // 覆盖里的 threshold 不生效，统一用 proThreshold
+      expect(attack.enabled, isFalse);
+      expect(attack.surfaces, {FilterSurface.reply, FilterSurface.video});
+      expect(attack.name, '覆盖后的名称');
+      expect(attack.summary, '覆盖后的摘要');
+      expect(attack.question, '覆盖后的问句？');
+      expect(attack.trueCriteria, '覆盖后的算作是');
+      expect(attack.falseCriteria, '覆盖后的算作否');
+      // 覆盖里的 threshold 不生效，统一用传入的 threshold
       expect(attack.threshold, closeTo(0.62, 1e-9));
-      // 覆盖里没有 enabled，沿用出厂值
-      expect(attack.enabled, isTrue);
-      expect(attack.question, _builtin('attack').question);
-
-      final mock = _byId(categories, 'mock');
-      expect(mock.enabled, isTrue);
-      expect(mock.question, '自定义问句？');
-      expect(mock.surfaces, {FilterSurface.danmaku});
-      // 覆盖里没有 name，沿用出厂值
-      expect(mock.name, _builtin('mock').name);
-      expect(mock.threshold, closeTo(0.62, 1e-9));
-
-      // 严格档下 bait 应开启，但专业模式只看出厂值
-      expect(_byId(categories, 'bait').enabled, isFalse);
-      expect(_byId(categories, 'bait').threshold, closeTo(0.62, 1e-9));
     });
 
-    test('改变 proThreshold，所有内置类别阈值随之变化', () {
+    test('未覆盖的字段沿用出厂值', () {
+      final categories = _resolve(
+        threshold: 0.58,
+        overrides: {
+          'mock': {'enabled': true},
+        },
+      );
+      final mock = _byId(categories, 'mock');
+      expect(mock.enabled, isTrue);
+      expect(mock.name, _builtin('mock').name);
+      expect(mock.summary, _builtin('mock').summary);
+      expect(mock.question, _builtin('mock').question);
+      expect(mock.trueCriteria, _builtin('mock').trueCriteria);
+      expect(mock.falseCriteria, _builtin('mock').falseCriteria);
+      expect(mock.surfaces, _builtin('mock').surfaces);
+      expect(mock.threshold, closeTo(0.58, 1e-9));
+
+      // 未覆盖的 bait 沿用出厂的关闭状态
+      expect(_byId(categories, 'bait').enabled, isFalse);
+    });
+
+    test('改变 threshold，所有内置类别阈值随之变化', () {
       for (final threshold in const [0.30, 0.55, 0.75, 0.95]) {
-        final categories = resolveCategories(
-          proMode: true,
-          tier: FilterTier.balanced,
-          proThreshold: threshold,
-          overrides: const <String, dynamic>{},
-          custom: const [],
-        );
+        final categories = _resolve(threshold: threshold);
         for (final category in categories) {
           expect(category.builtin, isTrue);
           expect(
             category.threshold,
             closeTo(threshold, 1e-9),
-            reason: 'proThreshold=$threshold 时 ${category.id} 的阈值',
+            reason: 'threshold=$threshold 时 ${category.id} 的阈值',
           );
         }
       }
     });
 
     test('覆盖里的 threshold 被忽略', () {
-      final categories = resolveCategories(
-        proMode: true,
-        tier: FilterTier.basic,
-        proThreshold: 0.66,
+      final categories = _resolve(
+        threshold: 0.66,
         overrides: {
           'attack': {'threshold': 0.1},
           'bait': {'threshold': 3},
         },
-        custom: const [],
       );
       expect(_byId(categories, 'attack').threshold, closeTo(0.66, 1e-9));
       expect(_byId(categories, 'bait').threshold, closeTo(0.66, 1e-9));
     });
 
-    test('自定义类别保留自己的阈值，不受 proThreshold 影响', () {
+    test('自定义类别保留自己的阈值，不受 threshold 影响', () {
       final custom = _category(id: 'custom-1', threshold: 0.9);
-      final categories = resolveCategories(
-        proMode: true,
-        tier: FilterTier.basic,
-        proThreshold: 0.35,
-        overrides: const <String, dynamic>{},
-        custom: [custom],
-      );
+      final categories = _resolve(threshold: 0.35, custom: [custom]);
       expect(_byId(categories, 'attack').threshold, closeTo(0.35, 1e-9));
       expect(categories.last.id, 'custom-1');
       expect(categories.last.threshold, closeTo(0.9, 1e-9));
@@ -270,49 +187,53 @@ void main() {
       final overrides = <String, dynamic>{
         'vulgar': {'question': '被覆盖的问句？'},
       };
-      var categories = resolveCategories(
-        proMode: true,
-        tier: FilterTier.basic,
-        proThreshold: 0.50,
-        overrides: overrides,
-        custom: const [],
-      );
+      var categories = _resolve(threshold: 0.50, overrides: overrides);
       expect(_byId(categories, 'vulgar').question, '被覆盖的问句？');
       expect(_byId(categories, 'vulgar').threshold, closeTo(0.50, 1e-9));
 
       overrides.remove('vulgar');
-      categories = resolveCategories(
-        proMode: true,
-        tier: FilterTier.basic,
-        proThreshold: 0.50,
-        overrides: overrides,
-        custom: const [],
-      );
+      categories = _resolve(threshold: 0.50, overrides: overrides);
       expect(_byId(categories, 'vulgar').question, _builtin('vulgar').question);
       expect(_byId(categories, 'vulgar').threshold, closeTo(0.50, 1e-9));
     });
 
     test('覆盖里的非法字段与类型被忽略', () {
-      final categories = resolveCategories(
-        proMode: true,
-        tier: FilterTier.basic,
-        proThreshold: 0.58,
+      final categories = _resolve(
+        threshold: 0.58,
         overrides: {
           'attack': {
             'enabled': 'yes',
             'threshold': 'not-a-number',
             'surfaces': 'danmaku',
+            'name': 42,
+            'summary': null,
             'question': 42,
+            'trueCriteria': false,
+            'falseCriteria': <String>[],
             'unknown': 'ignored',
           },
         },
-        custom: const [],
       );
       final attack = _byId(categories, 'attack');
       expect(attack.enabled, isTrue);
       expect(attack.threshold, closeTo(0.58, 1e-9));
       expect(attack.surfaces, FilterSurface.values.toSet());
+      expect(attack.name, _builtin('attack').name);
+      expect(attack.summary, _builtin('attack').summary);
       expect(attack.question, _builtin('attack').question);
+      expect(attack.trueCriteria, _builtin('attack').trueCriteria);
+      expect(attack.falseCriteria, _builtin('attack').falseCriteria);
+    });
+
+    test('覆盖里的 surfaces 只认已知的适用面名称', () {
+      final categories = _resolve(
+        overrides: {
+          'attack': {
+            'surfaces': ['danmaku', 'unknown', 1],
+          },
+        },
+      );
+      expect(_byId(categories, 'attack').surfaces, {FilterSurface.danmaku});
     });
 
     test('自定义类别追加在出厂类别之后且不叠加覆盖', () {
@@ -322,12 +243,10 @@ void main() {
         enabled: true,
         surfaces: const {FilterSurface.dynamic},
       );
-      final categories = resolveCategories(
-        proMode: true,
-        tier: FilterTier.basic,
-        proThreshold: 0.45,
+      final categories = _resolve(
+        threshold: 0.45,
         overrides: {
-          'custom-1': {'threshold': 0.1},
+          'custom-1': {'threshold': 0.1, 'enabled': false},
         },
         custom: [custom],
       );
@@ -335,22 +254,71 @@ void main() {
       final appended = categories.last;
       expect(appended.id, 'custom-1');
       expect(appended.threshold, 0.9);
+      expect(appended.enabled, isTrue);
       expect(appended.surfaces, {FilterSurface.dynamic});
     });
   });
 
-  group('overridesFromTier', () {
-    test('只产出 enabled 字段，值与档位一致', () {
-      for (final tier in FilterTier.values) {
-        final overrides = overridesFromTier(tier);
-        final expected = _expectedTierSettings[tier]!;
-        expect(overrides.keys.toSet(), expected.keys.toSet());
-        for (final entry in overrides.entries) {
-          final value = entry.value as Map;
-          expect(value.keys.toSet(), {'enabled'});
-          expect(value['enabled'], expected[entry.key]!.$1);
-        }
+  group('calibrationDelta', () {
+    test('正负偏移都会加在内置类别阈值上', () {
+      final raised = _resolve(threshold: 0.62, calibrationDelta: 0.1);
+      for (final category in raised) {
+        expect(
+          category.threshold,
+          closeTo(0.72, 1e-9),
+          reason: '${category.id} 的正向偏移',
+        );
       }
+
+      final lowered = _resolve(threshold: 0.62, calibrationDelta: -0.1);
+      for (final category in lowered) {
+        expect(
+          category.threshold,
+          closeTo(0.52, 1e-9),
+          reason: '${category.id} 的负向偏移',
+        );
+      }
+
+      // 不传时默认不偏移
+      final unchanged = _resolve(threshold: 0.62);
+      for (final category in unchanged) {
+        expect(category.threshold, closeTo(0.62, 1e-9));
+      }
+    });
+
+    test('低于 0.30 时钳位到 0.30', () {
+      final negative = _resolve(threshold: 0.35, calibrationDelta: -0.2);
+      for (final category in negative) {
+        expect(category.threshold, closeTo(0.30, 1e-9));
+      }
+
+      final farBelow = _resolve(threshold: 0.90, calibrationDelta: -1.0);
+      for (final category in farBelow) {
+        expect(category.threshold, closeTo(0.30, 1e-9));
+      }
+    });
+
+    test('高于 0.99 时钳位到 0.99', () {
+      final positive = _resolve(threshold: 0.95, calibrationDelta: 0.2);
+      for (final category in positive) {
+        expect(category.threshold, closeTo(0.99, 1e-9));
+      }
+
+      final farAbove = _resolve(threshold: 0.90, calibrationDelta: 1.0);
+      for (final category in farAbove) {
+        expect(category.threshold, closeTo(0.99, 1e-9));
+      }
+    });
+
+    test('自定义类别阈值不受校准调整量影响', () {
+      final categories = _resolve(
+        threshold: 0.62,
+        calibrationDelta: 0.1,
+        custom: [_category(id: 'custom-1', threshold: 0.40)],
+      );
+      expect(_byId(categories, 'attack').threshold, closeTo(0.72, 1e-9));
+      expect(categories.last.id, 'custom-1');
+      expect(categories.last.threshold, closeTo(0.40, 1e-9));
     });
   });
 
@@ -384,18 +352,38 @@ void main() {
       expect(activeCategoriesFor(FilterSurface.video, categories), isEmpty);
     });
 
-    test('非专业模式的基础档只筛出启用的三个类别', () {
-      final categories = resolveCategories(
-        proMode: false,
-        tier: FilterTier.basic,
-        proThreshold: 0.42,
-        overrides: const <String, dynamic>{},
-        custom: const [],
+    test('出厂默认只筛出启用的 attack、discrim 与 promo', () {
+      final categories = _resolve();
+      expect(
+        activeCategoriesFor(FilterSurface.danmaku, categories)
+            .map((category) => category.id),
+        ['attack', 'discrim', 'promo'],
+      );
+      expect(
+        activeCategoriesFor(FilterSurface.live, categories)
+            .map((category) => category.id),
+        ['attack', 'discrim', 'promo'],
+      );
+    });
+
+    test('覆盖开启并限定适用面后按新适用面筛选', () {
+      final categories = _resolve(
+        overrides: {
+          'vulgar': {
+            'enabled': true,
+            'surfaces': ['video'],
+          },
+        },
       );
       expect(
         activeCategoriesFor(FilterSurface.danmaku, categories)
             .map((category) => category.id),
         ['attack', 'discrim', 'promo'],
+      );
+      expect(
+        activeCategoriesFor(FilterSurface.video, categories)
+            .map((category) => category.id),
+        ['attack', 'discrim', 'vulgar', 'promo'],
       );
     });
   });
@@ -406,12 +394,15 @@ void main() {
         builtinCategories.map((category) => category.id),
         ['attack', 'discrim', 'bait', 'mock', 'vulgar', 'promo'],
       );
+      expect(kDefaultBlockThreshold, closeTo(0.90, 1e-9));
       for (final category in builtinCategories) {
         expect(category.builtin, isTrue);
         expect(category.surfaces, FilterSurface.values.toSet());
         expect(category.threshold, _factoryThresholds[category.id]);
         expect(category.question, isNotEmpty);
         expect(category.question.startsWith('只判断'), isFalse);
+        expect(category.question.contains('是否'), isTrue);
+        expect(category.question.endsWith('？'), isTrue);
         expect(category.trueCriteria, isNotEmpty);
         expect(category.falseCriteria, isNotEmpty);
         expect(category.summary.runes.length, lessThanOrEqualTo(20));
@@ -420,7 +411,7 @@ void main() {
       expect(_builtin('discrim').enabled, isTrue);
       expect(_builtin('bait').enabled, isFalse);
       expect(_builtin('mock').enabled, isFalse);
-      expect(_builtin('vulgar').enabled, isTrue);
+      expect(_builtin('vulgar').enabled, isFalse);
       expect(_builtin('promo').enabled, isTrue);
     });
   });

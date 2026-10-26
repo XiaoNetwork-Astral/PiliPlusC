@@ -1,42 +1,24 @@
 import 'package:PiliPlus/models/cognitive_filter/builtin_categories.dart';
 import 'package:PiliPlus/models/cognitive_filter/filter_category.dart';
 import 'package:PiliPlus/models/cognitive_filter/filter_surface.dart';
-import 'package:PiliPlus/models/cognitive_filter/filter_tier.dart';
 
-/// 按当前模式解析出实际生效的类别列表
+/// 解析出实际生效的类别列表
 ///
-/// 非专业模式只用档位决定内置类别的开关与阈值，题面与适用面用出厂值；
-/// 专业模式以出厂值为底，叠加 [overrides] 里用户改过的字段，内置类别统一用
-/// [proThreshold]（总敏感度），再追加自定义类别（各自保留自己的阈值）。
+/// 以出厂值为底，叠加 [overrides] 里用户改过的字段，内置类别统一用
+/// [threshold]（总敏感度），再追加自定义类别（各自保留自己的阈值）。
 /// 校准向导的累计调整量 [calibrationDelta] 只加在内置类别的阈值上。
 List<FilterCategory> resolveCategories({
-  required bool proMode,
-  required FilterTier tier,
-  required double proThreshold,
+  required double threshold,
   required Map<String, dynamic> overrides,
   required List<FilterCategory> custom,
   double calibrationDelta = 0,
 }) {
-  if (!proMode) {
-    final settings = tier.builtinSettings;
-    return [
-      for (final category in builtinCategories)
-        category.copyWith(
-          enabled: settings[category.id]?.enabled ?? category.enabled,
-          threshold: _shifted(
-            settings[category.id]?.threshold ?? category.threshold,
-            calibrationDelta,
-          ),
-        ),
-    ];
-  }
-
   return [
     for (final category in builtinCategories)
       _applyOverride(
         category,
         overrides[category.id],
-      ).copyWith(threshold: _shifted(proThreshold, calibrationDelta)),
+      ).copyWith(threshold: _shifted(threshold, calibrationDelta)),
     ...custom,
   ];
 }
@@ -52,16 +34,6 @@ List<FilterCategory> activeCategoriesFor(
 ) => all
     .where((category) => category.enabled && category.surfaces.contains(surface))
     .toList();
-
-/// 从档位复制出覆盖，只包含 enabled 字段（阈值是全局的，不放进覆盖）
-///
-/// 供第一次开启专业模式时使用，避免切换瞬间屏蔽行为突变
-Map<String, dynamic> overridesFromTier(FilterTier tier) => {
-  for (final entry in tier.builtinSettings.entries)
-    entry.key: <String, dynamic>{
-      'enabled': entry.value.enabled,
-    },
-};
 
 FilterCategory _applyOverride(FilterCategory category, Object? raw) {
   if (raw is! Map) return category;

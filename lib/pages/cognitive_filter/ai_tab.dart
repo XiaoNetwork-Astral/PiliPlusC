@@ -19,9 +19,7 @@ import 'package:material_ui/material_ui.dart';
 ///
 /// 对规则屏蔽后的内容再交给 Jev 二次判断
 class AiFilterTab extends StatefulWidget {
-  const AiFilterTab({super.key, required this.proMode});
-
-  final bool proMode;
+  const AiFilterTab({super.key});
 
   @override
   State<AiFilterTab> createState() => _AiFilterTabState();
@@ -162,19 +160,17 @@ class _AiFilterTabState extends State<AiFilterTab> {
           title: '清除缓存',
           onTap: _clearCache,
         ),
-        if (widget.proMode) ...[
-          CfTile(
-            icon: Icons.category_outlined,
-            title: '类别规则',
-            subtitle: '调整每个类别的开关、阈值与适用面',
-            onTap: _openCategories,
-          ),
-          CfTile(
-            icon: Icons.science_outlined,
-            title: '试判定',
-            onTap: () => showJudgeTrialDialog(context),
-          ),
-        ],
+        CfTile(
+          icon: Icons.category_outlined,
+          title: '类别规则',
+          subtitle: '调整每个类别的开关、阈值与适用面',
+          onTap: _openCategories,
+        ),
+        CfTile(
+          icon: Icons.science_outlined,
+          title: '试判定',
+          onTap: () => showJudgeTrialDialog(context),
+        ),
       ],
     );
   }

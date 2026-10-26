@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'package:PiliPlus/utils/cognitive_filter/ai/calibration/calibration_models.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/calibration/llm_client.dart';
+import 'package:PiliPlus/utils/cognitive_filter/raw_error.dart';
 
 /// 一轮整理调用模型时的 system 提示
 const String calibrationSystemPrompt =
@@ -24,6 +25,7 @@ class RoundResult {
     required this.droppedIds,
     required this.refusedChunks,
     this.abortedBy,
+    this.abortMessage,
     required this.processedChunks,
   });
 
@@ -41,6 +43,9 @@ class RoundResult {
 
   /// 非空表示因网络/密钥/限流/服务端/超时/用量上限中止，池里条目保持不动
   final LlmErrorKind? abortedBy;
+
+  /// 中止时最后那个异常的原始说明；没有异常可用时为空
+  final String? abortMessage;
 
   /// 实际处理过的批数
   final int processedChunks;
@@ -88,6 +93,7 @@ Future<RoundResult> runRound({
   final questions = <CalibrationQuestion>[];
   final total = chunks.length;
   LlmErrorKind? abortedBy;
+  String? abortMessage;
   var refusedChunks = 0;
   var processedChunks = 0;
 
@@ -97,7 +103,9 @@ Future<RoundResult> runRound({
     }
     // 每批开始前确认今日用量额度；已到上限就停掉整轮，已得的题保留
     if (shouldStop?.call() ?? false) {
-      abortedBy = LlmErrorKind.budget;
+      const budgetError = LlmException(LlmErrorKind.budget, '已达今日用量上限');
+      abortedBy = budgetError.kind;
+      abortMessage = budgetError.message;
       break;
     }
     final chunk = chunks[index];
@@ -127,6 +135,7 @@ Future<RoundResult> runRound({
         final kind = error is LlmException ? error.kind : LlmErrorKind.network;
         if (kind == LlmErrorKind.auth || kind == LlmErrorKind.budget) {
           abortedBy = kind;
+          abortMessage = _errorMessage(error);
           abort = true;
           break;
         }
@@ -141,6 +150,7 @@ Future<RoundResult> runRound({
           if (otherFailures >= _maxOtherAttempts) {
             // 与模型输出无关，说明网络或服务有问题：停掉整轮，池里条目不动
             abortedBy = kind;
+            abortMessage = _errorMessage(error);
             abort = true;
             break;
           }
@@ -171,6 +181,7 @@ Future<RoundResult> runRound({
     droppedIds: droppedIds,
     refusedChunks: refusedChunks,
     abortedBy: abortedBy,
+    abortMessage: abortMessage,
     processedChunks: processedChunks,
   );
 }
@@ -184,6 +195,14 @@ const int _maxOtherAttempts = 3;
 /// 是不是模型输出本身的问题（解析不了或被拒绝）
 bool _isOutputProblem(LlmErrorKind kind) =>
     kind == LlmErrorKind.parse || kind == LlmErrorKind.refused;
+
+/// 取异常里给用户看的原始说明，非 [LlmException] 也脱敏并截断
+String _errorMessage(Object error) {
+  if (error is LlmException) {
+    return error.message;
+  }
+  return truncateError(redactSecrets(error.toString()));
+}
 
 /// 拼出 user 提示：开头说明 + 逐行“编号. 文本”
 String _buildUserPrompt(List<PoolItem> chunk) {

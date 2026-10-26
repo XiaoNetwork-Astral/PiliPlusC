@@ -6,25 +6,11 @@ import 'package:PiliPlus/utils/storage_pref.dart';
 abstract final class CognitiveFilterConfig {
   /// 当前实际生效的类别列表
   static List<FilterCategory> get effectiveCategories => resolveCategories(
-    proMode: Pref.cfFilterProMode,
-    tier: Pref.cfFilterTier,
-    proThreshold: Pref.cfProThreshold,
+    threshold: Pref.cfProThreshold,
     overrides: Pref.cfCategoryOverrides,
     custom: Pref.cfCustomCategories,
     calibrationDelta: Pref.cfAiThresholdDelta,
   );
-
-  /// 开启专业模式
-  ///
-  /// 第一次开启时若还没有覆盖，先从当前档位复制一份，避免屏蔽行为突变
-  static void enterProMode() {
-    if (Pref.cfFilterProMode) return;
-    if (Pref.cfCategoryOverrides.isEmpty) {
-      Pref.cfCategoryOverrides = overridesFromTier(Pref.cfFilterTier);
-      Pref.cfProThreshold = Pref.cfFilterTier.threshold;
-    }
-    Pref.cfFilterProMode = true;
-  }
 
   /// 恢复某个内置类别的出厂默认，即删除该 id 的覆盖
   static void resetCategory(String id) {

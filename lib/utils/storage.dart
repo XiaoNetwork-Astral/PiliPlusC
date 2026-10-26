@@ -35,6 +35,8 @@ abstract final class GStorage {
     SettingBoxKey.cfAiUsageItems,
     SettingBoxKey.cfLlmUsageDay,
     SettingBoxKey.cfLlmUsageTokens,
+    SettingBoxKey.cfStatsBlocked,
+    SettingBoxKey.cfStatsSince,
   };
 
   static late final Box<UserInfoData> userInfo;

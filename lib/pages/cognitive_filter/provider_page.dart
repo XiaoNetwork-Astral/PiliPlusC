@@ -8,6 +8,7 @@ import 'package:PiliPlus/utils/cognitive_filter/ai/calibration/calibration_servi
 import 'package:PiliPlus/utils/cognitive_filter/ai/calibration/llm_client.dart';
 import 'package:PiliPlus/utils/cognitive_filter/jev_client.dart';
 import 'package:PiliPlus/utils/cognitive_filter/jev_proxy.dart';
+import 'package:PiliPlus/utils/cognitive_filter/raw_error.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
 import 'package:flutter/services.dart' show FilteringTextInputFormatter;
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
@@ -240,8 +241,8 @@ class _FilterProviderPageState extends State<FilterProviderPage> {
           ? (result.ok ? '连接成功' : '连接失败')
           : result.message;
       return message.replaceAll(apiKey, '***');
-    } catch (_) {
-      return '连接失败，请检查接口地址与网络';
+    } catch (error) {
+      return truncateError(redactSecrets(error.toString(), secrets: [apiKey]));
     }
   }
 
@@ -257,9 +258,11 @@ class _FilterProviderPageState extends State<FilterProviderPage> {
       ).test();
       return '连接成功';
     } on LlmException catch (error) {
-      return llmErrorText(error.kind);
-    } catch (_) {
-      return '连接失败，请检查接口地址与网络';
+      return error.message;
+    } catch (error) {
+      return truncateError(
+        redactSecrets(error.toString(), secrets: [store.getApiKey()]),
+      );
     }
   }
 }

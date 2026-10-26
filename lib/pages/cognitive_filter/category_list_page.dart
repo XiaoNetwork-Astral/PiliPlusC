@@ -11,7 +11,7 @@ import 'package:material_ui/material_ui.dart';
 
 /// 类别规则列表
 ///
-/// 只在专业模式下使用，列出当前生效的类别
+/// 列出当前生效的类别
 class CategoryRulesPage extends StatefulWidget {
   const CategoryRulesPage({super.key});
 

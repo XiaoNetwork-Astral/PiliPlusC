@@ -67,6 +67,7 @@ void main() {
     expect(result.droppedIds, isEmpty);
     expect(result.refusedChunks, 0);
     expect(result.abortedBy, isNull);
+    expect(result.abortMessage, isNull);
     expect(result.processedChunks, 1);
     expect(progress, <List<int>>[
       <int>[1, 1],
@@ -253,6 +254,7 @@ void main() {
 
     expect(fake.calls, hasLength(3));
     expect(result.abortedBy, LlmErrorKind.server);
+    expect(result.abortMessage, '挂了');
     expect(result.droppedIds, isEmpty);
     expect(result.usedIds, isEmpty);
   });
@@ -273,6 +275,7 @@ void main() {
 
     expect(fake.calls, hasLength(1));
     expect(result.abortedBy, LlmErrorKind.auth);
+    expect(result.abortMessage, '无效');
   });
 
   test('refused 两次失败则整批进 droppedIds', () async {
@@ -344,6 +347,7 @@ void main() {
     expect(result.usedIds, hasLength(3));
     expect(result.droppedIds, isEmpty);
     expect(result.abortedBy, LlmErrorKind.timeout);
+    expect(result.abortMessage, '超时');
     expect(result.processedChunks, 2);
     expect(progress, <List<int>>[
       <int>[1, 2],
@@ -364,6 +368,7 @@ void main() {
     );
 
     expect(result.abortedBy, LlmErrorKind.network);
+    expect(result.abortMessage, 'Bad state: 坏了');
     expect(result.questions, isEmpty);
     expect(result.droppedIds, isEmpty);
     expect(result.usedIds, isEmpty);
@@ -421,6 +426,7 @@ void main() {
     expect(result.usedIds, hasLength(3));
     expect(result.droppedIds, isEmpty);
     expect(result.abortedBy, LlmErrorKind.budget);
+    expect(result.abortMessage, '已达今日用量上限');
     expect(result.processedChunks, 1);
   });
 

@@ -9,10 +9,13 @@ const Set<FilterSurface> _allSurfaces = {
   FilterSurface.live,
 };
 
+/// 内置类别共用的出厂屏蔽门槛：只拦十足把握的内容，拿不准的一律放行
+const double kDefaultBlockThreshold = 0.90;
+
 /// 内置类别，id 固定不变，存储里只记录对它们的覆盖
 ///
-/// 出厂默认等于「基础」档：attack、discrim、vulgar、promo 开启，
-/// bait、mock 关闭，适用面均为五个全选；内置类别共用一个总阈值（出厂 0.55），
+/// 出厂默认只开 attack、discrim、promo，其余关闭，适用面均为五个全选；
+/// 内置类别共用一个总阈值（出厂见 [kDefaultBlockThreshold]），
 /// 这里的 threshold 只是占位。
 const List<FilterCategory> builtinCategories = [
   FilterCategory(
@@ -81,7 +84,7 @@ const List<FilterCategory> builtinCategories = [
     falseCriteria:
         '不含性意味的粗口感叹、普通玩笑、游戏术语、正常情感表达，以及不针对具体人的夸张情绪、游戏语境里的“杀”“打爆”、无恶意的玩梗，都算“否”。',
     threshold: 0.55,
-    enabled: true,
+    enabled: false,
     surfaces: _allSurfaces,
     builtin: true,
   ),
