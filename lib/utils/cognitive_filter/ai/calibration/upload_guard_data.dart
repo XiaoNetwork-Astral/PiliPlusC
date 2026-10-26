@@ -2,6 +2,12 @@ import 'package:PiliPlus/utils/cognitive_filter/ai/calibration/upload_guard.dart
 import 'package:PiliPlus/utils/cognitive_filter/ai/calibration/upload_guard_codec.dart';
 
 // 数据文件。
+//
+// 备注：下面的数据是「校准向导」的上传过滤清单，作用是把容易被第三方大模型
+// 服务拒绝、或让用户账号和服务商惹上麻烦的敏感话题挡在上传之外，命中的内容
+// 既不进收集池，也不会发给整理接口。它是出于合规和稳妥的内容过滤，不代表本项目
+// 或作者对任何政治话题的立场，也不用于传播、推广任何观点。清单为避免被关键词
+// 扫描误伤而做了编码存放，用户可以在「不外传规则」页自行补充。
 
 /// 内置规则的编码数据
 const String kDefaultGuardBlob =
