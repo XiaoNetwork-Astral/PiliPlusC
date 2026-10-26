@@ -14,6 +14,7 @@ import 'package:PiliPlus/models/model_hot_video_item.dart';
 import 'package:PiliPlus/models/model_rec_video_item.dart';
 import 'package:PiliPlus/models/model_video.dart';
 import 'package:PiliPlus/models/search/result.dart';
+import 'package:PiliPlus/pages/cognitive_filter/danmaku_preview_player.dart';
 import 'package:PiliPlus/pages/cognitive_filter/widgets.dart';
 import 'package:PiliPlus/pages/dynamics/widgets/dynamic_panel.dart';
 import 'package:PiliPlus/pages/video/reply/widgets/reply_item_grpc.dart';
@@ -56,6 +57,8 @@ class _JudgeHistoryDetailPageState extends State<JudgeHistoryDetailPage>
   late final AnimationController _danmakuAnimation;
   bool _danmakuDone = false;
   Widget? _snapshot;
+  final GlobalKey<DanmakuPreviewPlayerState> _previewKey =
+      GlobalKey<DanmakuPreviewPlayerState>();
 
   JudgeHistoryEntry get _entry => widget.entry;
 
@@ -71,7 +74,7 @@ class _JudgeHistoryDetailPageState extends State<JudgeHistoryDetailPage>
       }
     });
     _buildSnapshot();
-    if (_type == 'danmaku') {
+    if (_type == 'danmaku' && !_hasDanmakuPreview) {
       _danmakuAnimation.forward();
     }
   }
@@ -99,6 +102,9 @@ class _JudgeHistoryDetailPageState extends State<JudgeHistoryDetailPage>
     }
     return null;
   }
+
+  /// 有 bvid 与 cid 才尝试播原视频，否则保持纯黑画布
+  bool get _hasDanmakuPreview => _str('bvid') != null && _int('cid') != null;
 
   FilterSurface? _surfaceOf(String label) {
     for (final surface in FilterSurface.values) {
@@ -196,11 +202,29 @@ class _JudgeHistoryDetailPageState extends State<JudgeHistoryDetailPage>
     return null;
   }
 
+  /// 视频开始出画（或确认只能黑底）后再启动弹幕，保证同一时间起点
+  void _onVideoReady() {
+    if (!mounted || _type != 'danmaku') {
+      return;
+    }
+    setState(() => _danmakuDone = false);
+    _danmakuAnimation
+      ..reset()
+      ..forward();
+  }
+
   void _replayDanmaku() {
     if (_type != 'danmaku') {
       return;
     }
     setState(() => _danmakuDone = false);
+    final preview = _previewKey.currentState;
+    if (preview != null) {
+      // 先停在起点，等视频 seek 好再一起播
+      _danmakuAnimation.reset();
+      preview.replay();
+      return;
+    }
     _danmakuAnimation
       ..reset()
       ..forward();
@@ -413,67 +437,86 @@ class _JudgeHistoryDetailPageState extends State<JudgeHistoryDetailPage>
     final color = rawColor == null || rawColor == 0
         ? Colors.white
         : Color(0xFF000000 | (rawColor & 0xFFFFFF));
+    final danmakuLayer = AnimatedBuilder(
+      animation: _danmakuAnimation,
+      builder: (context, _) {
+        if (_danmakuDone) {
+          return Center(
+            child: Text(
+              _entry.text,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: color, fontSize: 18),
+            ),
+          );
+        }
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final width = constraints.maxWidth;
+            final left = width - width * 2 * _danmakuAnimation.value;
+            return Stack(
+              children: [
+                Positioned(
+                  left: left,
+                  top: 0,
+                  bottom: 0,
+                  child: Center(
+                    child: Text(
+                      _entry.text,
+                      style: TextStyle(color: color, fontSize: 18),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+    final meta = _entry.meta;
+    final canvas = meta != null && _hasDanmakuPreview
+        ? DanmakuPreviewPlayer(
+            key: _previewKey,
+            meta: meta,
+            onVideoReady: _onVideoReady,
+            child: danmakuLayer,
+          )
+        : danmakuLayer;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           GestureDetector(
+            behavior: HitTestBehavior.opaque,
             onTap: _replayDanmaku,
             child: AspectRatio(
               aspectRatio: 16 / 9,
-              child: AnimatedBuilder(
-                animation: _danmakuAnimation,
-                builder: (context, child) {
-                  return DecoratedBox(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  DecoratedBox(
                     decoration: BoxDecoration(
                       color: Colors.black,
                       borderRadius: BorderRadius.circular(8),
-                      border: _danmakuDone
-                          ? Border.all(
-                              color: theme.colorScheme.primary,
-                              width: 2,
-                            )
-                          : null,
                     ),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(8),
-                      child: _danmakuDone
-                          ? Center(
-                              child: Text(
-                                _entry.text,
-                                textAlign: TextAlign.center,
-                                style: TextStyle(color: color, fontSize: 18),
-                              ),
-                            )
-                          : LayoutBuilder(
-                              builder: (context, constraints) {
-                                final width = constraints.maxWidth;
-                                final left =
-                                    width - width * 2 * _danmakuAnimation.value;
-                                return Stack(
-                                  children: [
-                                    Positioned(
-                                      left: left,
-                                      top: 0,
-                                      bottom: 0,
-                                      child: Center(
-                                        child: Text(
-                                          _entry.text,
-                                          style: TextStyle(
-                                            color: color,
-                                            fontSize: 18,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                );
-                              },
-                            ),
+                      child: canvas,
                     ),
-                  );
-                },
+                  ),
+                  if (_danmakuDone)
+                    IgnorePointer(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: theme.colorScheme.primary,
+                            width: 2,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
           ),

@@ -1353,6 +1353,15 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
                               introController.videoDetail.value.title ?? '',
                           partition: () =>
                               introController.videoDetail.value.tname ?? '',
+                          source: () => <String, dynamic>{
+                            'bvid': videoDetailController.bvid,
+                            'aid': videoDetailController.aid,
+                            'videoType': videoDetailController.videoType.name,
+                            if (videoDetailController.epId != null)
+                              'epId': videoDetailController.epId,
+                            if (videoDetailController.seasonId != null)
+                              'seasonId': videoDetailController.seasonId,
+                          },
                         ),
                       ),
                     ),

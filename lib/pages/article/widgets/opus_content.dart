@@ -61,7 +61,13 @@ class OpusContent extends StatelessWidget {
         final rich = item.rich!;
         switch (rich.type) {
           case 'RICH_TEXT_NODE_TYPE_EMOJI':
-            Emoji emoji = rich.emoji!;
+            final emoji = rich.emoji;
+            if (emoji == null) {
+              return TextSpan(
+                text: rich.origText ?? rich.text,
+                style: _getStyle(rich.style, colorScheme.primary),
+              );
+            }
             final size = 20.0 * emoji.size;
             return WidgetSpan(
               rawText: rich.origText,
@@ -107,7 +113,7 @@ class OpusContent extends StatelessWidget {
           default:
             return TextSpan(
               text:
-                  '${rich.type == 'RICH_TEXT_NODE_TYPE_WEB' ? '\u{1F517}' : ''}${item.rich!.text}',
+                  '${rich.type == 'RICH_TEXT_NODE_TYPE_WEB' ? '\u{1F517}' : ''}${rich.text ?? rich.origText ?? ''}',
               style: _getStyle(
                 rich.style,
                 rich.type == 'RICH_TEXT_NODE_TYPE_TEXT'
@@ -129,7 +135,14 @@ class OpusContent extends StatelessWidget {
             );
         }
       case 'TEXT_NODE_TYPE_FORMULA' when (item.formula != null):
-        final latex = item.formula!.latexContent!;
+        final latex = item.formula!.latexContent;
+        if (latex == null || latex.isEmpty) {
+          return _getSpan(
+            item.word,
+            surfaceLuminance: surfaceLuminance,
+            defaultColor: isQuote ? colorScheme.onSurfaceVariant : null,
+          );
+        }
         return WidgetSpan(
           child: CachedNetworkSVGImage(
             cacheKey: latex,
@@ -267,9 +280,21 @@ class OpusContent extends StatelessWidget {
               }
               return widget;
             case 2 when (element.pic != null):
-              final pics = element.pic!.pics!;
+              final picData = element.pic!;
+              final pics =
+                  picData.pics
+                      ?.where((e) => e.url?.isNotEmpty == true)
+                      .toList() ??
+                  [if (picData.url?.isNotEmpty == true) picData];
+              if (pics.isEmpty) {
+                if (kDebugMode) {
+                  debugPrint('opus pic data missing: ${element.paraType}');
+                }
+                return const SizedBox.shrink();
+              }
               if (pics.length == 1) {
                 final pic = pics.first;
+                final url = pic.url!;
                 double? width = pic.width == null
                     ? null
                     : math.min(maxWidth, pic.width!);
@@ -282,22 +307,32 @@ class OpusContent extends StatelessWidget {
                   height: height,
                   gaplessPlayback: true,
                   memCacheWidth: width.cacheSize(context),
-                  imageUrl: ImageUtils.thumbnailUrl(pic.url!, 60),
+                  imageUrl: ImageUtils.thumbnailUrl(url, 60),
                   fadeInDuration: const Duration(milliseconds: 120),
                   fadeOutDuration: const Duration(milliseconds: 120),
                   placeholder: (_, _) => Image.asset(Assets.loading),
                 );
                 if (!(pic.isLongPic ?? false)) {
-                  child = fromHero(
-                    tag: '${pic.url!}$hashCode',
-                    child: child,
-                  );
+                  child = fromHero(tag: '$url$hashCode', child: child);
                 }
-                final images = this.images();
+                List<SourceModel> images = const <SourceModel>[];
+                try {
+                  images = this.images();
+                } catch (_) {
+                  images = [
+                    SourceModel(
+                      url: url,
+                      width: pic.width?.toInt(),
+                      height: pic.height?.toInt(),
+                    ),
+                  ];
+                }
                 return GestureDetector(
                   onTap: () => PageUtils.imageView(
                     imgList: images,
-                    initialPage: images.indexWhere((e) => e.url == pic.url),
+                    initialPage: images.indexWhere(
+                      (e) => e.url == url,
+                    ),
                     quality: 60,
                     tag: hashCode.toString(),
                   ),
@@ -317,7 +352,9 @@ class OpusContent extends StatelessWidget {
                 );
               }
             case 3:
-              if (element.line?.pic case final pic?) {
+              final pic = element.line?.pic;
+              final url = pic?.url;
+              if (pic != null && url != null && url.isNotEmpty) {
                 final height = pic.height?.toDouble();
                 return CachedNetworkImage(
                   fit: .contain,
@@ -325,7 +362,7 @@ class OpusContent extends StatelessWidget {
                   width: maxWidth,
                   gaplessPlayback: true,
                   memCacheWidth: maxWidth.cacheSize(context),
-                  imageUrl: ImageUtils.thumbnailUrl(pic.url!),
+                  imageUrl: ImageUtils.thumbnailUrl(url),
                   placeholder: (_, _) => const SizedBox.shrink(),
                 );
               } else {
@@ -355,7 +392,7 @@ class OpusContent extends StatelessWidget {
                                 .toList(),
                           );
                         }),
-                        if (i < element.list!.items!.length - 1)
+                        if (i < element.list!.children!.length - 1)
                           const TextSpan(text: '\n'),
                       ],
                     );
@@ -372,7 +409,7 @@ class OpusContent extends StatelessWidget {
                           child: Icon(MdiIcons.circleMedium),
                           alignment: .middle,
                         ),
-                        ...entry.nodes!.map((item) {
+                        ...?entry.nodes?.map((item) {
                           if (item.word != null) {
                             return _getSpan(
                               item.word,
@@ -407,11 +444,22 @@ class OpusContent extends StatelessWidget {
                 ),
               );
             case 6:
-              final type = element.linkCard!.card!.type;
-              Widget child;
+              final card = element.linkCard?.card;
+              if (card == null) {
+                if (kDebugMode) {
+                  debugPrint('opus link card data missing');
+                }
+                return const SizedBox.shrink();
+              }
+              final type = card.type;
+              Widget child = const SizedBox.shrink();
               switch (type) {
                 case 'LINK_CARD_TYPE_UGC':
-                  final ugc = element.linkCard!.card!.ugc!;
+                  final ugc = card.ugc;
+                  if (ugc == null ||
+                      (ugc.title == null && ugc.descSecond == null)) {
+                    return const SizedBox.shrink();
+                  }
                   child = Row(
                     spacing: 10,
                     children: [
@@ -425,28 +473,33 @@ class OpusContent extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: .start,
                           children: [
-                            Text(ugc.title!),
-                            Text(
-                              ugc.descSecond!,
-                              maxLines: 2,
-                              overflow: .ellipsis,
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: colorScheme.outline,
+                            Text(ugc.title ?? ugc.descSecond ?? ''),
+                            if (ugc.title != null && ugc.descSecond != null)
+                              Text(
+                                ugc.descSecond!,
+                                maxLines: 2,
+                                overflow: .ellipsis,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: colorScheme.outline,
+                                ),
                               ),
-                            ),
                           ],
                         ),
                       ),
                     ],
                   );
                 case 'LINK_CARD_TYPE_ITEM_NULL':
-                  final itemNull = element.linkCard?.card?.itemNull;
-                  child = Text(
-                    ' ${itemNull?.text}: ${element.linkCard?.card?.oid}',
-                  );
+                  final itemNull = card.itemNull;
+                  child = Text(' ${itemNull?.text}: ${card.oid}');
                 case 'LINK_CARD_TYPE_COMMON':
-                  final common = element.linkCard!.card!.common!;
+                  final common = card.common;
+                  if (common == null ||
+                      (common.title == null &&
+                          common.desc1 == null &&
+                          common.desc2 == null)) {
+                    return const SizedBox.shrink();
+                  }
                   child = Row(
                     spacing: 10,
                     children: [
@@ -460,8 +513,13 @@ class OpusContent extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: .start,
                           children: [
-                            Text(common.title!),
-                            if (common.desc1 != null)
+                            Text(
+                              common.title ??
+                                  common.desc1 ??
+                                  common.desc2 ??
+                                  '',
+                            ),
+                            if (common.title != null && common.desc1 != null)
                               Text(
                                 common.desc1!,
                                 style: TextStyle(
@@ -469,7 +527,7 @@ class OpusContent extends StatelessWidget {
                                   color: colorScheme.outline,
                                 ),
                               ),
-                            if (common.desc2 != null)
+                            if (common.title != null && common.desc2 != null)
                               Text(
                                 common.desc2!,
                                 maxLines: 2,
@@ -485,7 +543,13 @@ class OpusContent extends StatelessWidget {
                     ],
                   );
                 case 'LINK_CARD_TYPE_LIVE':
-                  final live = element.linkCard!.card!.live!;
+                  final live = card.live;
+                  if (live == null ||
+                      (live.title == null &&
+                          live.descFirst == null &&
+                          live.descSecond == null)) {
+                    return const SizedBox.shrink();
+                  }
                   child = Row(
                     spacing: 10,
                     children: [
@@ -499,8 +563,13 @@ class OpusContent extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: .start,
                           children: [
-                            Text(live.title!),
-                            if (live.descFirst != null)
+                            Text(
+                              live.title ??
+                                  live.descFirst ??
+                                  live.descSecond ??
+                                  '',
+                            ),
+                            if (live.title != null && live.descFirst != null)
                               Text(
                                 live.descFirst!,
                                 style: TextStyle(
@@ -508,7 +577,7 @@ class OpusContent extends StatelessWidget {
                                   color: colorScheme.outline,
                                 ),
                               ),
-                            if (live.descSecond != null)
+                            if (live.title != null && live.descSecond != null)
                               Text(
                                 live.descSecond!,
                                 maxLines: 2,
@@ -524,7 +593,10 @@ class OpusContent extends StatelessWidget {
                     ],
                   );
                 case 'LINK_CARD_TYPE_OPUS':
-                  final opus = element.linkCard!.card!.opus!;
+                  final opus = card.opus;
+                  if (opus == null) {
+                    return const SizedBox.shrink();
+                  }
                   child = Row(
                     spacing: 10,
                     children: [
@@ -538,7 +610,7 @@ class OpusContent extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: .start,
                           children: [
-                            Text(opus.title!),
+                            Text(opus.title ?? ''),
                             Text(
                               '${opus.authorName} · ${opus.statView ?? 0}阅读',
                               style: TextStyle(
@@ -552,7 +624,10 @@ class OpusContent extends StatelessWidget {
                     ],
                   );
                 case 'LINK_CARD_TYPE_VOTE':
-                  final vote = element.linkCard!.card!.vote!;
+                  final vote = card.vote;
+                  if (vote == null) {
+                    return const SizedBox.shrink();
+                  }
                   child = Row(
                     spacing: 10,
                     children: [
@@ -573,7 +648,7 @@ class OpusContent extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: .start,
                           children: [
-                            Text(vote.desc!),
+                            Text(vote.desc ?? ''),
                             Text(
                               '${vote.joinNum}人参与',
                               style: TextStyle(
@@ -587,7 +662,10 @@ class OpusContent extends StatelessWidget {
                     ],
                   );
                 case 'LINK_CARD_TYPE_MUSIC':
-                  final music = element.linkCard!.card!.music!;
+                  final music = card.music;
+                  if (music == null) {
+                    return const SizedBox.shrink();
+                  }
                   child = Row(
                     spacing: 10,
                     children: [
@@ -601,7 +679,7 @@ class OpusContent extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: .start,
                           children: [
-                            Text(music.title!),
+                            Text(music.title ?? ''),
                             if (music.label != null)
                               Text(
                                 music.label!,
@@ -618,9 +696,12 @@ class OpusContent extends StatelessWidget {
                     ],
                   );
                 case 'LINK_CARD_TYPE_GOODS':
-                  final goods = element.linkCard!.card!.goods!;
+                  final items = card.goods?.items;
+                  if (items == null || items.isEmpty) {
+                    return const SizedBox.shrink();
+                  }
                   child = Column(
-                    children: goods.items!.map((e) {
+                    children: items.map((e) {
                       return GestureDetector(
                         onTap: () {
                           if (e.jumpUrl?.isNotEmpty == true) {
@@ -640,7 +721,7 @@ class OpusContent extends StatelessWidget {
                               child: Column(
                                 crossAxisAlignment: .start,
                                 children: [
-                                  Text(e.name!),
+                                  Text(e.name ?? e.brief ?? ''),
                                   if (e.brief?.isNotEmpty == true)
                                     Text(
                                       e.brief!,
@@ -666,7 +747,10 @@ class OpusContent extends StatelessWidget {
                     }).toList(),
                   );
                 case "LINK_CARD_TYPE_EVA3_VIDEO":
-                  final info = element.linkCard!.card!.eva3Video!.info!;
+                  final info = card.eva3Video?.info;
+                  if (info == null) {
+                    return const SizedBox.shrink();
+                  }
                   Widget cover = NetworkImgLayer(
                     width: 104,
                     height: 65,
@@ -699,7 +783,7 @@ class OpusContent extends StatelessWidget {
                             mainAxisAlignment: .spaceBetween,
                             children: [
                               Text(
-                                info.title!,
+                                info.title ?? '',
                                 maxLines: 2,
                                 overflow: .ellipsis,
                               ),
@@ -719,7 +803,10 @@ class OpusContent extends StatelessWidget {
                     ),
                   );
                 case "LINK_CARD_TYPE_EVA3_OPUS":
-                  final info = element.linkCard!.card!.eva3Opus!.info!;
+                  final info = card.eva3Opus?.info;
+                  if (info == null) {
+                    return const SizedBox.shrink();
+                  }
                   final cover = info.pics?.firstOrNull?.src;
                   child = SizedBox(
                     height: 65,
@@ -739,7 +826,7 @@ class OpusContent extends StatelessWidget {
                             mainAxisAlignment: .spaceBetween,
                             children: [
                               Text(
-                                info.title!,
+                                info.title ?? '',
                                 maxLines: 2,
                                 overflow: .ellipsis,
                               ),
@@ -777,9 +864,16 @@ class OpusContent extends StatelessWidget {
                     ),
                   );
                 default:
-                  throw UnimplementedError(
-                    '\nparaType: ${element.paraType},\ncard type: $type',
-                  );
+                  if (kDebugMode) {
+                    return Text(
+                      '不支持的卡片类型 $type',
+                      style: const TextStyle(
+                        fontWeight: .bold,
+                        color: Colors.red,
+                      ),
+                    );
+                  }
+                  return const SizedBox.shrink();
               }
               return Material(
                 shape: const RoundedRectangleBorder(
@@ -791,7 +885,6 @@ class OpusContent extends StatelessWidget {
                       ? null
                       : () {
                           try {
-                            final card = element.linkCard!.card!;
                             if (type == 'LINK_CARD_TYPE_VOTE') {
                               showVoteDialog(
                                 context,
@@ -800,6 +893,10 @@ class OpusContent extends StatelessWidget {
                               return;
                             }
                             if (type == 'LINK_CARD_TYPE_ITEM_NULL') {
+                              final oid = card.oid;
+                              if (oid == null) {
+                                return;
+                              }
                               showDialog(
                                 context: context,
                                 builder: (context) => SimpleDialog(
@@ -812,7 +909,7 @@ class OpusContent extends StatelessWidget {
                                       onPressed: () {
                                         Get.back();
                                         PiliScheme.videoPush(
-                                          int.parse(card.oid!),
+                                          int.parse(oid),
                                           null,
                                         );
                                       },
@@ -821,7 +918,7 @@ class OpusContent extends StatelessWidget {
                                     DialogOption(
                                       onPressed: () {
                                         Get.back();
-                                        PageUtils.pushDynFromId(id: card.oid!);
+                                        PageUtils.pushDynFromId(id: oid);
                                       },
                                       child: const Text('动态/专栏'),
                                     ),
@@ -855,22 +952,36 @@ class OpusContent extends StatelessWidget {
                 ),
               );
             case 7 when (element.code != null):
+              final code = element.code!;
+              final content = code.content;
+              if (content == null) {
+                return const SizedBox.shrink();
+              }
+              final lang = code.lang;
+              final language = switch (lang) {
+                final l? when l.isNotEmpty => l,
+                _ => 'plaintext',
+              };
               final renderer = TextSpanRenderer(
                 null,
                 isDarkMode ? githubDarkTheme : githubTheme,
               );
               highlight
                   .highlightAuto(
-                    element.code!.content!,
-                    element.code!.lang == 'language-clike'
+                    content,
+                    lang == 'language-clike'
                         ? const ['c', 'java']
                         : [
-                            element.code!.lang!
+                            language
                                 .replaceAll('language-', '')
                                 .replaceAll('like', ''),
                           ],
                   )
                   .render(renderer);
+              final span = renderer.span;
+              if (span == null) {
+                return const SizedBox.shrink();
+              }
               return Container(
                 padding: const .all(12),
                 decoration: BoxDecoration(
@@ -878,7 +989,7 @@ class OpusContent extends StatelessWidget {
                   color: colorScheme.onInverseSurface,
                 ),
                 width: .infinity,
-                child: Text.rich(renderer.span!),
+                child: Text.rich(span),
               );
             case 8 when (element.heading?.nodes?.isNotEmpty == true):
               return Text.rich(
@@ -913,22 +1024,28 @@ class OpusContent extends StatelessWidget {
                 );
               }
 
-              return Text(
-                '不支持的类型 (${element.paraType})',
-                style: const TextStyle(
-                  fontWeight: .bold,
-                  color: Colors.red,
-                ),
-              );
+              if (kDebugMode) {
+                return Text(
+                  '不支持的类型 (${element.paraType})',
+                  style: const TextStyle(
+                    fontWeight: .bold,
+                    color: Colors.red,
+                  ),
+                );
+              }
+              return const SizedBox.shrink();
           }
         } catch (e, s) {
-          return Text(
-            '错误的类型 $e${kDebugMode ? '\n$s' : ''}',
-            style: const TextStyle(
-              fontWeight: .bold,
-              color: Colors.red,
-            ),
-          );
+          if (kDebugMode) {
+            return Text(
+              '错误的类型 $e\n$s',
+              style: const TextStyle(
+                fontWeight: .bold,
+                color: Colors.red,
+              ),
+            );
+          }
+          return const SizedBox.shrink();
         }
       },
       separatorBuilder: (context, index) => const SizedBox(height: 10),

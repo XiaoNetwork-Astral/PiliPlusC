@@ -175,6 +175,8 @@ class PlDanmakuController {
                 if (videoTitle.isNotEmpty) 'videoTitle': videoTitle,
                 if (partition.isNotEmpty) 'partition': partition,
                 'progressMs': chunk[i].progress,
+                'cid': _cid,
+                ..._judgeSource(),
                 if (chunk[i].midHash.isNotEmpty) 'midHash': chunk[i].midHash,
                 if (chunk[i].color != 0) 'color': chunk[i].color,
                 if (chunk[i].mode != 0) 'mode': chunk[i].mode,
@@ -229,6 +231,15 @@ class PlDanmakuController {
   String _judgeBackground() {
     final (title, partition) = _judgeContextParts();
     return partition.isEmpty ? title : '$title（分区：$partition）';
+  }
+
+  /// 能定位到视频的信息，取不到时为空
+  Map<String, dynamic> _judgeSource() {
+    try {
+      return _judgeContext?.source?.call() ?? const <String, dynamic>{};
+    } catch (_) {
+      return const <String, dynamic>{};
+    }
   }
 
   /// 视频标题与分区，取不到时都是空串
