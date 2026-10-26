@@ -1,34 +1,97 @@
 <div align="center">
-    <img width="200" height="200" src="assets/images/logo/logo.png">
+    <img width="160" height="160" src="assets/images/logo/logo.png" alt="PiliPlusC logo">
+    <h1>PiliPlusC</h1>
+    <p>A third-party Bilibili client built with Flutter, with a filter that learns what you don't want to see</p>
+
+English | [中文](README.zh-CN.md)
+
+<a href="https://github.com/XiaoNetwork-Astral/PiliPlusC/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/XiaoNetwork-Astral/PiliPlusC?style=flat-square"></a>
+<a href="https://github.com/XiaoNetwork-Astral/PiliPlusC/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/XiaoNetwork-Astral/PiliPlusC/ci.yml?branch=main&style=flat-square&label=CI"></a>
+<a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/XiaoNetwork-Astral/PiliPlusC?style=flat-square"></a>
 </div>
+
+<br/>
+
+PiliPlusC builds on [PiliPlus](https://github.com/bggRGjQaUbCoE/PiliPlus) and PiliPlusX. It is maintained by idk together with Claude, an AI assistant made by Anthropic. The C in the name stands for Claude.
+
+*This is an unofficial client. It is not affiliated with, endorsed by, or connected to Bilibili.*
+
+## Highlights
+
+- a **cognitive filter** that keeps out what you don't want to read, with **rule blocking** and **AI blocking** in one place
+- **rule blocking** with keyword, regex and user rules, scoped to danmaku, comments, dynamics, videos and live rooms
+- **AI blocking** with your own key: it only hides what it is sure about and lets everything uncertain through
+- a **calibration wizard** that nudges the blocking threshold with your own answers
+- a **block history** that restores the original comment, video, dynamic or danmaku, with one-tap whitelisting
+- **playback** with danmaku (advanced, merged and colored), subtitles, hardware decoding, picture in picture, DLNA casting and offline cache
+- **dynamics, comments and direct messages**, multiple accounts, incognito and guest modes
+- **backup and restore** through WebDAV, an archive or the clipboard, with optional password protection
+- a **searchable settings** page that jumps to the exact option
+- and the small things you would expect from a good client
+
+## Platforms
+
+- [Android](#android) (arm64-v8a, armeabi-v7a, x86_64)
+- [iOS](#ios)
+- [macOS](#macos)
+- [Windows](#windows)
+- [Linux](#linux)
+
+> [!NOTE]
+> Tablets and desktops get the wide layout. There is no web build.
+
+## Looks
 
 <div align="center">
-    <h1>PiliPlusC</h1>
-    <p>使用 Flutter 开发的哔哩哔哩第三方客户端</p>
-
-中文 | [English](README.en.md)
-
-<img src="assets/screenshots/510shots_so.png" width="32%" alt="home" />
-<img src="assets/screenshots/174shots_so.png" width="32%" alt="home" />
-<img src="assets/screenshots/850shots_so.png" width="32%" alt="home" />
+<img src="assets/screenshots/home.png" width="23%" alt="Home" />
+<img src="assets/screenshots/dynamic.png" width="23%" alt="Dynamics" />
+<img src="assets/screenshots/bangumi_detail.png" width="23%" alt="Bangumi" />
+<img src="assets/screenshots/set.png" width="23%" alt="Settings" />
 <br/>
-<img src="assets/screenshots/main_screen.png" width="96%" alt="home" />
-<br/>
+<img src="assets/screenshots/main_screen.png" width="96%" alt="Desktop" />
 </div>
 
-<br/>
+## Install
 
-PiliPlusC 基于 [PiliPlus](https://github.com/bggRGjQaUbCoE/PiliPlus) 和 PiliPlusX 继续开发，由 idk 与 Claude（Anthropic 的 AI 助手）共同维护。名字里的 C 代表 Claude，表示这个项目是人和 AI 一起做的。
+Every build is on the [releases page](https://github.com/XiaoNetwork-Astral/PiliPlusC/releases/latest). Pick the file for your system.
 
-## 适配平台
+### Android
 
-Android / iOS / Pad / Windows / Linux
+Download `PiliPlusC_android_<version>_<abi>.apk`. Most phones need `arm64-v8a`.
 
-## 港澳台代理
+### iOS
 
-由于本项目使用了 web 接口，所以不能直接使用哔哩漫游的公共服务器。
+Download `PiliPlusC_ios_<version>.ipa`. It is not signed, so install it with a sideloading tool such as AltStore or SideStore.
 
-搭建方法：直接反向代理 `api.bilibili.com`，或添加下面几个路由的支持：
+### macOS
+
+Download `PiliPlusC_macos_<version>.dmg` and drag the app to Applications.
+
+### Windows
+
+Download `PiliPlusC_windows_<version>_x64_setup.exe` for an installer, or `PiliPlusC_windows_<version>_x64_portable.zip` to run it from a folder.
+
+### Linux
+
+Download the `tar.gz`, `deb`, `rpm` or `AppImage` file. For the AppImage:
+
+```bash
+chmod +x PiliPlus_linux_*.AppImage
+./PiliPlus_linux_*.AppImage
+```
+
+### Build from source
+
+Install the Flutter version named in [`pubspec.yaml`](pubspec.yaml), then:
+
+```bash
+flutter pub get
+flutter run
+```
+
+## Hong Kong, Macau and Taiwan content
+
+The app uses web endpoints, so public proxies built for other clients do not work. Reverse proxy `api.bilibili.com`, or add these routes to your own proxy:
 
 ```text
 /x/web-interface/view
@@ -41,46 +104,17 @@ Android / iOS / Pad / Windows / Linux
 /pgc/view/web/season
 ```
 
-可用的公共服务器：
+> [!WARNING]
+> A proxy receives your cookies. Only use one you trust, or stay logged out.
 
-注意：由于请求代理服务器会携带 cookie，所以请使用可信任的代理服务器，或不登录账号进行使用。
+## Disclaimer
 
-|提供者|服务器|
-|------|------|
-|gucooing|https://blblapi.alsl.xyz|
+PiliPlusC is a personal project for learning and testing. Please delete it within 24 hours of downloading. All APIs come from the official website, and the project provides no cracked content.
 
-## 下载
+## License
 
-可以从 [Releases](https://github.com/XiaoNetwork-Astral/PiliPlusC/releases) 下载，或克隆仓库拉取代码后在本地编译。
+Released under the GNU General Public License v3.0, see [LICENSE](LICENSE).
 
-## 功能
+## Credits
 
-- **播放**：推荐、热门、番剧、直播；弹幕（含高级弹幕、合并弹幕、会员彩色弹幕）、字幕、倍速、手势调节亮度音量与进度、记忆播放；硬件加速、超分辨率、画中画、DLNA 投屏；离线缓存与播放；SponsorBlock、跳过番剧片头片尾
-- **内容与互动**：动态（发布、编辑、转发、话题、分组）；评论（楼中楼、点赞点踩、带图、置顶）；私信；三连与投币动画；收藏夹与稍后再看的管理；搜索与筛选
-- **账号**：多账号；Cookie 登录；Win/Mac 支持极验和短信登录；无痕模式与游客模式；黑名单
-- **备份与恢复**：支持 WebDAV、压缩包和剪贴板三种方式，可选择备份的项目，压缩包可用密码加密；登录信息属于敏感信息，导出时有明确提示
-- **设置**：设置项可搜索，点击结果会跳转到对应位置并闪烁高亮
-- **本分支特色**：港澳台内容适配、弹幕字体、桌面端快捷键、剪贴板搜索、动态分组筛选
-
-## 声明
-
-此项目（PiliPlusC）是个人为了兴趣而开发，仅用于学习和测试，请于下载后 24 小时内删除。
-所用 API 皆从官方网站收集，不提供任何破解内容。
-
-由 idk 与 Claude（Anthropic）共同维护。
-
-在此致敬：
-- 原作者：[guozhigq/pilipala](https://github.com/guozhigq/pilipala)
-- 上游作者：[bggRGjQaUbCoE/PiliPlus](https://github.com/bggRGjQaUbCoE/PiliPlus)、[orz12/PiliPalaX](https://github.com/orz12/PiliPalaX)
-
-本仓库做了更激进的修改，感谢各位作者的开源精神。
-
-感谢使用。
-
-## 致谢
-
-- [bilibili-API-collect](https://github.com/SocialSisterYi/bilibili-API-collect)
-- [flutter_meedu_videoplayer](https://github.com/zezo357/flutter_meedu_videoplayer)
-- [media-kit](https://github.com/media-kit/media-kit)
-- [dio](https://pub.dev/packages/dio)
-- 等等
+Thanks to [guozhigq/pilipala](https://github.com/guozhigq/pilipala), [bggRGjQaUbCoE/PiliPlus](https://github.com/bggRGjQaUbCoE/PiliPlus) and [orz12/PiliPalaX](https://github.com/orz12/PiliPalaX) for the work this is built on, and to [bilibili-API-collect](https://github.com/SocialSisterYi/bilibili-API-collect), [media-kit](https://github.com/media-kit/media-kit) and [dio](https://pub.dev/packages/dio).
