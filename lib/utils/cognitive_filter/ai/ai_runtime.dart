@@ -5,6 +5,7 @@ import 'package:PiliPlus/models/cognitive_filter/config.dart';
 import 'package:PiliPlus/models/cognitive_filter/filter_category.dart';
 import 'package:PiliPlus/models/cognitive_filter/filter_surface.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/ai_whitelist.dart';
+import 'package:PiliPlus/utils/cognitive_filter/ai/calibration/calibration_service.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/daily_budget.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/judge_cache.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/judge_history.dart';
@@ -92,6 +93,9 @@ class AiFilterRuntime {
   /// 正在等待 AI 判定的列表类请求数，界面据此显示"AI 判定中"
   final ValueNotifier<int> busy = ValueNotifier<int>(0);
 
+  /// 全屏期间有评论/相关视频被暂缓送 AI；退出全屏后视频页据此补判一次
+  bool deferredWhileFullscreen = false;
+
   JudgeService? _service;
   JudgeCache? _cache;
   JudgeHistory? _history;
@@ -141,6 +145,7 @@ class AiFilterRuntime {
       _historyStore = historyStore;
       _budget = budget;
       _service = service;
+      unawaited(CalibrationService.instance.init());
     } catch (_) {
       _service = null;
       _cache = null;
@@ -290,25 +295,50 @@ class AiFilterRuntime {
         result.verdicts[id] = _whitelistVerdict;
       }
 
-      final texts = <String, String>{
-        for (final item in items) item.id: item.text,
-      };
       final history = recordHistory ? _history : null;
       if (history != null) {
+        final texts = <String, String>{
+          for (final item in items) item.id: item.text,
+        };
+        final itemsById = <String, JudgeItem>{
+          for (final item in items) item.id: item,
+        };
         final time = DateTime.now();
         result.verdicts.forEach((id, verdict) {
           if (!verdict.blocked) {
             return;
           }
+          // 同一内容反复出现（比如每次刷新首页）不重复记录
+          final text = texts[id] ?? '';
+          if (_recentAiEntry(history, surface, text)) {
+            return;
+          }
+          final item = itemsById[id];
+          Map<String, dynamic>? snapshot;
+          final builder = item?.snapshotBuilder;
+          if (builder != null) {
+            try {
+              snapshot = builder();
+              if (snapshot.isEmpty) {
+                snapshot = null;
+              }
+            } catch (_) {
+              // 快照失败不影响判定与屏蔽
+              snapshot = null;
+            }
+          }
           history.add(
             JudgeHistoryEntry(
               time: time,
               surface: surface.label,
-              text: texts[id] ?? '',
+              text: text,
               categoryId: verdict.categoryId,
               score: verdict.score,
               source: verdict.source.name,
               label: _categoryName(verdict.categoryId),
+              scores: verdict.scores.isEmpty ? null : verdict.scores,
+              meta: item?.meta,
+              snapshot: snapshot,
             ),
           );
         });
@@ -325,11 +355,51 @@ class AiFilterRuntime {
         budget.addItems(aiCount);
       }
 
+      // 得分偏高的内容静默存进校准向导的收集池，只存本机
+      if (recordHistory && !trial) {
+        final calibration = CalibrationService.instance;
+        for (final item in items) {
+          final verdict = result.verdicts[item.id];
+          if (verdict == null ||
+              (verdict.source != JudgeSource.ai &&
+                  verdict.source != JudgeSource.cache)) {
+            continue;
+          }
+          calibration.collect(
+            surface: surface,
+            text: item.text,
+            score: verdict.score,
+            category: _categoryName(verdict.categoryId),
+          );
+        }
+      }
+
       _scheduleFlush();
       return result;
     } catch (_) {
       return null;
     }
+  }
+
+  /// 最近的历史里是否已有同一适用面的同一条 AI 屏蔽记录
+  bool _recentAiEntry(
+    JudgeHistory history,
+    FilterSurface surface,
+    String text,
+  ) {
+    final entryText = _truncateRuleText(text);
+    var checked = 0;
+    for (final entry in history.entries) {
+      if (checked++ >= _ruleDedupWindow) {
+        break;
+      }
+      if (!entry.isRule &&
+          entry.surface == surface.label &&
+          entry.text == entryText) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /// 试判定一段文字，不写入屏蔽历史；未启用或请求失败返回 null

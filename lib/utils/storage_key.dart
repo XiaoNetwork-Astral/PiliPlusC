@@ -300,7 +300,6 @@ abstract final class SettingBoxKey {
       cfCategoryOverrides = 'cfCategoryOverrides',
       cfProThreshold = 'cfProThreshold',
       cfCustomCategories = 'cfCustomCategories',
-      cfAiPrivacyAccepted = 'cfAiPrivacyAccepted',
       cfAiDailyCapUsd = 'cfAiDailyCapUsd',
       cfAiSurfaces = 'cfAiSurfaces',
       cfAiUsageDay = 'cfAiUsageDay',
@@ -312,6 +311,13 @@ abstract final class SettingBoxKey {
       cfRuleUserExtras = 'cfRuleUserExtras',
       cfRuleMigrationDone = 'cfRuleMigrationDone',
       cfAiWhitelistRules = 'cfAiWhitelistRules',
+      cfLlmBaseUrl = 'cfLlmBaseUrl',
+      cfLlmApiKey = 'cfLlmApiKey',
+      cfLlmModel = 'cfLlmModel',
+      cfLlmProxyType = 'cfLlmProxyType',
+      cfLlmProxyAddress = 'cfLlmProxyAddress',
+      cfAiThresholdDelta = 'cfAiThresholdDelta',
+      cfGuardRules = 'cfGuardRules',
       cfAiWhitelist = 'cfAiWhitelist';
 }
 

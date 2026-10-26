@@ -1523,6 +1523,86 @@ abstract final class Pref {
   static set cfRuleMigrationDone(bool value) =>
       _setting.put(SettingBoxKey.cfRuleMigrationDone, value);
 
+  /// 校准向导用的整理接口，OpenAI 兼容格式，默认 DeepSeek 官方
+  static String get cfLlmBaseUrl {
+    final value = _setting.get(SettingBoxKey.cfLlmBaseUrl);
+    return value is String && value.trim().isNotEmpty
+        ? value
+        : 'https://api.deepseek.com';
+  }
+
+  static set cfLlmBaseUrl(String value) =>
+      _setting.put(SettingBoxKey.cfLlmBaseUrl, value);
+
+  static String get cfLlmApiKey {
+    final value = _setting.get(SettingBoxKey.cfLlmApiKey);
+    return value is String ? value : '';
+  }
+
+  static set cfLlmApiKey(String value) =>
+      _setting.put(SettingBoxKey.cfLlmApiKey, value);
+
+  static String get cfLlmModel {
+    final value = _setting.get(SettingBoxKey.cfLlmModel);
+    return value is String && value.trim().isNotEmpty
+        ? value
+        : 'deepseek-flash';
+  }
+
+  static set cfLlmModel(String value) =>
+      _setting.put(SettingBoxKey.cfLlmModel, value);
+
+  /// 整理接口的代理类型：0 不用代理，1 HTTP，2 SOCKS5；坏数据回落为 0
+  static int get cfLlmProxyType {
+    final value = _setting.get(SettingBoxKey.cfLlmProxyType);
+    if (value is num) {
+      final index = value.toInt();
+      if (value == index && index >= 0 && index <= 2) return index;
+    }
+    return 0;
+  }
+
+  static set cfLlmProxyType(int value) =>
+      _setting.put(SettingBoxKey.cfLlmProxyType, value.clamp(0, 2).toInt());
+
+  static String get cfLlmProxyAddress {
+    final value = _setting.get(SettingBoxKey.cfLlmProxyAddress);
+    return value is String ? value : '';
+  }
+
+  static set cfLlmProxyAddress(String value) =>
+      _setting.put(SettingBoxKey.cfLlmProxyAddress, value);
+
+  /// 校准向导对屏蔽门槛的累计调整量，加在档位或专业模式的门槛上
+  static double get cfAiThresholdDelta {
+    final value = _setting.get(SettingBoxKey.cfAiThresholdDelta);
+    if (value is num && value.isFinite) {
+      return value.toDouble().clamp(-0.5, 0.5).toDouble();
+    }
+    return 0.0;
+  }
+
+  static set cfAiThresholdDelta(double value) => _setting.put(
+    SettingBoxKey.cfAiThresholdDelta,
+    value.isFinite ? value.clamp(-0.5, 0.5).toDouble() : 0.0,
+  );
+
+  /// 用户自己添加的「不外传规则」，与屏蔽规则共用 [FilterRule]
+  static List<FilterRule> get cfGuardRules {
+    final raw = _setting.get(SettingBoxKey.cfGuardRules);
+    if (raw is! String || raw.isEmpty) return const <FilterRule>[];
+    try {
+      return whitelistRulesFromJson(jsonDecode(raw));
+    } catch (_) {
+      return const <FilterRule>[];
+    }
+  }
+
+  static set cfGuardRules(List<FilterRule> value) => _setting.put(
+    SettingBoxKey.cfGuardRules,
+    jsonEncode([for (final rule in value) rule.toJson()]),
+  );
+
   /// AI 白名单规则，与屏蔽规则共用 [FilterRule]
   static List<FilterRule> get cfAiWhitelistRules {
     final raw = _setting.get(SettingBoxKey.cfAiWhitelistRules);

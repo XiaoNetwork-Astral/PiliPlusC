@@ -59,9 +59,9 @@ class _CognitiveFilterPageState extends State<CognitiveFilterPage>
 
   String _tierDescription(FilterTier tier) {
     return switch (tier) {
-      .basic => '只拦辱骂、歧视、低俗、广告，误伤最少',
-      .balanced => '再加引战拉踩与阴阳怪气，推荐',
-      .strict => '更敏感，误伤更多',
+      .basic => '只拦明显的辱骂、歧视和广告引流，推荐',
+      .balanced => '再加低俗与性暗示',
+      .strict => '再加引战拉踩，误伤会多一些',
     };
   }
 

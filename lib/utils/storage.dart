@@ -23,6 +23,7 @@ abstract final class GStorage {
     SettingBoxKey.archivePassword,
     SettingBoxKey.webdavArchivePassword,
     SettingBoxKey.cfApiKey,
+    SettingBoxKey.cfLlmApiKey,
   };
 
   /// 只属于本机的用量计数，不写入备份，导入时保留本机原值

@@ -133,6 +133,27 @@ class CfHint extends StatelessWidget {
   }
 }
 
+/// 列表里一组设置的小标题
+class CfGroupHeader extends StatelessWidget {
+  const CfGroupHeader(this.text, {super.key});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 4),
+      child: Text(
+        text,
+        style: theme.textTheme.labelLarge!.copyWith(
+          color: theme.colorScheme.primary,
+        ),
+      ),
+    );
+  }
+}
+
 /// 靠右的椭圆形「测试连接」按钮，测试中显示转圈并不可点
 class CfTestButton extends StatelessWidget {
   const CfTestButton({

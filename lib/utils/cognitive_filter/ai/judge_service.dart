@@ -78,6 +78,8 @@ class JudgeItem {
     required this.text,
     this.mid,
     this.midHash,
+    this.meta,
+    this.snapshotBuilder,
   });
 
   final String id;
@@ -88,6 +90,12 @@ class JudgeItem {
 
   /// 弹幕发送者哈希，用于白名单里按 UID 派生的哈希匹配
   final String? midHash;
+
+  /// 原始内容的简单快照，键与值都是简单类型
+  final Map<String, dynamic>? meta;
+
+  /// 被屏蔽并写入历史时才调用的重快照生成器
+  final Map<String, dynamic> Function()? snapshotBuilder;
 }
 
 /// 一次判定的完整结果

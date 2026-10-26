@@ -11,6 +11,7 @@ abstract final class CognitiveFilterConfig {
     proThreshold: Pref.cfProThreshold,
     overrides: Pref.cfCategoryOverrides,
     custom: Pref.cfCustomCategories,
+    calibrationDelta: Pref.cfAiThresholdDelta,
   );
 
   /// 开启专业模式

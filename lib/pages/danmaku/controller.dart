@@ -161,6 +161,7 @@ class PlDanmakuController {
     var passed = chunk;
     try {
       final ids = _judgeIds(chunk);
+      final (videoTitle, partition) = _judgeContextParts();
       final result = await AiFilterRuntime.instance.judge(
         surface: FilterSurface.danmaku,
         items: <JudgeItem>[
@@ -169,6 +170,15 @@ class PlDanmakuController {
               id: ids[i],
               text: chunk[i].content,
               midHash: chunk[i].midHash,
+              meta: <String, dynamic>{
+                'type': 'danmaku',
+                if (videoTitle.isNotEmpty) 'videoTitle': videoTitle,
+                if (partition.isNotEmpty) 'partition': partition,
+                'progressMs': chunk[i].progress,
+                if (chunk[i].midHash.isNotEmpty) 'midHash': chunk[i].midHash,
+                if (chunk[i].color != 0) 'color': chunk[i].color,
+                if (chunk[i].mode != 0) 'mode': chunk[i].mode,
+              },
             ),
         ],
         title: title,
@@ -217,16 +227,20 @@ class PlDanmakuController {
   }
 
   String _judgeBackground() {
+    final (title, partition) = _judgeContextParts();
+    return partition.isEmpty ? title : '$title（分区：$partition）';
+  }
+
+  /// 视频标题与分区，取不到时都是空串
+  (String, String) _judgeContextParts() {
     final context = _judgeContext;
     if (context == null) {
-      return '';
+      return ('', '');
     }
     try {
-      final title = context.title();
-      final partition = context.partition().trim();
-      return partition.isEmpty ? title : '$title（分区：$partition）';
+      return (context.title(), context.partition().trim());
     } catch (_) {
-      return '';
+      return ('', '');
     }
   }
 

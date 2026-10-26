@@ -20,36 +20,36 @@ const _factoryThresholds = <String, double>{
 /// 所有内置类别共用档位阈值；关闭的类别沿用同一阈值，便于开启时直接使用。
 const _expectedTierSettings = <FilterTier, Map<String, (bool, double)>>{
   FilterTier.basic: {
-    'attack': (true, 0.55),
-    'discrim': (true, 0.55),
-    'bait': (false, 0.55),
-    'mock': (false, 0.55),
-    'vulgar': (true, 0.55),
-    'promo': (true, 0.55),
+    'attack': (true, 0.90),
+    'discrim': (true, 0.90),
+    'bait': (false, 0.90),
+    'mock': (false, 0.90),
+    'vulgar': (false, 0.90),
+    'promo': (true, 0.90),
   },
   FilterTier.balanced: {
-    'attack': (true, 0.55),
-    'discrim': (true, 0.55),
-    'bait': (true, 0.55),
-    'mock': (false, 0.55),
-    'vulgar': (true, 0.55),
-    'promo': (true, 0.55),
+    'attack': (true, 0.90),
+    'discrim': (true, 0.90),
+    'bait': (false, 0.90),
+    'mock': (false, 0.90),
+    'vulgar': (true, 0.90),
+    'promo': (true, 0.90),
   },
   FilterTier.strict: {
-    'attack': (true, 0.75),
-    'discrim': (true, 0.75),
-    'bait': (true, 0.75),
-    'mock': (true, 0.75),
-    'vulgar': (true, 0.75),
-    'promo': (true, 0.75),
+    'attack': (true, 0.90),
+    'discrim': (true, 0.90),
+    'bait': (true, 0.90),
+    'mock': (false, 0.90),
+    'vulgar': (true, 0.90),
+    'promo': (true, 0.90),
   },
 };
 
 /// 各档位的全局阈值，与 _expectedTierSettings 保持一致
 const _expectedTierThresholds = <FilterTier, double>{
-  FilterTier.basic: 0.55,
-  FilterTier.balanced: 0.55,
-  FilterTier.strict: 0.75,
+  FilterTier.basic: 0.90,
+  FilterTier.balanced: 0.90,
+  FilterTier.strict: 0.90,
 };
 
 FilterCategory _category({
@@ -80,7 +80,7 @@ FilterCategory _byId(List<FilterCategory> categories, String id) =>
 
 void main() {
   group('FilterTier', () {
-    test('三档阈值分别为 0.55、0.55、0.75', () {
+    test('三档阈值都是 0.90', () {
       for (final tier in FilterTier.values) {
         expect(
           tier.threshold,
@@ -88,9 +88,9 @@ void main() {
           reason: '${tier.name} 的阈值',
         );
       }
-      expect(FilterTier.basic.threshold, closeTo(0.55, 1e-9));
-      expect(FilterTier.balanced.threshold, closeTo(0.55, 1e-9));
-      expect(FilterTier.strict.threshold, closeTo(0.75, 1e-9));
+      expect(FilterTier.basic.threshold, closeTo(0.90, 1e-9));
+      expect(FilterTier.balanced.threshold, closeTo(0.90, 1e-9));
+      expect(FilterTier.strict.threshold, closeTo(0.90, 1e-9));
     });
 
     test('档位映射与规格逐项一致', () {
@@ -144,8 +144,8 @@ void main() {
       }
     });
 
-    test('默认档位为平衡', () {
-      expect(FilterTier.defaultTier, FilterTier.balanced);
+    test('默认档位为基础', () {
+      expect(FilterTier.defaultTier, FilterTier.basic);
 
       final categories = resolveCategories(
         proMode: false,
@@ -154,10 +154,11 @@ void main() {
         overrides: const <String, dynamic>{},
         custom: const [],
       );
-      expect(_byId(categories, 'attack').threshold, closeTo(0.55, 1e-9));
-      expect(_byId(categories, 'bait').enabled, isTrue);
+      expect(_byId(categories, 'attack').threshold, closeTo(0.90, 1e-9));
+      expect(_byId(categories, 'vulgar').enabled, isFalse);
+      expect(_byId(categories, 'bait').enabled, isFalse);
       expect(_byId(categories, 'mock').enabled, isFalse);
-      expect(_byId(categories, 'mock').threshold, closeTo(0.55, 1e-9));
+      expect(_byId(categories, 'mock').threshold, closeTo(0.90, 1e-9));
     });
 
     test('非专业模式忽略覆盖、proThreshold 和自定义类别', () {
@@ -171,7 +172,7 @@ void main() {
         custom: [_category(id: 'custom')],
       );
       expect(categories.length, builtinCategories.length);
-      expect(_byId(categories, 'attack').threshold, closeTo(0.55, 1e-9));
+      expect(_byId(categories, 'attack').threshold, closeTo(0.90, 1e-9));
       expect(_byId(categories, 'attack').enabled, isTrue);
       expect(categories.any((category) => category.id == 'custom'), isFalse);
     });
@@ -383,7 +384,7 @@ void main() {
       expect(activeCategoriesFor(FilterSurface.video, categories), isEmpty);
     });
 
-    test('非专业模式的基础档只筛出启用的四个类别', () {
+    test('非专业模式的基础档只筛出启用的三个类别', () {
       final categories = resolveCategories(
         proMode: false,
         tier: FilterTier.basic,
@@ -394,7 +395,7 @@ void main() {
       expect(
         activeCategoriesFor(FilterSurface.danmaku, categories)
             .map((category) => category.id),
-        ['attack', 'discrim', 'vulgar', 'promo'],
+        ['attack', 'discrim', 'promo'],
       );
     });
   });

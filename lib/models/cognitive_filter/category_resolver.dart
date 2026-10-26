@@ -8,12 +8,14 @@ import 'package:PiliPlus/models/cognitive_filter/filter_tier.dart';
 /// 非专业模式只用档位决定内置类别的开关与阈值，题面与适用面用出厂值；
 /// 专业模式以出厂值为底，叠加 [overrides] 里用户改过的字段，内置类别统一用
 /// [proThreshold]（总敏感度），再追加自定义类别（各自保留自己的阈值）。
+/// 校准向导的累计调整量 [calibrationDelta] 只加在内置类别的阈值上。
 List<FilterCategory> resolveCategories({
   required bool proMode,
   required FilterTier tier,
   required double proThreshold,
   required Map<String, dynamic> overrides,
   required List<FilterCategory> custom,
+  double calibrationDelta = 0,
 }) {
   if (!proMode) {
     final settings = tier.builtinSettings;
@@ -21,7 +23,10 @@ List<FilterCategory> resolveCategories({
       for (final category in builtinCategories)
         category.copyWith(
           enabled: settings[category.id]?.enabled ?? category.enabled,
-          threshold: settings[category.id]?.threshold ?? category.threshold,
+          threshold: _shifted(
+            settings[category.id]?.threshold ?? category.threshold,
+            calibrationDelta,
+          ),
         ),
     ];
   }
@@ -31,10 +36,14 @@ List<FilterCategory> resolveCategories({
       _applyOverride(
         category,
         overrides[category.id],
-      ).copyWith(threshold: proThreshold),
+      ).copyWith(threshold: _shifted(proThreshold, calibrationDelta)),
     ...custom,
   ];
 }
+
+/// 门槛加上校准调整量，限制在 0.30 到 0.99
+double _shifted(double threshold, double delta) =>
+    (threshold + delta).clamp(0.30, 0.99).toDouble();
 
 /// 在某个适用面下实际生效的类别
 List<FilterCategory> activeCategoriesFor(

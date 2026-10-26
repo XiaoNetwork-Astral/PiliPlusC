@@ -30,6 +30,49 @@ abstract final class SearchHttp {
     return '${item.title}（UP主：$name）';
   }
 
+  /// 视频的简单快照，键与值都是简单类型
+  static Map<String, dynamic> _videoMeta(SearchVideoItemModel item) {
+    final owner = item.owner;
+    final uname = owner.name;
+    final mid = owner.mid;
+    return <String, dynamic>{
+      'type': 'video',
+      if (item.bvid != null) 'bvid': item.bvid,
+      if (item.aid != null) 'aid': item.aid,
+      'title': item.title,
+      if (uname != null && uname.isNotEmpty) 'uname': uname,
+      if (mid != null) 'mid': mid,
+      if (item.cover != null && item.cover!.isNotEmpty) 'cover': item.cover,
+      if (item.duration > 0) 'duration': item.duration,
+    };
+  }
+
+  /// 从搜索结果里按 bvid 收集原始 JSON，供屏蔽时做快照
+  static Map<String, Map<String, dynamic>> _rawVideoItemsOf(
+    Map<String, dynamic> data,
+  ) {
+    final result = <String, Map<String, dynamic>>{};
+    void addRaw(Object? raw) {
+      if (raw is Map && raw['bvid'] is String) {
+        result[raw['bvid'] as String] = Map<String, dynamic>.from(raw);
+      }
+    }
+
+    final list = data['result'];
+    if (list is List) {
+      for (final item in list) {
+        if (item is Map && item['data'] is List) {
+          for (final raw in item['data'] as List) {
+            addRaw(raw);
+          }
+        } else {
+          addRaw(item);
+        }
+      }
+    }
+    return result;
+  }
+
   // 获取搜索建议
   @pragma('vm:notify-debugger-on-exception')
   static Future<LoadingState<SearchSuggestModel>> searchSuggest({
@@ -133,11 +176,22 @@ abstract final class SearchHttp {
           if (data is SearchVideoData) {
             final items = data.list;
             if (items != null && items.isNotEmpty) {
+              final rawByBvid = _rawVideoItemsOf(dataData);
               data.list = await aiFilterList<SearchVideoItemModel>(
                 surface: FilterSurface.video,
                 items: items,
                 textOf: _videoText,
                 midOf: (e) => e.owner.mid,
+                metaOf: _videoMeta,
+                snapshotOf: (e) {
+                  final raw = rawByBvid[e.bvid];
+                  return raw == null
+                      ? null
+                      : <String, dynamic>{
+                          'json': raw,
+                          'model': 'SearchVideoItemModel',
+                        };
+                },
               );
             }
           }

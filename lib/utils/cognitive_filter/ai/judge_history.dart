@@ -13,7 +13,11 @@ class JudgeHistoryEntry {
     this.label = '',
     this.ruleType = '',
     this.ruleId,
-  }) : text = _truncate(text);
+    this.scores,
+    this.meta,
+    Map<String, dynamic>? snapshot,
+  }) : text = _truncate(text),
+       _snapshot = snapshot;
 
   /// 来源：AI 屏蔽
   static const String ai = 'ai';
@@ -22,7 +26,7 @@ class JudgeHistoryEntry {
   static const String rule = 'rule';
 
   /// 文本最多保留的字数
-  static const int maxTextLength = 200;
+  static const int maxTextLength = 2000;
 
   final DateTime time;
   final String surface;
@@ -30,6 +34,22 @@ class JudgeHistoryEntry {
   final String? categoryId;
   final double score;
   final String source;
+
+  /// AI 判定的各选项概率，旧数据或规则屏蔽为空
+  final Map<String, double>? scores;
+
+  /// 原始内容的简单快照，键与值都是简单类型
+  final Map<String, dynamic>? meta;
+
+  Map<String, dynamic>? _snapshot;
+
+  /// 可选的重快照，只有最近少量 AI 条目保留
+  Map<String, dynamic>? get snapshot => _snapshot;
+
+  /// 快照超出保留窗口时置空
+  void dropSnapshot() {
+    _snapshot = null;
+  }
 
   /// 屏蔽来源，`ai` 或 `rule`
   final String kind;
@@ -56,6 +76,9 @@ class JudgeHistoryEntry {
     'label': label,
     if (ruleType.isNotEmpty) 'ruleType': ruleType,
     if (ruleId != null) 'ruleId': ruleId,
+    if (scores != null && scores!.isNotEmpty) 'scores': scores,
+    if (meta != null && meta!.isNotEmpty) 'meta': meta,
+    if (_snapshot != null) 'snapshot': _snapshot,
   };
 
   /// 缺字段、类型错误都按缺省值处理，不抛异常
@@ -76,10 +99,39 @@ class JudgeHistoryEntry {
       label: _stringOf(json['label']),
       ruleType: _stringOf(json['ruleType']),
       ruleId: json['ruleId'] is String ? json['ruleId'] as String : null,
+      scores: _scoresOf(json['scores']),
+      meta: _mapOf(json['meta']),
+      snapshot: _mapOf(json['snapshot']),
     );
   }
 
   static String _stringOf(Object? value) => value is String ? value : '';
+
+  static Map<String, double>? _scoresOf(Object? value) {
+    if (value is! Map) {
+      return null;
+    }
+    final result = <String, double>{};
+    value.forEach((key, item) {
+      if (key is String && item is num && item.isFinite) {
+        result[key] = item.toDouble();
+      }
+    });
+    return result.isEmpty ? null : result;
+  }
+
+  static Map<String, dynamic>? _mapOf(Object? value) {
+    if (value is! Map) {
+      return null;
+    }
+    final result = <String, dynamic>{};
+    value.forEach((key, item) {
+      if (key is String) {
+        result[key] = item;
+      }
+    });
+    return result.isEmpty ? null : result;
+  }
 
   static String _truncate(String text) {
     final runes = text.runes.toList(growable: false);
@@ -95,6 +147,9 @@ class JudgeHistory {
   JudgeHistory({this.capacity = 300}) : assert(capacity > 0);
 
   static const int _version = 1;
+
+  /// 只保留最近这么多条 AI 条目的重快照
+  static const int _snapshotWindow = 100;
 
   final int capacity;
   final List<JudgeHistoryEntry> _entries = <JudgeHistoryEntry>[];
@@ -112,7 +167,22 @@ class JudgeHistory {
     while (_entries.length > capacity) {
       _entries.removeLast();
     }
+    _trimSnapshots();
     _dirty = true;
+  }
+
+  /// 超出保留窗口的 AI 条目丢掉重快照，meta 与 scores 不动
+  void _trimSnapshots() {
+    var aiCount = 0;
+    for (final entry in _entries) {
+      if (entry.isRule) {
+        continue;
+      }
+      aiCount++;
+      if (aiCount > _snapshotWindow) {
+        entry.dropSnapshot();
+      }
+    }
   }
 
   void clear() {
@@ -159,6 +229,7 @@ class JudgeHistory {
     if (_entries.length > capacity) {
       _entries.removeRange(capacity, _entries.length);
     }
+    _trimSnapshots();
     _dirty = false;
   }
 

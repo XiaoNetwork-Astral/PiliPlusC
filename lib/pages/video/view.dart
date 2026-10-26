@@ -44,6 +44,7 @@ import 'package:PiliPlus/pages/video/introduction/ugc/widgets/season.dart'
     as ugc;
 import 'package:PiliPlus/pages/video/member/controller.dart';
 import 'package:PiliPlus/pages/video/member/view.dart';
+import 'package:PiliPlus/pages/video/related/controller.dart';
 import 'package:PiliPlus/pages/video/related/view.dart';
 import 'package:PiliPlus/pages/video/reply/controller.dart';
 import 'package:PiliPlus/pages/video/reply/view.dart';
@@ -63,6 +64,7 @@ import 'package:PiliPlus/services/shutdown_timer_service.dart'
     show shutdownTimerService;
 import 'package:PiliPlus/utils/accounts.dart';
 import 'package:PiliPlus/utils/android/bindings.g.dart';
+import 'package:PiliPlus/utils/cognitive_filter/ai/ai_runtime.dart';
 import 'package:PiliPlus/utils/extension/scroll_controller_ext.dart';
 import 'package:PiliPlus/utils/extension/theme_ext.dart';
 import 'package:PiliPlus/utils/image_utils.dart';
@@ -96,6 +98,9 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
   late final VideoDetailController videoDetailController;
   late final VideoReplyController _videoReplyController;
   PlPlayerController? plPlayerController;
+
+  /// 全屏状态监听：退出全屏后补判全屏期间被 AI 暂缓的评论与相关视频
+  Worker? _fullScreenWorker;
 
   // intro ctr
   late final CommonIntroController introController;
@@ -167,6 +172,11 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
 
     _setPlayCallBack();
 
+    _fullScreenWorker = ever(
+      videoDetailController.plPlayerController.isFullScreen,
+      _onFullScreenChanged,
+    );
+
     if (videoDetailController.removeSafeArea) {
       hideSystemBar();
     }
@@ -185,6 +195,29 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
     videoSourceInit();
 
     addObserverMobile(this);
+  }
+
+  /// 退出全屏时补判：全屏期间 aiFilterList 暂缓了评论/相关视频，这里对
+  /// 当前视频页的两个列表各重新加载一次（重新加载会重新走 AI 过滤）。
+  void _onFullScreenChanged(bool fullScreen) {
+    if (fullScreen || !isShowing || !mounted) return;
+    if (!AiFilterRuntime.instance.deferredWhileFullscreen) return;
+    // 先置回 false，避免重复退出全屏或其它页面监听导致多次补判
+    AiFilterRuntime.instance.deferredWhileFullscreen = false;
+    try {
+      if (Get.isRegistered<VideoReplyController>(tag: heroTag)) {
+        Get.find<VideoReplyController>(tag: heroTag).onRefresh();
+      }
+    } catch (_) {
+      // 控制器缺失或正在销毁时安全跳过
+    }
+    try {
+      if (Get.isRegistered<RelatedController>(tag: heroTag)) {
+        Get.find<RelatedController>(tag: heroTag).onRefresh();
+      }
+    } catch (_) {
+      // 同上
+    }
   }
 
   // 获取视频资源，初始化播放器
@@ -361,6 +394,7 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
 
   @override
   void dispose() {
+    _fullScreenWorker?.dispose();
     plPlayerController
       ?..removeStatusLister(playerListener)
       ..removePositionListener(positionListener);

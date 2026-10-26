@@ -2,12 +2,14 @@ import 'package:PiliPlus/common/widgets/dialog/dialog.dart';
 import 'package:PiliPlus/common/widgets/scaffold/simple_scaffold.dart';
 import 'package:PiliPlus/common/widgets/view_safe_area.dart';
 import 'package:PiliPlus/models/cognitive_filter/filter_surface.dart';
+import 'package:PiliPlus/pages/cognitive_filter/judge_history_detail_page.dart';
 import 'package:PiliPlus/pages/cognitive_filter/widgets.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/ai_runtime.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/ai_whitelist.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/judge_history.dart';
 import 'package:PiliPlus/utils/cognitive_filter/rule_store.dart';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
+import 'package:get/get.dart';
 import 'package:material_ui/material_ui.dart';
 
 enum _HistoryFilter {
@@ -208,6 +210,9 @@ class _JudgeHistoryPageState extends State<JudgeHistoryPage> {
                           titleMaxLines: 2,
                           subtitleWidget: _buildBadges(entry),
                           trailing: _buildTrailing(theme, entry),
+                          onTap: () => Get.to(
+                            () => JudgeHistoryDetailPage(entry: entry),
+                          ),
                         );
                       },
                     ),

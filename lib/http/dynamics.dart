@@ -39,6 +39,38 @@ abstract final class DynamicsHttp {
   // 连续自动翻页上限：整页被过滤后最多补拉 5 页，之后由用户下拉刷新
   static const int _maxAutoLoadPages = 5;
 
+  /// 动态的简单快照，键与值都是简单类型
+  static Map<String, dynamic> _dynamicMeta(DynamicItemModel item) {
+    final author = item.modules.moduleAuthor;
+    final dynamicModule = item.modules.moduleDynamic;
+    final title =
+        dynamicModule?.major?.opus?.title ?? dynamicModule?.major?.archive?.title;
+    final uname = author?.name;
+    final mid = author?.mid;
+    return <String, dynamic>{
+      'type': 'dynamic',
+      if (item.idStr != null) 'id': '${item.idStr}',
+      if (uname != null && uname.isNotEmpty) 'uname': uname,
+      if (mid != null) 'mid': mid,
+      if (title != null && title.isNotEmpty) 'title': title,
+      'text': DynamicsDataModel.matchText(item),
+    };
+  }
+
+  /// 从原始响应里按动态 id 收集 JSON，供屏蔽时做快照
+  static Map<String, Map<String, dynamic>> _rawItemsOf(Object? data) {
+    final result = <String, Map<String, dynamic>>{};
+    final items = data is Map ? data['items'] : null;
+    if (items is List) {
+      for (final raw in items) {
+        if (raw is Map && raw['id_str'] != null) {
+          result['${raw['id_str']}'] = Map<String, dynamic>.from(raw);
+        }
+      }
+    }
+    return result;
+  }
+
   @pragma('vm:notify-debugger-on-exception')
   static Future<LoadingState<DynamicsDataModel>> followDynamic({
     int? hostMid,
@@ -59,6 +91,7 @@ abstract final class DynamicsHttp {
     final res = await Request().get(Api.followDynamic, queryParameters: data);
     final code = res.data['code'];
     if (code == 0) {
+      final rawById = _rawItemsOf(res.data['data']);
       try {
         DynamicsDataModel data = DynamicsDataModel.fromJson(
           res.data['data'],
@@ -90,6 +123,11 @@ abstract final class DynamicsHttp {
             items: items,
             textOf: DynamicsDataModel.matchText,
             midOf: (e) => e.modules.moduleAuthor?.mid,
+            metaOf: _dynamicMeta,
+            snapshotOf: (e) {
+              final raw = rawById['${e.idStr}'];
+              return raw == null ? null : <String, dynamic>{'json': raw};
+            },
           );
           if (!identical(filtered, items)) {
             data.items = filtered;

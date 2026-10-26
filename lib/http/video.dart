@@ -67,6 +67,33 @@ abstract final class VideoHttp {
     return '${item.title}（UP主：$name）';
   }
 
+  /// 视频的简单快照，键与值都是简单类型
+  static Map<String, dynamic> _videoMeta(BaseVideoItemModel item) {
+    final owner = item.owner;
+    final uname = owner.name;
+    final mid = owner.mid;
+    return <String, dynamic>{
+      'type': 'video',
+      if (item.bvid != null) 'bvid': item.bvid,
+      if (item.aid != null) 'aid': item.aid,
+      'title': item.title,
+      if (uname != null && uname.isNotEmpty) 'uname': uname,
+      if (mid != null) 'mid': mid,
+      if (item.cover != null && item.cover!.isNotEmpty) 'cover': item.cover,
+      if (item.duration > 0) 'duration': item.duration,
+    };
+  }
+
+  /// 原始 JSON 加上模型类名，只有被屏蔽写入历史时才生成
+  static Map<String, dynamic>? _videoSnapshot(
+    Map<String, dynamic>? raw,
+    String model,
+  ) {
+    return raw == null
+        ? null
+        : <String, dynamic>{'json': raw, 'model': model};
+  }
+
   // 首页推荐视频
   static Future<LoadingState<List<RcmdVideoItemModel>>> rcmdVideoList({
     required int ps,
@@ -88,6 +115,7 @@ abstract final class VideoHttp {
       final snap = RuleEngine.instance.snapshot(RuleScope.video);
       final enabled = Pref.cfRuleFilterEnabled;
       List<RcmdVideoItemModel> list = <RcmdVideoItemModel>[];
+      final rawByItem = <RcmdVideoItemModel, Map<String, dynamic>>{};
       for (final i in res.data['data']['item']) {
         //过滤掉live与ad，以及拉黑用户
         if (_filterWebRcmd(i, snap)) continue;
@@ -98,6 +126,9 @@ abstract final class VideoHttp {
           enabled: enabled,
         )) {
           list.add(videoItem);
+          if (i is Map) {
+            rawByItem[videoItem] = Map<String, dynamic>.from(i);
+          }
         }
       }
       final filtered = await aiFilterList<RcmdVideoItemModel>(
@@ -105,6 +136,9 @@ abstract final class VideoHttp {
         items: list,
         textOf: _rcmdText,
         midOf: (e) => e.owner.mid,
+        metaOf: _videoMeta,
+        snapshotOf: (e) =>
+            _videoSnapshot(rawByItem[e], 'RcmdVideoItemModel'),
       );
       return Success(filtered);
     } else {
@@ -193,6 +227,7 @@ abstract final class VideoHttp {
       final snap = RuleEngine.instance.snapshot(RuleScope.video);
       final enabled = Pref.cfRuleFilterEnabled;
       final list = <RcmdVideoItemAppModel>[];
+      final rawByItem = <RcmdVideoItemAppModel, Map<String, dynamic>>{};
       for (final i in res.data['data']['items']) {
         // 屏蔽推广和拉黑用户
         if (_filterAppRcmd(i, snap)) continue;
@@ -203,6 +238,9 @@ abstract final class VideoHttp {
           enabled: enabled,
         )) {
           list.add(videoItem);
+          if (i is Map) {
+            rawByItem[videoItem] = Map<String, dynamic>.from(i);
+          }
         }
       }
       final filtered = await aiFilterList<RcmdVideoItemAppModel>(
@@ -210,6 +248,9 @@ abstract final class VideoHttp {
         items: list,
         textOf: _rcmdText,
         midOf: (e) => e.owner.mid,
+        metaOf: _videoMeta,
+        snapshotOf: (e) =>
+            _videoSnapshot(rawByItem[e], 'RcmdVideoItemAppModel'),
       );
       return Success(filtered);
     } else {
@@ -442,6 +483,7 @@ abstract final class VideoHttp {
     if (res.data['code'] == 0) {
       final snap = RuleEngine.instance.snapshot(RuleScope.video);
       final enabled = Pref.cfRuleFilterEnabled;
+      final rawByItem = <HotVideoItemModel, Map<String, dynamic>>{};
       final items = (res.data['data'] as List?)
           ?.where(
             (e) => !_blocked(
@@ -450,7 +492,13 @@ abstract final class VideoHttp {
               text: _textOf(e['title']),
             ),
           )
-          .map((i) => HotVideoItemModel.fromJson(i));
+          .map((i) {
+            final model = HotVideoItemModel.fromJson(i);
+            if (i is Map) {
+              rawByItem[model] = Map<String, dynamic>.from(i);
+            }
+            return model;
+          });
       final List<HotVideoItemModel>? list;
       if (enabled && RecommendFilter.applyFilterToRelatedVideos) {
         list = items
@@ -468,6 +516,9 @@ abstract final class VideoHttp {
             items: list,
             textOf: _rcmdText,
             midOf: (e) => e.owner.mid,
+            metaOf: _videoMeta,
+            snapshotOf: (e) =>
+                _videoSnapshot(rawByItem[e], 'HotVideoItemModel'),
           ),
         );
       }

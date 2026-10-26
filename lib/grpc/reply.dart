@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:PiliPlus/common/constants.dart';
 import 'package:PiliPlus/grpc/bilibili/main/community/reply/v1.pb.dart';
 import 'package:PiliPlus/grpc/bilibili/pagination.pb.dart';
@@ -100,6 +102,25 @@ abstract final class ReplyGrpc {
         reply.content.atNameToMid.length >= blockReplyAtCount!;
   }
 
+  /// 评论的简单快照，键与值都是简单类型
+  static Map<String, dynamic> _replyMeta(ReplyInfo item) {
+    final uname = item.member.name;
+    return <String, dynamic>{
+      'type': 'reply',
+      'oid': item.oid.toInt(),
+      'rpid': item.id.toInt(),
+      'replyType': item.type.toInt(),
+      if (uname.isNotEmpty) 'uname': uname,
+      'mid': item.mid.toInt(),
+      'text': item.content.message,
+    };
+  }
+
+  /// 评论的原始 protobuf 快照，只有被屏蔽写入历史时才调用
+  static Map<String, dynamic> _replySnapshot(ReplyInfo item) {
+    return <String, dynamic>{'reply': base64Encode(item.writeToBuffer())};
+  }
+
   /// 判断单条评论是否剔除；快照与总开关由调用方按页只取一次
   static bool needRemoveGrpc(
     ReplyInfo reply,
@@ -173,9 +194,9 @@ abstract final class ReplyGrpc {
         });
       }
 
-      // 规则过滤后，置顶、主评论与楼中楼合成一次请求交给 AI
+      // 规则过滤后，主评论与楼中楼合成一次请求交给 AI。
+      // 置顶评论按位置不送 AI 判定（规则屏蔽已在上面处理），不做身份豁免。
       final candidates = <ReplyInfo>[
-        if (response.hasUpTop()) response.upTop,
         ...response.replies,
         for (final item in response.replies) ...item.replies,
       ];
@@ -184,12 +205,11 @@ abstract final class ReplyGrpc {
         items: candidates,
         textOf: (item) => item.content.message,
         midOf: (item) => item.mid.toInt(),
+        metaOf: _replyMeta,
+        snapshotOf: _replySnapshot,
       );
       if (!identical(kept, candidates)) {
         final keptSet = Set<ReplyInfo>.identity()..addAll(kept);
-        if (response.hasUpTop() && !keptSet.contains(response.upTop)) {
-          response.clearUpTop();
-        }
         response.replies.removeWhere((item) => !keptSet.contains(item));
         for (final item in response.replies) {
           if (item.replies.isNotEmpty) {
@@ -231,6 +251,8 @@ abstract final class ReplyGrpc {
         items: replies,
         textOf: (e) => e.content.message,
         midOf: (e) => e.mid.toInt(),
+        metaOf: _replyMeta,
+        snapshotOf: _replySnapshot,
       );
       if (!identical(filtered, replies)) {
         replies
@@ -268,6 +290,8 @@ abstract final class ReplyGrpc {
         items: replies,
         textOf: (e) => e.content.message,
         midOf: (e) => e.mid.toInt(),
+        metaOf: _replyMeta,
+        snapshotOf: _replySnapshot,
       );
       if (!identical(filtered, replies)) {
         replies

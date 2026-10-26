@@ -1,6 +1,6 @@
 import 'package:PiliPlus/common/widgets/dialog/dialog.dart';
-import 'package:PiliPlus/common/widgets/dialog/text_input_dialog.dart';
 import 'package:PiliPlus/pages/cognitive_filter/ai_surface_page.dart';
+import 'package:PiliPlus/pages/cognitive_filter/calibration_page.dart';
 import 'package:PiliPlus/pages/cognitive_filter/category_list_page.dart';
 import 'package:PiliPlus/pages/cognitive_filter/judge_trial_dialog.dart';
 import 'package:PiliPlus/pages/cognitive_filter/provider_page.dart';
@@ -9,8 +9,7 @@ import 'package:PiliPlus/pages/cognitive_filter/widgets.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/ai_runtime.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/ai_whitelist.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/ai_whitelist_core.dart';
-import 'package:PiliPlus/utils/storage.dart';
-import 'package:PiliPlus/utils/storage_key.dart';
+import 'package:PiliPlus/utils/cognitive_filter/ai/calibration/guard_rules_source.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
@@ -49,42 +48,35 @@ class _AiFilterTabState extends State<AiFilterTab> {
       return;
     }
 
-    final rawAccepted = GStorage.setting.get(
-      SettingBoxKey.cfAiPrivacyAccepted,
-      defaultValue: false,
-    );
-    final accepted = rawAccepted is bool ? rawAccepted : false;
-    if (!accepted) {
-      final confirmed =
-          await showDialog<bool>(
-            context: context,
-            builder: (dialogContext) => AlertDialog(
-              title: const Text('开启 AI 屏蔽'),
-              content: const Text('开启后，弹幕、评论、动态、视频的文字会发送到你配置的服务'),
-              actions: [
-                TextButton(
-                  onPressed: Get.back,
-                  child: Text(
-                    '取消',
-                    style: TextStyle(
-                      color: ColorScheme.of(dialogContext).outline,
-                    ),
+    // 每次打开都确认，不记住上一次的选择
+    final confirmed =
+        await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('开启 AI 屏蔽'),
+            content: const Text(
+              '开启后，弹幕、评论、动态、视频标题等文字会发送到你配置的外部 AI 服务来判断是否屏蔽\n\n'
+              '使用校准向导时，还会把其中一部分内容发送到你配置的整理服务',
+            ),
+            actions: [
+              TextButton(
+                onPressed: Get.back,
+                child: Text(
+                  '取消',
+                  style: TextStyle(
+                    color: ColorScheme.of(dialogContext).outline,
                   ),
                 ),
-                TextButton(
-                  onPressed: () => Get.back(result: true),
-                  child: const Text('我已了解并开启'),
-                ),
-              ],
-            ),
-          ) ??
-          false;
-      if (!confirmed || !mounted) return;
-      await GStorage.setting.put(
-        SettingBoxKey.cfAiPrivacyAccepted,
-        true,
-      );
-    }
+              ),
+              TextButton(
+                onPressed: () => Get.back(result: true),
+                child: const Text('我已了解并开启'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirmed || !mounted) return;
 
     Pref.cfAiFilterEnabled = true;
     if (!mounted) return;
@@ -95,34 +87,6 @@ class _AiFilterTabState extends State<AiFilterTab> {
     await Get.to(() => const FilterProviderPage());
     if (!mounted) return;
     setState(() {});
-  }
-
-  Future<void> _editDailyCap() async {
-    final cap = Pref.cfAiDailyCapUsd;
-    final result = await showTextInputDialog(
-      context: context,
-      title: '每日用量上限',
-      initialValue: cap > 0 ? _formatUsd(cap) : '0',
-      hintText: '0 表示不限制',
-      suffixText: '美元',
-      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-      validator: (value) {
-        final number = double.tryParse(value);
-        if (number == null || !number.isFinite || number < 0) {
-          return '请输入不小于 0 的数字';
-        }
-        return null;
-      },
-    );
-    if (result == null) return;
-    Pref.cfAiDailyCapUsd = double.parse(result);
-    if (!mounted) return;
-    setState(() {});
-  }
-
-  String _formatUsd(double value) {
-    final text = value.toStringAsFixed(3);
-    return text.replaceFirst(RegExp(r'\.?0+$'), '');
   }
 
   Future<void> _clearCache() async {
@@ -162,18 +126,6 @@ class _AiFilterTabState extends State<AiFilterTab> {
           onTap: _openProvider,
         ),
         CfTile(
-          icon: Icons.savings_outlined,
-          title: '每日用量上限',
-          subtitle: '今日已用 \$${AiFilterRuntime.instance.usdToday.toStringAsFixed(3)}',
-          trailing: Text(
-            Pref.cfAiDailyCapUsd > 0
-                ? '\$${_formatUsd(Pref.cfAiDailyCapUsd)}'
-                : '不限制',
-            style: Theme.of(context).textTheme.titleSmall,
-          ),
-          onTap: _editDailyCap,
-        ),
-        CfTile(
           icon: Icons.apps,
           title: '生效范围',
           onTap: () => Get.to(() => const AiSurfacePage()),
@@ -185,6 +137,22 @@ class _AiFilterTabState extends State<AiFilterTab> {
             () => RuleListPage(
               source: AiWhitelist.instance,
               title: '白名单',
+              allowedScopes: aiWhitelistScopes,
+            ),
+          ),
+        ),
+        CfTile(
+          icon: Icons.tune_outlined,
+          title: '校准向导',
+          onTap: () => Get.to(() => const CalibrationPage()),
+        ),
+        CfTile(
+          icon: Icons.shield_outlined,
+          title: '不外传规则',
+          onTap: () => Get.to(
+            () => RuleListPage(
+              source: GuardRulesSource.instance,
+              title: '不外传规则',
               allowedScopes: aiWhitelistScopes,
             ),
           ),

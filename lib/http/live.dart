@@ -60,6 +60,22 @@ abstract final class LiveHttp {
     return '$text（主播：$name）';
   }
 
+  /// 直播间的简单快照，键与值都是简单类型
+  static Map<String, dynamic> _liveMeta({
+    int? roomId,
+    String? title,
+    String? uname,
+    String? cover,
+  }) {
+    return <String, dynamic>{
+      'type': 'live',
+      if (roomId != null) 'roomId': roomId,
+      if (title != null && title.isNotEmpty) 'title': title,
+      if (uname != null && uname.isNotEmpty) 'uname': uname,
+      if (cover != null && cover.isNotEmpty) 'cover': cover,
+    };
+  }
+
   static Future<LoadingState<void>> sendLiveMsg({
     required Object roomId,
     required Object msg,
@@ -297,6 +313,15 @@ abstract final class LiveHttp {
             return _liveText(item?.title, item?.uname);
           },
           midOf: (e) => e.cardData?.smallCardV1?.uid,
+          metaOf: (e) {
+            final item = e.cardData?.smallCardV1;
+            return _liveMeta(
+              roomId: item?.roomid,
+              title: item?.title,
+              uname: item?.uname,
+              cover: item?.cover,
+            );
+          },
         );
         if (!identical(filtered, cards)) {
           data.cardList = filtered;
@@ -309,6 +334,12 @@ abstract final class LiveHttp {
           items: followList,
           textOf: (e) => _liveText(e.title, e.uname),
           midOf: (e) => e.uid,
+          metaOf: (e) => _liveMeta(
+            roomId: e.roomid,
+            title: e.title,
+            uname: e.uname,
+            cover: e.cover,
+          ),
         );
         if (!identical(filtered, followList)) {
           followList
@@ -351,6 +382,12 @@ abstract final class LiveHttp {
           items: list,
           textOf: (e) => _liveText(e.title, e.uname),
           midOf: (e) => e.uid,
+          metaOf: (e) => _liveMeta(
+            roomId: e.roomid,
+            title: e.title,
+            uname: e.uname,
+            cover: e.roomCover,
+          ),
         );
         if (!identical(filtered, list)) {
           data.list = filtered;
@@ -435,6 +472,12 @@ abstract final class LiveHttp {
           items: cards,
           textOf: (e) => _liveText(e.title, e.uname),
           midOf: (e) => e.uid,
+          metaOf: (e) => _liveMeta(
+            roomId: e.roomid,
+            title: e.title,
+            uname: e.uname,
+            cover: e.cover,
+          ),
         );
         if (!identical(filtered, cards)) {
           data.cardList = filtered;
@@ -623,6 +666,12 @@ abstract final class LiveHttp {
           items: rooms,
           textOf: (e) => _liveText(e.title, e.name),
           midOf: (e) => e.uid,
+          metaOf: (e) => _liveMeta(
+            roomId: e.roomid,
+            title: e.title,
+            uname: e.name,
+            cover: e.cover,
+          ),
         );
         if (!identical(filtered, rooms)) {
           rooms
