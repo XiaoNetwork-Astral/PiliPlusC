@@ -4,6 +4,7 @@ import 'package:PiliPlus/common/widgets/view_safe_area.dart';
 import 'package:PiliPlus/pages/cognitive_filter/widgets.dart';
 import 'package:PiliPlus/pages/setting/widgets/select_dialog.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/ai_runtime.dart';
+import 'package:PiliPlus/utils/cognitive_filter/ai/calibration/calibration_service.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/calibration/llm_client.dart';
 import 'package:PiliPlus/utils/cognitive_filter/jev_client.dart';
 import 'package:PiliPlus/utils/cognitive_filter/jev_proxy.dart';
@@ -129,6 +130,35 @@ class _FilterProviderPageState extends State<FilterProviderPage> {
     setState(() {});
   }
 
+  Future<void> _editLlmCap() async {
+    final cap = Pref.cfLlmDailyCapTokens;
+    final result = await showTextInputDialog(
+      context: context,
+      title: '每日用量上限',
+      initialValue: cap > 0 ? _formatWan(cap) : '0',
+      hintText: '0 表示不限制',
+      suffixText: '万 token',
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      validator: (value) {
+        final number = double.tryParse(value);
+        if (number == null || !number.isFinite || number < 0) {
+          return '请输入不小于 0 的数字';
+        }
+        return null;
+      },
+    );
+    if (result == null) return;
+    Pref.cfLlmDailyCapTokens = (double.parse(result) * 10000).round();
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  String _formatWan(int tokens) =>
+      (tokens / 10000).toStringAsFixed(2).replaceFirst(RegExp(r'\.?0+$'), '');
+
+  String _formatTokens(int tokens) =>
+      tokens < 10000 ? '$tokens token' : '${_formatWan(tokens)} 万 token';
+
   String _formatUsd(double value) {
     final text = value.toStringAsFixed(3);
     return text.replaceFirst(RegExp(r'\.?0+$'), '');
@@ -147,31 +177,47 @@ class _FilterProviderPageState extends State<FilterProviderPage> {
             _EndpointSection(
               store: _judgeStore,
               test: _testJudge,
+              extra: [
+                CfTile(
+                  icon: Icons.timer_outlined,
+                  title: '等待超时',
+                  subtitle: '$_timeout 秒',
+                  onTap: _editTimeout,
+                ),
+                CfTile(
+                  icon: Icons.savings_outlined,
+                  title: '每日用量上限',
+                  subtitle:
+                      '今日已用 \$${AiFilterRuntime.instance.usdToday.toStringAsFixed(3)}',
+                  trailing: Text(
+                    Pref.cfAiDailyCapUsd > 0
+                        ? '\$${_formatUsd(Pref.cfAiDailyCapUsd)}'
+                        : '不限制',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                  onTap: _editDailyCap,
+                ),
+              ],
             ),
             const CfGroupHeader('整理接口'),
             _EndpointSection(
               store: _llmStore,
               test: _testLlm,
-            ),
-            const CfGroupHeader('通用'),
-            CfTile(
-              icon: Icons.timer_outlined,
-              title: '等待超时',
-              subtitle: '$_timeout 秒',
-              onTap: _editTimeout,
-            ),
-            CfTile(
-              icon: Icons.savings_outlined,
-              title: '每日用量上限',
-              subtitle:
-                  '今日已用 \$${AiFilterRuntime.instance.usdToday.toStringAsFixed(3)}',
-              trailing: Text(
-                Pref.cfAiDailyCapUsd > 0
-                    ? '\$${_formatUsd(Pref.cfAiDailyCapUsd)}'
-                    : '不限制',
-                style: Theme.of(context).textTheme.titleSmall,
-              ),
-              onTap: _editDailyCap,
+              extra: [
+                CfTile(
+                  icon: Icons.savings_outlined,
+                  title: '每日用量上限',
+                  subtitle:
+                      '今日已用 ${_formatTokens(CalibrationService.instance.llmTokensToday)}',
+                  trailing: Text(
+                    Pref.cfLlmDailyCapTokens > 0
+                        ? _formatTokens(Pref.cfLlmDailyCapTokens)
+                        : '不限制',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                  onTap: _editLlmCap,
+                ),
+              ],
             ),
           ],
         ),
@@ -220,12 +266,19 @@ class _FilterProviderPageState extends State<FilterProviderPage> {
 
 /// 一个接口的五项设置加测试按钮
 class _EndpointSection extends StatefulWidget {
-  const _EndpointSection({required this.store, required this.test});
+  const _EndpointSection({
+    required this.store,
+    required this.test,
+    this.extra = const <Widget>[],
+  });
 
   final _EndpointStore store;
 
   /// 用当前保存的设置测试连接，返回要提示给用户的一句话
   final Future<String> Function() test;
+
+  /// 接口设置下面追加的行，比如超时与用量上限
+  final List<Widget> extra;
 
   @override
   State<_EndpointSection> createState() => _EndpointSectionState();
@@ -377,6 +430,7 @@ class _EndpointSectionState extends State<_EndpointSection> {
             subtitle: proxyAddress.isEmpty ? '未填写' : proxyAddress,
             onTap: _editProxyAddress,
           ),
+        ...widget.extra,
         CfTestButton(testing: _testing, onPressed: _testConnection),
       ],
     );

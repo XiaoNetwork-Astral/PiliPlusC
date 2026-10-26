@@ -26,7 +26,7 @@ class RoundOutcome {
   /// 这一轮整理出的题目
   final List<CalibrationQuestion> questions;
 
-  /// 非空表示这一轮因密钥、网络、限流、服务端或超时中止
+  /// 非空表示这一轮因密钥、网络、限流、服务端、超时或用量上限中止
   final LlmErrorKind? abortedBy;
 
   /// 服务商拒绝或返回无法解析而丢弃的批数
@@ -130,6 +130,15 @@ class CalibrationService {
       );
     }
 
+    // 今日整理接口的 token 额度用完了，这一轮直接不发请求
+    if (llmBudgetReached) {
+      return const RoundOutcome(
+        questions: <CalibrationQuestion>[],
+        abortedBy: LlmErrorKind.budget,
+        refusedChunks: 0,
+      );
+    }
+
     await init();
     final pool = _pool;
     if (pool == null) {
@@ -147,12 +156,14 @@ class CalibrationService {
         model: Pref.cfLlmModel,
         timeout: const Duration(seconds: 60),
         proxy: _currentProxy(),
+        onUsage: _recordLlmUsage,
       );
       final result = await round.runRound(
         pool: pool.items,
         chat: client.chat,
         isBlockedForUpload: _isBlockedForUpload,
         onProgress: onProgress,
+        shouldStop: () => llmBudgetReached,
       );
       pool.removeIds(<String>{...result.usedIds, ...result.droppedIds});
       await pool.flush();
@@ -168,6 +179,38 @@ class CalibrationService {
         refusedChunks: 0,
       );
     }
+  }
+
+  /// 整理接口今天的 token 用量；跨天时把存储的日期改成今天并清零
+  int get llmTokensToday {
+    final day = _dayKey(DateTime.now());
+    if (Pref.cfLlmUsageDay != day) {
+      Pref.cfLlmUsageDay = day;
+      Pref.cfLlmUsageTokens = 0;
+      return 0;
+    }
+    return Pref.cfLlmUsageTokens;
+  }
+
+  /// 整理接口今天的用量是否已到上限；上限为 0 表示不限制
+  bool get llmBudgetReached {
+    final cap = Pref.cfLlmDailyCapTokens;
+    return cap > 0 && llmTokensToday >= cap;
+  }
+
+  /// 累加整理接口的 token 用量，跨天时从 0 开始记
+  void _recordLlmUsage(int totalTokens) {
+    final day = _dayKey(DateTime.now());
+    final base = Pref.cfLlmUsageDay == day ? Pref.cfLlmUsageTokens : 0;
+    Pref.cfLlmUsageDay = day;
+    Pref.cfLlmUsageTokens = base + (totalTokens < 0 ? 0 : totalTokens);
+  }
+
+  /// 本地日期，格式 yyyy-MM-dd，与用量存储保持一致
+  static String _dayKey(DateTime time) {
+    final month = time.month.toString().padLeft(2, '0');
+    final day = time.day.toString().padLeft(2, '0');
+    return '${time.year}-$month-$day';
   }
 
   /// 把回答折算成门槛调整量并写入设置

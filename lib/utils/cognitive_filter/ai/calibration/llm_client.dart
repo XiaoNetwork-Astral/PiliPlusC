@@ -25,6 +25,9 @@ enum LlmErrorKind {
 
   /// 返回结构不对或内容为空
   parse,
+
+  /// 已达整理接口的今日 token 用量上限
+  budget,
 }
 
 /// 大模型调用异常，[message] 是中文且不含 Authorization 头或密钥
@@ -67,6 +70,7 @@ class LlmClient {
     this.temperature = 0.2,
     this.jsonMode = true,
     Dio? dio,
+    this.onUsage,
   }) : _dio = dio ?? _createDio(proxy, timeout);
 
   /// 接口根地址，例如 `https://api.example.com/v1`
@@ -86,6 +90,9 @@ class LlmClient {
 
   /// 是否要求服务商返回 JSON 对象
   final bool jsonMode;
+
+  /// 成功拿到响应后回调本次的 `usage.total_tokens`，取不到时不回调
+  final void Function(int totalTokens)? onUsage;
 
   final Dio _dio;
 
@@ -110,7 +117,7 @@ class LlmClient {
   Future<void> test() async {
     await _request(
       const <LlmMessage>[LlmMessage(role: 'user', content: '回复 ok')],
-      maxTokens: 8,
+      maxTokens: 16,
       useJsonMode: false,
     );
   }
@@ -140,6 +147,11 @@ class LlmClient {
     if (maxTokens != null) {
       body['max_tokens'] = maxTokens;
     }
+    // DeepSeek 默认开启思考，思考会占满输出额度导致正文为空，归类也用不着，
+    // 所以官方接口一律关掉；其它服务商不认这个字段，不发
+    if (Uri.tryParse(baseUrl.trim())?.host.endsWith('deepseek.com') ?? false) {
+      body['thinking'] = const <String, dynamic>{'type': 'disabled'};
+    }
 
     try {
       final response = await _dio.post<String>(
@@ -154,7 +166,9 @@ class LlmClient {
           },
         ),
       );
-      return _extractContent(response.data);
+      final content = _extractContent(response.data);
+      _reportUsage(response.data);
+      return content;
     } on DioException catch (error) {
       throw _mapDioError(error);
     } on LlmException {
@@ -216,6 +230,31 @@ class LlmClient {
       throw _parseError;
     }
     return content;
+  }
+
+  /// 从成功响应里取 `usage.total_tokens` 上报；缺字段或结构不对就跳过
+  void _reportUsage(String? data) {
+    final onUsage = this.onUsage;
+    if (onUsage == null) {
+      return;
+    }
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(data ?? '');
+    } catch (_) {
+      return;
+    }
+    if (decoded is! Map) {
+      return;
+    }
+    final usage = decoded['usage'];
+    if (usage is! Map) {
+      return;
+    }
+    final totalTokens = usage['total_tokens'];
+    if (totalTokens is int) {
+      onUsage(totalTokens);
+    }
   }
 
   /// 把 dio 异常映射成带中文 message 的 [LlmException]
@@ -294,4 +333,5 @@ String llmErrorText(LlmErrorKind kind) => switch (kind) {
   LlmErrorKind.network => '网络错误',
   LlmErrorKind.server => '服务端出错',
   LlmErrorKind.parse => '返回内容无法解析',
+  LlmErrorKind.budget => '已达今日用量上限',
 };

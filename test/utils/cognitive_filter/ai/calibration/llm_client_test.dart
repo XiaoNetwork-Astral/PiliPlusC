@@ -34,16 +34,26 @@ ResponseBody _json(int status, Object body) => ResponseBody.fromString(
   },
 );
 
-ResponseBody _okContent(String content) => _json(200, <String, dynamic>{
-  'choices': <dynamic>[
-    <String, dynamic>{
-      'message': <String, dynamic>{'role': 'assistant', 'content': content},
-      'finish_reason': 'stop',
-    },
-  ],
-});
+ResponseBody _okContent(String content, {Object? totalTokens}) =>
+    _json(200, <String, dynamic>{
+      'choices': <dynamic>[
+        <String, dynamic>{
+          'message': <String, dynamic>{
+            'role': 'assistant',
+            'content': content,
+          },
+          'finish_reason': 'stop',
+        },
+      ],
+      if (totalTokens != null)
+        'usage': <String, dynamic>{'total_tokens': totalTokens},
+    });
 
-LlmClient _client(_FakeAdapter adapter, {bool jsonMode = true}) {
+LlmClient _client(
+  _FakeAdapter adapter, {
+  bool jsonMode = true,
+  void Function(int totalTokens)? onUsage,
+}) {
   final dio = Dio();
   dio.httpClientAdapter = adapter;
   return LlmClient(
@@ -53,6 +63,7 @@ LlmClient _client(_FakeAdapter adapter, {bool jsonMode = true}) {
     timeout: const Duration(seconds: 2),
     jsonMode: jsonMode,
     dio: dio,
+    onUsage: onUsage,
   );
 }
 
@@ -139,11 +150,35 @@ void main() {
       await client.test();
 
       final body = _bodyOf(adapter.requests.single);
-      expect(body['max_tokens'], 8);
+      expect(body['max_tokens'], 16);
       expect(body.containsKey('response_format'), isFalse);
       final messages = body['messages'] as List<dynamic>;
       expect(messages, hasLength(1));
       expect((messages.single as Map<String, dynamic>)['content'], '回复 ok');
+    });
+
+    test('只有 DeepSeek 官方地址才带关闭思考的字段', () async {
+      final deepseekAdapter = _FakeAdapter((_) async => _okContent('ok'));
+      final deepseekDio = Dio()..httpClientAdapter = deepseekAdapter;
+      await LlmClient(
+        baseUrl: 'https://api.deepseek.com',
+        apiKey: 'sk-test-secret',
+        model: 'deepseek-flash',
+        dio: deepseekDio,
+      ).chat(const <LlmMessage>[LlmMessage(role: 'user', content: '你好')]);
+      expect(
+        _bodyOf(deepseekAdapter.requests.single)['thinking'],
+        {'type': 'disabled'},
+      );
+
+      final otherAdapter = _FakeAdapter((_) async => _okContent('ok'));
+      await _client(otherAdapter).chat(
+        const <LlmMessage>[LlmMessage(role: 'user', content: '你好')],
+      );
+      expect(
+        _bodyOf(otherAdapter.requests.single).containsKey('thinking'),
+        isFalse,
+      );
     });
 
     test('空密钥直接抛 auth 且不发请求', () async {
@@ -167,6 +202,46 @@ void main() {
         ),
       );
       expect(adapter.requests, isEmpty);
+    });
+  });
+
+  group('用量上报', () {
+    test('响应带 usage.total_tokens 时回调一次', () async {
+      final adapter = _FakeAdapter(
+        (_) async => _okContent('你好', totalTokens: 1234),
+      );
+      final usages = <int>[];
+
+      final reply = await _client(adapter, onUsage: usages.add).chat(
+        const <LlmMessage>[LlmMessage(role: 'user', content: '你好')],
+      );
+
+      expect(reply, '你好');
+      expect(usages, <int>[1234]);
+    });
+
+    test('缺少 usage 时不回调', () async {
+      final adapter = _FakeAdapter((_) async => _okContent('你好'));
+      final usages = <int>[];
+
+      await _client(adapter, onUsage: usages.add).chat(
+        const <LlmMessage>[LlmMessage(role: 'user', content: '你好')],
+      );
+
+      expect(usages, isEmpty);
+    });
+
+    test('total_tokens 不是整数时不回调', () async {
+      final adapter = _FakeAdapter(
+        (_) async => _okContent('你好', totalTokens: '1234'),
+      );
+      final usages = <int>[];
+
+      await _client(adapter, onUsage: usages.add).chat(
+        const <LlmMessage>[LlmMessage(role: 'user', content: '你好')],
+      );
+
+      expect(usages, isEmpty);
     });
   });
 
@@ -304,6 +379,7 @@ void main() {
       expect(llmErrorText(LlmErrorKind.auth), '密钥无效');
       expect(llmErrorText(LlmErrorKind.rateLimit), '请求太频繁');
       expect(llmErrorText(LlmErrorKind.timeout), '连接超时，可能需要配置代理');
+      expect(llmErrorText(LlmErrorKind.budget), '已达今日用量上限');
     });
   });
 }

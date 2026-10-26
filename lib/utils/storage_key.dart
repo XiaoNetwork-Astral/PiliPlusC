@@ -316,6 +316,9 @@ abstract final class SettingBoxKey {
       cfLlmModel = 'cfLlmModel',
       cfLlmProxyType = 'cfLlmProxyType',
       cfLlmProxyAddress = 'cfLlmProxyAddress',
+      cfLlmDailyCapTokens = 'cfLlmDailyCapTokens',
+      cfLlmUsageDay = 'cfLlmUsageDay',
+      cfLlmUsageTokens = 'cfLlmUsageTokens',
       cfAiThresholdDelta = 'cfAiThresholdDelta',
       cfGuardRules = 'cfGuardRules',
       cfAiWhitelist = 'cfAiWhitelist';

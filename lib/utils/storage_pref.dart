@@ -1573,6 +1573,35 @@ abstract final class Pref {
   static set cfLlmProxyAddress(String value) =>
       _setting.put(SettingBoxKey.cfLlmProxyAddress, value);
 
+  /// 整理接口每日 token 上限，0 表示不限制；整理接口按量计费，和判定接口分开算
+  static int get cfLlmDailyCapTokens {
+    final value = _setting.get(SettingBoxKey.cfLlmDailyCapTokens);
+    if (value is num && value.isFinite) {
+      final cap = value.toInt();
+      return cap < 0 ? 0 : cap;
+    }
+    return 500000;
+  }
+
+  static set cfLlmDailyCapTokens(int value) => _setting.put(
+    SettingBoxKey.cfLlmDailyCapTokens,
+    value < 0 ? 0 : value,
+  );
+
+  /// 整理接口用量所属的本地日期，格式 yyyy-MM-dd
+  static String get cfLlmUsageDay {
+    final value = _setting.get(SettingBoxKey.cfLlmUsageDay);
+    return value is String ? value : '';
+  }
+
+  static set cfLlmUsageDay(String value) =>
+      _setting.put(SettingBoxKey.cfLlmUsageDay, value);
+
+  static int get cfLlmUsageTokens => _usageInt(SettingBoxKey.cfLlmUsageTokens);
+
+  static set cfLlmUsageTokens(int value) =>
+      _setting.put(SettingBoxKey.cfLlmUsageTokens, _nonNegative(value));
+
   /// 校准向导对屏蔽门槛的累计调整量，加在档位或专业模式的门槛上
   static double get cfAiThresholdDelta {
     final value = _setting.get(SettingBoxKey.cfAiThresholdDelta);

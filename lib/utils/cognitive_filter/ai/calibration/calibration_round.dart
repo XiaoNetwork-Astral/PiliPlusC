@@ -39,7 +39,7 @@ class RoundResult {
   /// 因服务商拒绝或返回无法解析而丢弃的批数
   final int refusedChunks;
 
-  /// 非空表示因网络/密钥/限流/服务端/超时中止，池里条目保持不动
+  /// 非空表示因网络/密钥/限流/服务端/超时/用量上限中止，池里条目保持不动
   final LlmErrorKind? abortedBy;
 
   /// 实际处理过的批数
@@ -57,6 +57,7 @@ Future<RoundResult> runRound({
   int minClusterSize = 3,
   int maxQuestions = 20,
   void Function(int done, int total)? onProgress,
+  bool Function()? shouldStop,
 }) async {
   final droppedIds = <String>{};
   final candidates = <PoolItem>[];
@@ -91,6 +92,11 @@ Future<RoundResult> runRound({
 
   for (var index = 0; index < chunks.length; index++) {
     if (questions.length >= questionLimit) {
+      break;
+    }
+    // 每批开始前确认今日用量额度；已到上限就停掉整轮，已得的题保留
+    if (shouldStop?.call() ?? false) {
+      abortedBy = LlmErrorKind.budget;
       break;
     }
     final chunk = chunks[index];
@@ -161,6 +167,7 @@ bool _abortsRound(LlmErrorKind kind) {
     case LlmErrorKind.timeout:
     case LlmErrorKind.network:
     case LlmErrorKind.server:
+    case LlmErrorKind.budget:
       return true;
     case LlmErrorKind.refused:
     case LlmErrorKind.parse:

@@ -333,6 +333,32 @@ void main() {
     }
   });
 
+  test('shouldStop 为真时提前停止并保留已得题目', () async {
+    final fake = _FakeChat(
+      (_, __) async => _reply(<Object?>[
+        _cluster(<int>[1, 2, 3]),
+      ]),
+    );
+    var checked = 0;
+
+    final result = await runRound(
+      pool: _pool(6),
+      chat: fake.call,
+      isBlockedForUpload: (_) => false,
+      random: Random(14),
+      chunkSize: 3,
+      shouldStop: () => checked++ > 0,
+    );
+
+    // 只用第一批，第二批开始前被 shouldStop 拦下
+    expect(fake.calls, hasLength(1));
+    expect(result.questions, hasLength(1));
+    expect(result.usedIds, hasLength(3));
+    expect(result.droppedIds, isEmpty);
+    expect(result.abortedBy, LlmErrorKind.budget);
+    expect(result.processedChunks, 1);
+  });
+
   test('每批结束都回调进度', () async {
     final fake = _FakeChat((_, __) async => '[]');
     final progress = <List<int>>[];
