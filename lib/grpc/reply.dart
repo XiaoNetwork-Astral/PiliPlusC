@@ -20,9 +20,6 @@ abstract final class ReplyGrpc {
   static bool antiGoodsReply = Pref.antiGoodsReply;
   static var blockAtOnlyReply = Pref.blockAtOnlyReply;
   static var blockReplyAtCount = Pref.blockReplyAtCount;
-  // 仅兼容旧版设置页的写入，评论过滤已统一读规则引擎
-  static RegExp replyRegExp = RegExp('');
-  static bool enableFilter = false;
 
   // static Future replyInfo({required int rpid}) {
   //   return _request(

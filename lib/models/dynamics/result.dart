@@ -44,10 +44,6 @@ class DynamicsDataModel {
     return title ?? '';
   }
 
-  // 仅兼容旧版设置页的写入，动态过滤已统一读规则引擎
-  static RegExp banWordForDyn = RegExp('');
-  static bool enableFilter = false;
-
   static bool antiGoodsDyn = Pref.antiGoodsDyn;
 
   DynamicsDataModel.fromJson(

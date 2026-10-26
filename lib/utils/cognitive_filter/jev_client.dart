@@ -55,9 +55,6 @@ class JevTestResult {
 /// 只负责发送请求与归类错误，不缓存也不重试。请求体由
 /// `utils/cognitive_filter/ai/jev_request.dart` 构造。
 abstract final class JevClient {
-  /// 单请求题数上限，超出接口会返回 400
-  static const int maxQuestions = 160;
-
   /// 发送一个已构造好的请求体并返回解码后的响应 Map
   static Future<Map<String, dynamic>> send({
     required String endpoint,
@@ -277,12 +274,6 @@ abstract final class JevClient {
       if (status >= 500) {
         return JevException(JevErrorKind.server, message);
       }
-      if (status == 404) {
-        return JevException(JevErrorKind.badRequest, message);
-      }
-      if (status == 400) {
-        return JevException(JevErrorKind.badRequest, message);
-      }
       return JevException(JevErrorKind.badRequest, message);
     }
     switch (error.type) {
@@ -301,6 +292,4 @@ abstract final class JevClient {
         return JevException(JevErrorKind.server, message);
     }
   }
-
-  /// 测试连接失败的简短提示
 }

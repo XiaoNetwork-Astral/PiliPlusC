@@ -11,8 +11,6 @@ class RuleSet {
 
   final List<_CompiledRule> _entries;
 
-  bool get isEmpty => _entries.isEmpty;
-
   /// 编译某个范围的文本规则，视频分区也是一个范围
   factory RuleSet.text(Iterable<FilterRule> rules, RuleScope scope) {
     final entries = <_CompiledRule>[];
@@ -119,8 +117,6 @@ class UserRuleSet {
   /// 哈希到用户规则的映射，用于记录命中的是哪条规则
   final Map<String, FilterRule> _hashRules;
 
-  bool get isEmpty => blockedMids.isEmpty && blockedHashes.isEmpty;
-
   factory UserRuleSet.compute({
     required RuleScope scope,
     required Set<int> blackMids,
@@ -176,12 +172,4 @@ class UserRuleSet {
   /// 弹幕发送者哈希命中时对应的用户规则
   FilterRule? ruleOfHash(String midHash) =>
       midHash.isEmpty ? null : _hashRules[midHash.toLowerCase()];
-
-  bool blocksMid(int mid, {bool enabled = true}) =>
-      enabled && blockedMids.contains(mid);
-
-  bool blocksHash(String midHash, {bool enabled = true}) {
-    if (!enabled || midHash.isEmpty) return false;
-    return blockedHashes.contains(midHash.toLowerCase());
-  }
 }

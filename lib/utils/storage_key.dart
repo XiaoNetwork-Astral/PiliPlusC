@@ -296,15 +296,12 @@ abstract final class SettingBoxKey {
       cfApiProxyType = 'cfApiProxyType',
       cfApiProxyAddress = 'cfApiProxyAddress',
       cfCategoryOverrides = 'cfCategoryOverrides',
-      cfProThreshold = 'cfProThreshold',
+      cfBlockThreshold = 'cfBlockThreshold',
       cfCustomCategories = 'cfCustomCategories',
       cfAiDailyCapUsd = 'cfAiDailyCapUsd',
       cfAiSurfaces = 'cfAiSurfaces',
       cfAiUsageDay = 'cfAiUsageDay',
       cfAiUsageInputTokens = 'cfAiUsageInputTokens',
-      cfAiUsageOutputTokens = 'cfAiUsageOutputTokens',
-      cfAiUsageRequests = 'cfAiUsageRequests',
-      cfAiUsageItems = 'cfAiUsageItems',
       cfRuleList = 'cfRuleList',
       cfRuleUserExtras = 'cfRuleUserExtras',
       cfRuleMigrationDone = 'cfRuleMigrationDone',
@@ -324,8 +321,7 @@ abstract final class SettingBoxKey {
       cfLlmUsageInputTokens = 'cfLlmUsageInputTokens',
       cfLlmUsageOutputTokens = 'cfLlmUsageOutputTokens',
       cfAiThresholdDelta = 'cfAiThresholdDelta',
-      cfGuardRules = 'cfGuardRules',
-      cfAiWhitelist = 'cfAiWhitelist';
+      cfGuardRules = 'cfGuardRules';
 }
 
 abstract final class LocalCacheKey {

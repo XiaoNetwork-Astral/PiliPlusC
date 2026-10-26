@@ -165,22 +165,6 @@ void main() {
       );
     });
 
-    test('titleKey 与 contextKey 可覆盖默认键名', () {
-      final body = JevRequest.buildRequest(
-        model: 'm',
-        surface: FilterSurface.video,
-        texts: const ['视频标题文字'],
-        title: '作品标题',
-        titleKey: '作品标题键',
-        context: '字幕文字',
-        contextKey: '字幕',
-      );
-      final state = _stateOf(body);
-      expect(state['作品标题键'], '作品标题');
-      expect(state['字幕'], '字幕文字');
-      expect(state.containsKey('视频标题'), isFalse);
-    });
-
     test('上下文超过 12000 字时从两端等量截断', () {
       final context =
           List<String>.filled(6000, 'a').join() +

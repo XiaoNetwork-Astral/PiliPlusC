@@ -12,7 +12,6 @@ import 'package:PiliPlus/utils/cognitive_filter/ai/calibration/llm_pricing.dart'
 import 'package:PiliPlus/utils/cognitive_filter/ai/calibration/threshold_fit.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/calibration/upload_guard.dart';
 import 'package:PiliPlus/utils/cognitive_filter/jev_proxy.dart';
-import 'package:PiliPlus/utils/cognitive_filter/raw_error.dart';
 import 'package:PiliPlus/utils/path_utils.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
 import 'package:path/path.dart' as path;
@@ -23,20 +22,16 @@ class RoundOutcome {
     required this.questions,
     required this.abortedBy,
     this.abortMessage,
-    required this.refusedChunks,
   });
 
   /// 这一轮整理出的题目
   final List<CalibrationQuestion> questions;
 
-  /// 非空表示这一轮因密钥、网络、限流、服务端、超时或用量上限中止
+  /// 非空表示这一轮因密钥、网络、限流、服务端、超时或费用上限中止
   final LlmErrorKind? abortedBy;
 
-  /// 中止时最后那个异常的原始说明，供界面直接显示
+  /// 中止时给用户看的说明，可能是异常原文，也可能是“未填写 API Key”这类合成文案
   final String? abortMessage;
-
-  /// 服务商拒绝或返回无法解析而丢弃的批数
-  final int refusedChunks;
 }
 
 /// 校准向导的运行时服务
@@ -125,7 +120,8 @@ class CalibrationService {
 
   /// 跑一轮整理，结束后删掉已成为题目与确定处理不了的池条目
   ///
-  /// [shouldCancel] 为真时在下一批开始前停止；停止时已整理出的题不算用掉，条目仍留在池里
+  /// [shouldCancel] 为真时在下一批开始前停止；停止时已出题的成员不删，
+  /// 但确定不放上传或整理失败的条目仍会被清掉
   Future<RoundOutcome> runRound({
     void Function(int done, int total)? onProgress,
     bool Function()? shouldCancel,
@@ -136,7 +132,6 @@ class CalibrationService {
         questions: <CalibrationQuestion>[],
         abortedBy: LlmErrorKind.auth,
         abortMessage: '未填写 API Key',
-        refusedChunks: 0,
       );
     }
 
@@ -145,8 +140,7 @@ class CalibrationService {
       return const RoundOutcome(
         questions: <CalibrationQuestion>[],
         abortedBy: LlmErrorKind.budget,
-        abortMessage: '已达今日用量上限',
-        refusedChunks: 0,
+        abortMessage: '已达今日费用上限',
       );
     }
 
@@ -156,7 +150,6 @@ class CalibrationService {
       return const RoundOutcome(
         questions: <CalibrationQuestion>[],
         abortedBy: LlmErrorKind.network,
-        refusedChunks: 0,
       );
     }
 
@@ -189,16 +182,12 @@ class CalibrationService {
         questions: result.questions,
         abortedBy: result.abortedBy,
         abortMessage: result.abortMessage,
-        refusedChunks: result.refusedChunks,
       );
     } catch (error) {
       return RoundOutcome(
         questions: const <CalibrationQuestion>[],
         abortedBy: LlmErrorKind.network,
-        abortMessage: error is LlmException
-            ? error.message
-            : truncateError(redactSecrets(error.toString())),
-        refusedChunks: 0,
+        abortMessage: round.llmErrorMessage(error),
       );
     }
   }
@@ -260,7 +249,7 @@ class CalibrationService {
   ({double before, double? after}) apply(
     List<({CalibrationAnswer answer, CalibrationQuestion question})> answers,
   ) {
-    final base = Pref.cfProThreshold;
+    final base = Pref.cfBlockThreshold;
     final current = base + Pref.cfAiThresholdDelta;
     final after = fitThreshold(
       current: current,

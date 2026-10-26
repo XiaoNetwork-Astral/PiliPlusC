@@ -342,14 +342,10 @@ abstract final class BackupService {
         : password;
 
     final String? note;
-    switch (method) {
-      case BackupMethod.archive:
-      case BackupMethod.webdav:
-        note = await _importArchiveLike(source, selected, pwd, onWarning);
-      case BackupMethod.clipboard:
-        note = await _importClipboard(source, selected);
-      case BackupMethod.cloud:
-        return _importCloud(selected);
+    if (method == BackupMethod.clipboard) {
+      note = await _importClipboard(source, selected);
+    } else {
+      note = await _importArchiveLike(source, selected, pwd, onWarning);
     }
 
     final failure = note == null || note.isEmpty ? null : '导入失败：$note';

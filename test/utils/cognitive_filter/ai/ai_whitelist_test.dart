@@ -168,67 +168,7 @@ void main() {
     });
   });
 
-  group('存储与迁移', () {
-    test('新键为空时把旧条目迁到新键，范围是全部五个适用面', () {
-      var written = <FilterRule>[];
-      var cleared = false;
-      var legacyRead = 0;
-      final legacy = legacyAiWhitelistRules([
-        {'id': 'a', 'type': 'keyword', 'content': '前排', 'enabled': true},
-        {'id': 'b', 'type': 'regex', 'content': r'^abc$', 'enabled': false},
-      ]);
-      final store = AiWhitelistStore(
-        read: () => const <FilterRule>[],
-        write: (rules) => written = rules,
-        readLegacy: () {
-          legacyRead++;
-          return legacy;
-        },
-        clearLegacy: () => cleared = true,
-      );
-
-      expect(store.rules.length, 2);
-      expect(written.length, 2);
-      expect(cleared, isTrue);
-      expect(legacyRead, 1);
-      expect(store.rules[0].content, '前排');
-      expect(store.rules[0].scopes, aiWhitelistScopes);
-      expect(store.rules[1].enabled, isFalse);
-      expect(store.rules[1].scopes, aiWhitelistScopes);
-    });
-
-    test('新键已有数据时不再读旧键', () {
-      var legacyRead = 0;
-      var cleared = false;
-      final stored = [_rule(content: '新数据')];
-      final store = AiWhitelistStore(
-        read: () => stored,
-        write: (_) {},
-        readLegacy: () {
-          legacyRead++;
-          return <FilterRule>[_rule(id: 'old', content: '旧数据')];
-        },
-        clearLegacy: () => cleared = true,
-      );
-
-      expect(store.rules.single.content, '新数据');
-      expect(legacyRead, 0);
-      expect(cleared, isTrue);
-    });
-
-    test('旧数据里的坏条目被跳过', () {
-      final legacy = legacyAiWhitelistRules([
-        {'id': 'a', 'type': 'unknown', 'content': 'x'},
-        {'id': 'b', 'type': 'keyword', 'content': '   '},
-        {'id': 'c', 'type': 'keyword', 'content': '好'},
-        {'id': 'c', 'type': 'keyword', 'content': '重复 id'},
-        null,
-      ]);
-      expect(legacy.length, 1);
-      expect(legacy.single.id, 'c');
-      expect(legacy.single.content, '好');
-    });
-
+  group('存储', () {
     test('新存储的坏数据当空，越界范围与哈希规则被丢弃', () {
       expect(whitelistRulesFromJson('bad'), isEmpty);
       expect(whitelistRulesFromJson(null), isEmpty);

@@ -79,11 +79,7 @@ void main() {
     });
   });
 
-  group('兼容常量与异常', () {
-    test('单请求题数上限保持 160', () {
-      expect(JevClient.maxQuestions, 160);
-    });
-
+  group('异常', () {
     test('JevException 的字符串包含类别与说明', () {
       const error = JevException(JevErrorKind.parse, '结构不正确');
       expect(error.toString(), contains('parse'));

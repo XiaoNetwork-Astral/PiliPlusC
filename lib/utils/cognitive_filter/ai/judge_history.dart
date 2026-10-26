@@ -8,7 +8,6 @@ class JudgeHistoryEntry {
     required String text,
     this.categoryId,
     required this.score,
-    required this.source,
     this.kind = ai,
     this.label = '',
     this.ruleType = '',
@@ -16,7 +15,7 @@ class JudgeHistoryEntry {
     this.scores,
     this.meta,
     Map<String, dynamic>? snapshot,
-  }) : text = _truncate(text),
+  }) : text = truncateText(text),
        _snapshot = snapshot;
 
   /// 来源：AI 屏蔽
@@ -33,9 +32,8 @@ class JudgeHistoryEntry {
   final String text;
   final String? categoryId;
   final double score;
-  final String source;
 
-  /// AI 判定的各选项概率，旧数据或规则屏蔽为空
+  /// AI 判定的各选项概率，规则屏蔽为空
   final Map<String, double>? scores;
 
   /// 原始内容的简单快照，键与值都是简单类型
@@ -71,7 +69,6 @@ class JudgeHistoryEntry {
     'text': text,
     if (categoryId != null) 'categoryId': categoryId,
     'score': score,
-    'source': source,
     'kind': kind,
     'label': label,
     if (ruleType.isNotEmpty) 'ruleType': ruleType,
@@ -94,7 +91,6 @@ class JudgeHistoryEntry {
       text: _stringOf(json['text']),
       categoryId: categoryId is String ? categoryId : null,
       score: score.isFinite ? score : 0.0,
-      source: _stringOf(json['source']),
       kind: json['kind'] == rule ? rule : ai,
       label: _stringOf(json['label']),
       ruleType: _stringOf(json['ruleType']),
@@ -133,7 +129,8 @@ class JudgeHistoryEntry {
     return result.isEmpty ? null : result;
   }
 
-  static String _truncate(String text) {
+  /// 按 [maxTextLength] 截断文本，超出时只保留前 [maxTextLength] 个字
+  static String truncateText(String text) {
     final runes = text.runes.toList(growable: false);
     if (runes.length <= maxTextLength) {
       return text;
@@ -145,8 +142,6 @@ class JudgeHistoryEntry {
 /// 屏蔽历史环形缓冲，最新在前
 class JudgeHistory {
   JudgeHistory({this.capacity = 300}) : assert(capacity > 0);
-
-  static const int _version = 1;
 
   /// 只保留最近这么多条 AI 条目的重快照
   static const int _snapshotWindow = 100;
@@ -195,9 +190,8 @@ class JudgeHistory {
     _dirty = false;
   }
 
-  /// 序列化为带版本号的 JSON 文本
+  /// 序列化为 JSON 文本
   String toJson() => jsonEncode(<String, dynamic>{
-    'version': _version,
     'entries': <Map<String, dynamic>>[
       for (final entry in _entries) entry.toJson(),
     ],
@@ -234,9 +228,6 @@ class JudgeHistory {
   }
 
   static List<dynamic>? _entriesOf(Object? decoded) {
-    if (decoded is List) {
-      return decoded;
-    }
     if (decoded is Map) {
       final entries = decoded['entries'];
       if (entries is List) {

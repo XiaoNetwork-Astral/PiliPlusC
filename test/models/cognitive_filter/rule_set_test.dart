@@ -89,9 +89,9 @@ void main() {
           scopes: const {RuleScope.reply},
         ),
       ], RuleScope.reply);
-      expect(onlyBad.isEmpty, isTrue);
+      expect(onlyBad.firstMatch('['), isNull);
     });
-    test('总开关关闭时文本与用户查询一律不命中', () {
+    test('文本总开关关闭时不命中', () {
       final textSet = RuleSet.text([
         _rule(content: 'abc', scopes: const {RuleScope.reply}),
       ], RuleScope.reply);
@@ -107,14 +107,6 @@ void main() {
         ),
       ], RuleScope.zone);
       expect(zoneSet.matchesText('动画区', enabled: false), isFalse);
-
-      final users = UserRuleSet.compute(
-        scope: RuleScope.reply,
-        blackMids: const {9},
-        extras: const {},
-        rules: const [],
-      );
-      expect(users.blocksMid(9, enabled: false), isFalse);
     });
   });
 
@@ -162,8 +154,14 @@ void main() {
           scopes: const {RuleScope.zone},
         ),
       ];
-      expect(RuleSet.text(rules, RuleScope.live).isEmpty, isTrue);
-      expect(RuleSet.text(rules, RuleScope.reply).isEmpty, isTrue);
+      expect(
+        RuleSet.text(rules, RuleScope.live).matchesText('动画区'),
+        isFalse,
+      );
+      expect(
+        RuleSet.text(rules, RuleScope.reply).matchesText('动画区'),
+        isFalse,
+      );
     });
   });
 
@@ -206,8 +204,8 @@ void main() {
         extras: const {2: UserRuleExtra(enabled: false)},
         rules: const [],
       );
-      expect(users.blocksMid(1), isTrue);
-      expect(users.blocksMid(2), isFalse);
+      expect(users.ruleOfMid(1), isNotNull);
+      expect(users.ruleOfMid(2), isNull);
       expect(users.blockedHashes, isEmpty);
     });
   });
@@ -225,9 +223,9 @@ void main() {
         extras: extras,
         rules: const [],
       );
-      expect(reply.blocksMid(1), isTrue);
-      expect(reply.blocksMid(2), isFalse);
-      expect(reply.blocksMid(3), isTrue);
+      expect(reply.ruleOfMid(1), isNotNull);
+      expect(reply.ruleOfMid(2), isNull);
+      expect(reply.ruleOfMid(3), isNotNull);
       expect(reply.blockedMids, {1, 3});
       expect(reply.blockedHashes, isEmpty);
 
@@ -237,8 +235,8 @@ void main() {
         extras: extras,
         rules: const [],
       );
-      expect(video.blocksMid(3), isFalse);
-      expect(video.blocksMid(1), isTrue);
+      expect(video.ruleOfMid(3), isNull);
+      expect(video.ruleOfMid(1), isNotNull);
 
       final whisper = UserRuleSet.compute(
         scope: RuleScope.whisper,
@@ -246,7 +244,8 @@ void main() {
         extras: extras,
         rules: const [],
       );
-      expect(whisper.isEmpty, isTrue);
+      expect(whisper.blockedMids, isEmpty);
+      expect(whisper.blockedHashes, isEmpty);
     });
 
     test('弹幕范围同时产出 UID 哈希，被禁用的 UID 不产出', () {
@@ -268,8 +267,11 @@ void main() {
         danmaku.blockedHashes,
         isNot(contains(FilterRule.midToHash(2))),
       );
-      expect(danmaku.blocksHash(FilterRule.midToHash(1).toUpperCase()), isTrue);
-      expect(danmaku.blocksHash(''), isFalse);
+      expect(
+        danmaku.ruleOfHash(FilterRule.midToHash(1).toUpperCase()),
+        isNotNull,
+      );
+      expect(danmaku.ruleOfHash(''), isNull);
     });
 
     test('只有哈希的规则直接贡献哈希，并尊重启用状态', () {
@@ -296,9 +298,9 @@ void main() {
         extras: const {},
         rules: rules,
       );
-      expect(danmaku.blocksHash('a1b2'), isTrue);
-      expect(danmaku.blocksHash('A1B2'), isTrue);
-      expect(danmaku.blocksHash('c3d4'), isFalse);
+      expect(danmaku.ruleOfHash('a1b2'), isNotNull);
+      expect(danmaku.ruleOfHash('A1B2'), isNotNull);
+      expect(danmaku.ruleOfHash('c3d4'), isNull);
       expect(danmaku.blockedMids, isEmpty);
 
       final viaRuleSet = RuleSet.users(
@@ -307,7 +309,7 @@ void main() {
         extras: const {},
         rules: rules,
       );
-      expect(viaRuleSet.blocksHash('a1b2'), isTrue);
+      expect(viaRuleSet.ruleOfHash('a1b2'), isNotNull);
     });
 
     test('UID 范围收窄为评论后，不再命中弹幕哈希', () {
@@ -321,14 +323,15 @@ void main() {
         extras: extras,
         rules: const [],
       );
-      expect(danmaku.isEmpty, isTrue);
+      expect(danmaku.blockedMids, isEmpty);
+      expect(danmaku.blockedHashes, isEmpty);
       final reply = UserRuleSet.compute(
         scope: RuleScope.reply,
         blackMids: blackMids,
         extras: extras,
         rules: const [],
       );
-      expect(reply.blocksMid(7), isTrue);
+      expect(reply.ruleOfMid(7), isNotNull);
     });
 
     test('附加信息默认值与 JSON 容错', () {

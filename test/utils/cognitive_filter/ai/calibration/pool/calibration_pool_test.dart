@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:math';
 
 import 'package:PiliPlus/utils/cognitive_filter/ai/calibration/calibration_pool.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/judge_cache.dart';
@@ -21,7 +20,7 @@ CalibrationPool _build(
 }
 
 class _CountingStore implements JudgeCacheStore {
-  _CountingStore([this.value]);
+  _CountingStore();
 
   String? value;
   int writes = 0;
@@ -89,20 +88,6 @@ void main() {
         pool.items.map((item) => item.text),
         <String>['first', 'second'],
       );
-    });
-
-    test('只读副本与随机抽样不改变池内容', () {
-      final pool = _build(MemoryJudgeCacheStore());
-      for (var i = 0; i < 10; i++) {
-        pool.add(text: 'item $i', surface: '动态', score: 0.6);
-      }
-
-      final sampled = pool.sample(4, Random(7));
-      expect(sampled.length, 4);
-      expect(sampled.map((item) => item.id).toSet().length, 4);
-      expect(pool.length, 10);
-      expect(pool.sample(100, Random(1)).length, 10);
-      expect(pool.sample(0, Random(1)), isEmpty);
     });
   });
 

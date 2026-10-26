@@ -58,50 +58,11 @@ List<FilterRule> whitelistRulesFromJson(Object? value) {
   return result;
 }
 
-/// 把旧版白名单条目（id/type/content/enabled）转成新规则
-///
-/// 旧版只有关键词与正则，迁移后范围是全部五个适用面。
-List<FilterRule> legacyAiWhitelistRules(Object? value) {
-  if (value is! List) return const <FilterRule>[];
-  final result = <FilterRule>[];
-  final ids = <String>{};
-  for (final item in value) {
-    if (item is! Map) continue;
-    final id = _stringOf(item['id']).trim();
-    if (id.isEmpty) continue;
-    final typeName = _stringOf(item['type']);
-    final type = switch (typeName) {
-      'keyword' => RuleType.keyword,
-      'regex' => RuleType.regex,
-      _ => null,
-    };
-    if (type == null) continue;
-    final content = _stringOf(item['content']);
-    if (content.trim().isEmpty) continue;
-    final rawEnabled = item['enabled'];
-    final rule = FilterRule(
-      id: id,
-      type: type,
-      content: content,
-      scopes: Set<RuleScope>.of(aiWhitelistScopes),
-      enabled: rawEnabled is bool ? rawEnabled : true,
-    );
-    if (validateAiWhitelistRule(rule) != null) continue;
-    if (ids.add(id)) result.add(rule);
-  }
-  return result;
-}
-
 /// 白名单的纯逻辑存储，读写由调用方注入
-///
-/// 首次读取时若新键为空而旧键有数据，就把旧条目迁到新键并清掉旧键；
-/// 此后不再读取旧键。
 class AiWhitelistStore {
   AiWhitelistStore({
     required this.read,
     required this.write,
-    this.readLegacy,
-    this.clearLegacy,
     this.onChanged,
   });
 
@@ -111,34 +72,13 @@ class AiWhitelistStore {
   /// 写入新键
   final void Function(List<FilterRule> rules) write;
 
-  /// 读取旧键并转成新规则
-  final List<FilterRule> Function()? readLegacy;
-
-  /// 迁移完成后清掉旧键
-  final void Function()? clearLegacy;
-
   /// 数据变化后的回调，用于自增版本
   final void Function()? onChanged;
 
   List<FilterRule>? _cached;
 
-  /// 当前规则，首次访问时顺带完成迁移
-  List<FilterRule> get rules => _cached ??= _load();
-
-  List<FilterRule> _load() {
-    final stored = read();
-    if (stored.isEmpty) {
-      final legacy = readLegacy?.call() ?? const <FilterRule>[];
-      if (legacy.isNotEmpty) {
-        write(legacy);
-        clearLegacy?.call();
-        return legacy;
-      }
-    }
-    // 新键已经有数据或旧键本来就不存在，之后都不再读旧键
-    clearLegacy?.call();
-    return stored;
-  }
+  /// 当前规则，首次访问时从存储读取
+  List<FilterRule> get rules => _cached ??= read();
 
   /// 校验并添加，重复规则合并范围或忽略；有变化时返回 true
   bool add(FilterRule rule) {
@@ -304,5 +244,3 @@ class AiWhitelistMatcher {
     return false;
   }
 }
-
-String _stringOf(Object? value) => value is String ? value : '';

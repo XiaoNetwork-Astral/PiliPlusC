@@ -14,7 +14,7 @@ import 'package:material_ui/material_ui.dart';
 
 /// AI 屏蔽页
 ///
-/// 对规则屏蔽后的内容再交给 Jev 二次判断
+/// 对规则屏蔽后的内容再交给 AI 判定
 class AiFilterTab extends StatefulWidget {
   const AiFilterTab({super.key});
 

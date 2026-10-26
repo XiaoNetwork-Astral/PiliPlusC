@@ -29,7 +29,7 @@ class _CategoryRulesPageState extends State<CategoryRulesPage> {
   void initState() {
     super.initState();
     _categories = CognitiveFilterConfig.effectiveCategories;
-    _threshold = Pref.cfProThreshold;
+    _threshold = Pref.cfBlockThreshold;
   }
 
   /// 敏感度 0 到 100，阈值越低越敏感
@@ -40,7 +40,7 @@ class _CategoryRulesPageState extends State<CategoryRulesPage> {
   }
 
   void _onSensitivityChangeEnd(double value) {
-    Pref.cfProThreshold = 1.25 - value;
+    Pref.cfBlockThreshold = 1.25 - value;
   }
 
   /// 内置类别按「默认开启的在前、拿不准的在后」显示，自定义类别排最后

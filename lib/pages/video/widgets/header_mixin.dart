@@ -195,10 +195,7 @@ mixin HeaderMixin<T extends StatefulWidget> on State<T> {
                             ),
                             onPressed: () => Get
                               ..back()
-                              ..toNamed(
-                                '/danmakuBlock',
-                                arguments: plPlayerController,
-                              ),
+                              ..toNamed('/danmakuBlock'),
                             child: Text(
                               "屏蔽管理(${RuleStore.instance.rules.where((rule) => rule.scopes.contains(RuleScope.danmaku)).length})",
                             ),

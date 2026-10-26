@@ -26,7 +26,7 @@ class RuleStore implements RuleSource {
     final result = <FilterRule>[];
     final ids = <String>{};
     for (final rule in Pref.cfRuleList) {
-      // 旧数据里若混入 UID 规则，以 blackMids 为准，避免重复
+      // 防御异常或导入的数据里混入 UID 规则，以 blackMids 为准，避免重复
       if (rule.isUidRule || !ids.add(rule.id)) continue;
       result.add(rule);
     }
@@ -107,44 +107,6 @@ class RuleStore implements RuleSource {
     _bump();
   }
 
-  /// 用给定列表覆盖列表内的规则，并应用其中的 UID 状态
-  ///
-  /// 为免误删其他入口写入的 UID，这里不会移除列表里没有的 `blackMids`；
-  /// 删除单条规则请用 [remove]。列表中已存在的坏正则可以传 `validate: false`
-  /// 原样保留。
-  void save(Iterable<FilterRule> rules, {bool validate = true}) {
-    final stored = <FilterRule>[];
-    final extras = <int, UserRuleExtra>{...Pref.cfRuleUserExtras};
-    var blackChanged = false;
-    for (final raw in rules) {
-      final rule = raw.id.trim().isEmpty
-          ? raw.copyWith(id: FilterRule.nextId())
-          : raw;
-      if (validate) {
-        final error = rule.validate();
-        if (error != null) throw ArgumentError.value(raw, 'rule', error);
-      }
-      if (rule.isUidRule) {
-        final mid = int.tryParse(rule.content);
-        if (mid == null || mid <= 0) continue;
-        if (GlobalData().blackMids.add(mid)) blackChanged = true;
-        final extra = UserRuleExtra(enabled: rule.enabled, scopes: rule.scopes);
-        if (extra.isDefault) {
-          extras.remove(mid);
-        } else {
-          extras[mid] = extra;
-        }
-        continue;
-      }
-      if (stored.any((e) => e.id == rule.id || _sameRule(e, rule))) continue;
-      stored.add(rule);
-    }
-    if (blackChanged) Pref.blackMids = GlobalData().blackMids;
-    Pref.cfRuleList = stored;
-    Pref.cfRuleUserExtras = extras;
-    _bump();
-  }
-
   /// 按 id 更新；UID 变化时同步 `blackMids` 与附加信息
   void update(FilterRule rule) {
     final next = _checked(rule);
@@ -213,55 +175,6 @@ class RuleStore implements RuleSource {
     if (stored[index].enabled == enabled) return;
     final updated = [...stored];
     updated[index] = stored[index].copyWith(enabled: enabled);
-    Pref.cfRuleList = updated;
-    _bump();
-  }
-
-  void setScopes(String id, Set<RuleScope> scopes) {
-    if (scopes.isEmpty) throw ArgumentError('至少选择一个适用范围');
-    final current = _find(id);
-    if (current == null) throw ArgumentError.value(id, 'id', '规则不存在');
-    if (current.isUidRule) {
-      final mid = int.parse(current.content);
-      for (final scope in scopes) {
-        if (!userRuleScopes.contains(scope)) {
-          throw ArgumentError.value(
-            scope,
-            'scopes',
-            '「用户」规则不能用于「${scope.label}」',
-          );
-        }
-      }
-      final extra = Pref.cfRuleUserExtras[mid] ?? const UserRuleExtra();
-      if (_sameScopes(extra.scopes, scopes)) return;
-      final next = extra.copyWith(scopes: Set<RuleScope>.of(scopes));
-      if (_writeExtra(mid, next)) _bump();
-      return;
-    }
-    final stored = Pref.cfRuleList;
-    final index = stored.indexWhere((e) => e.id == id);
-    if (index < 0) throw ArgumentError.value(id, 'id', '规则不存在');
-    final old = stored[index];
-    if (old.isHashOnly &&
-        (scopes.length != 1 || !scopes.contains(RuleScope.danmaku))) {
-      throw ArgumentError.value(
-        scopes,
-        'scopes',
-        '只有哈希的用户规则只能用于弹幕',
-      );
-    }
-    for (final scope in scopes) {
-      if (!old.type.allowedScopes.contains(scope)) {
-        throw ArgumentError.value(
-          scope,
-          'scopes',
-          '「${old.type.label}」规则不能用于「${scope.label}」',
-        );
-      }
-    }
-    if (_sameScopes(old.scopes, scopes)) return;
-    final updated = [...stored];
-    updated[index] = old.copyWith(scopes: Set<RuleScope>.of(scopes));
     Pref.cfRuleList = updated;
     _bump();
   }

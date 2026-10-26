@@ -66,7 +66,7 @@ JudgeService _service(
     transport: fake.call,
     model: 'test-model',
     cache: cache ?? JudgeCache(store: MemoryJudgeCacheStore()),
-    budget: budget ?? const UnlimitedJudgeBudget(),
+    budget: budget ?? _TestBudget(),
     categoryBatch: categoryBatch,
     maxConcurrency: maxConcurrency,
     breakerFailures: breakerFailures,
@@ -87,9 +87,7 @@ List<int> _questionCounts(Iterable<Map<String, dynamic>> bodies) {
 
 class _FakeTransport {
   _FakeTransport({
-    this.optionsByText = const <String, Map<String, double>>{},
     this.defaultOptions = const <String, double>{'正常': 1.0},
-    this.customByText = const <String, Map<String, double>>{},
     this.defaultCustom = const <String, double>{},
     this.delay,
     this.failures = 0,
@@ -97,9 +95,7 @@ class _FakeTransport {
     this.badResponse = false,
   });
 
-  final Map<String, Map<String, double>> optionsByText;
   final Map<String, double> defaultOptions;
-  final Map<String, Map<String, double>> customByText;
   final Map<String, double> defaultCustom;
   Duration? delay;
   int failures;
@@ -134,19 +130,15 @@ class _FakeTransport {
       final questions = body['questions'] as Map<String, dynamic>;
       final answers = <String, dynamic>{};
       for (var i = 0; i < list.length; i++) {
-        final entry = list[i] as Map<String, dynamic>;
-        final text = entry.entries
-            .firstWhere((item) => item.key != '编号')
-            .value as String;
         final no = i + 1;
-        final options = optionsByText[text] ?? defaultOptions;
+        final options = defaultOptions;
         answers['i$no'] = <String, dynamic>{
           'probabilities': <String, dynamic>{
             for (final name in JevRequest.optionNames)
               name: options[name] ?? 0.0,
           },
         };
-        final customs = customByText[text] ?? defaultCustom;
+        final customs = defaultCustom;
         for (final key in questions.keys) {
           if (!key.startsWith('i${no}_')) {
             continue;
@@ -207,11 +199,10 @@ void main() {
         categories: <FilterCategory>[_builtin('attack')],
         title: '视频标题文字',
         context: '背景文字',
-        contextKey: '字幕',
       );
       final state = _stateOf(fake.calls.single);
       expect(state['视频标题'], '视频标题文字');
-      expect(state['字幕'], '背景文字');
+      expect(state['字幕上下文'], '背景文字');
     });
 
     test('不再接入本地规则，规则关键词也交给 AI', () async {
@@ -249,7 +240,6 @@ void main() {
         expect(result.verdicts[id]!.source, JudgeSource.ai);
         expect(result.verdicts[id]!.blocked, isFalse);
       }
-      expect(result.stats.requests, 1);
     });
   });
 
@@ -303,29 +293,6 @@ void main() {
       expect(verdict.categoryId, 'attack');
       expect(verdict.score, closeTo(0.4, 1e-9));
       expect(verdict.source, JudgeSource.ai);
-    });
-
-    test('阈值取启用内置类别里的最大值', () async {
-      final fake = _FakeTransport(
-        defaultOptions: <String, double>{
-          '正常': 0.45,
-          '攻击': 0.25,
-          '嘲讽': 0.3,
-        },
-      );
-      final service = _service(fake);
-      final result = await service.judge(
-        surface: FilterSurface.danmaku,
-        items: _items(<String>['阈值取最大值的弹幕']),
-        categories: <FilterCategory>[
-          _builtin('attack', threshold: 0.4),
-          _builtin('mock', threshold: 0.6),
-        ],
-      );
-      final verdict = result.verdicts['t0']!;
-      expect(verdict.blocked, isFalse);
-      expect(verdict.score, closeTo(0.55, 1e-9));
-      expect(verdict.categoryId, 'mock');
     });
 
     test('乱码选项不计入屏蔽得分', () async {
@@ -495,7 +462,6 @@ void main() {
       expect(verdict.categoryId, 'attack');
       expect(verdict.scores['攻击'], 0.5);
       expect(fake.calls.length, 1);
-      expect(second.stats.cacheHits, 1);
     });
 
     test('自定义类别答案按指纹缓存，题面变化后重新请求', () async {
@@ -587,12 +553,12 @@ void main() {
       final texts = <String>[
         for (var i = 0; i < 81; i++) '普通弹幕内容$i号',
       ];
-      final result = await service.judge(
+      await service.judge(
         surface: FilterSurface.danmaku,
         items: _items(texts),
         categories: <FilterCategory>[_builtin('attack')],
       );
-      expect(result.stats.requests, 2);
+      expect(fake.calls.length, 2);
       final counts = _questionCounts(fake.calls);
       counts.sort();
       expect(counts, <int>[1, 80]);
@@ -604,7 +570,7 @@ void main() {
       final texts = <String>[
         for (var i = 0; i < 81; i++) '带自定义类别弹幕$i号',
       ];
-      final result = await service.judge(
+      await service.judge(
         surface: FilterSurface.danmaku,
         items: _items(texts),
         categories: <FilterCategory>[
@@ -612,7 +578,7 @@ void main() {
           _custom('c1'),
         ],
       );
-      expect(result.stats.requests, 2);
+      expect(fake.calls.length, 2);
       final counts = _questionCounts(fake.calls);
       counts.sort();
       expect(counts, <int>[2, 160]);
@@ -667,7 +633,6 @@ void main() {
         isNull,
       );
       expect(result.stats.failedRequests, 1);
-      expect(result.stats.requests, 1);
     });
 
     test('响应结构不对时只放行且不写缓存', () async {
@@ -845,20 +810,17 @@ void main() {
         expect(verdict.blocked, isFalse);
       }
       expect(fake.calls, isEmpty);
-      expect(result.stats.requests, 0);
     });
 
     test('请求成功后记录 usage 到统计与预算', () async {
       final budget = _TestBudget();
       final fake = _FakeTransport(defaultOptions: <String, double>{'正常': 1.0});
       final service = _service(fake, budget: budget);
-      final result = await service.judge(
+      await service.judge(
         surface: FilterSurface.danmaku,
         items: _items(<String>['记录用量的弹幕内容']),
         categories: <FilterCategory>[_builtin('attack')],
       );
-      expect(result.stats.inputTokens, 10);
-      expect(result.stats.outputTokens, 5);
       expect(budget.records.length, 1);
       expect(budget.records.single, (10, 5));
     });

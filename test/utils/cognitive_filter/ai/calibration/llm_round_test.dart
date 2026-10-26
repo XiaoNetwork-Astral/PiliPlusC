@@ -65,10 +65,8 @@ void main() {
     expect(result.questions, hasLength(2));
     expect(result.usedIds, hasLength(6));
     expect(result.droppedIds, isEmpty);
-    expect(result.refusedChunks, 0);
     expect(result.abortedBy, isNull);
     expect(result.abortMessage, isNull);
-    expect(result.processedChunks, 1);
     expect(progress, <List<int>>[
       <int>[1, 1],
     ]);
@@ -181,7 +179,6 @@ void main() {
     );
 
     expect(result.questions, hasLength(1));
-    expect(result.processedChunks, 1);
     expect(fake.calls, hasLength(1));
     expect(progress, <List<int>>[
       <int>[1, 3],
@@ -208,7 +205,6 @@ void main() {
 
     expect(fake.calls, hasLength(2));
     expect(result.questions, hasLength(1));
-    expect(result.refusedChunks, 0);
     expect(result.droppedIds, isEmpty);
     expect(result.abortedBy, isNull);
   });
@@ -298,8 +294,6 @@ void main() {
       result.droppedIds,
       unorderedEquals(<String>['p1', 'p2', 'p3']),
     );
-    expect(result.refusedChunks, 1);
-    expect(result.processedChunks, 1);
     expect(result.abortedBy, isNull);
   });
 
@@ -317,7 +311,6 @@ void main() {
     expect(fake.calls, hasLength(2));
     expect(result.questions, isEmpty);
     expect(result.droppedIds, hasLength(3));
-    expect(result.refusedChunks, 1);
     expect(result.abortedBy, isNull);
   });
 
@@ -336,7 +329,6 @@ void main() {
     expect(fake.calls, hasLength(1));
     expect(result.questions, isEmpty);
     expect(result.droppedIds, hasLength(3));
-    expect(result.refusedChunks, 1);
     expect(result.abortedBy, isNull);
   });
 
@@ -358,7 +350,6 @@ void main() {
     expect(fake.calls, hasLength(3));
     expect(result.questions, isEmpty);
     expect(result.droppedIds, hasLength(3));
-    expect(result.refusedChunks, 1);
   });
 
   test('otherRetries 为 0 时网络错误不重试，直接中止整轮', () async {
@@ -429,7 +420,6 @@ void main() {
     expect(result.droppedIds, isEmpty);
     expect(result.abortedBy, LlmErrorKind.timeout);
     expect(result.abortMessage, '超时');
-    expect(result.processedChunks, 2);
     expect(progress, <List<int>>[
       <int>[1, 2],
       <int>[2, 2],
@@ -453,7 +443,6 @@ void main() {
     expect(result.questions, isEmpty);
     expect(result.droppedIds, isEmpty);
     expect(result.usedIds, isEmpty);
-    expect(result.processedChunks, 1);
   });
 
   test('被拦文本进 droppedIds 且绝不出现在 chat 提示里', () async {
@@ -507,8 +496,7 @@ void main() {
     expect(result.usedIds, hasLength(3));
     expect(result.droppedIds, isEmpty);
     expect(result.abortedBy, LlmErrorKind.budget);
-    expect(result.abortMessage, '已达今日用量上限');
-    expect(result.processedChunks, 1);
+    expect(result.abortMessage, '已达今日费用上限');
   });
 
   test('每批结束都回调进度', () async {
@@ -525,7 +513,6 @@ void main() {
     );
 
     expect(result.questions, isEmpty);
-    expect(result.processedChunks, 3);
     expect(progress, <List<int>>[
       <int>[1, 3],
       <int>[2, 3],

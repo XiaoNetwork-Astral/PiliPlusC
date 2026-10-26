@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:math';
 
 import 'package:PiliPlus/utils/cognitive_filter/ai/calibration/calibration_models.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/judge_cache.dart';
@@ -75,7 +74,7 @@ class CalibrationPool {
           if (!item.score.isFinite) {
             continue;
           }
-          loaded[_normalize(item.text)] = item;
+          loaded[flattenText(item.text)] = item;
         } catch (_) {
           // 单条损坏只丢弃该条
         }
@@ -122,7 +121,7 @@ class CalibrationPool {
     required double score,
     String category = '',
   }) {
-    final normalized = _normalize(text);
+    final normalized = flattenText(text);
     if (normalized.isEmpty) {
       return false;
     }
@@ -167,15 +166,6 @@ class CalibrationPool {
     return true;
   }
 
-  /// 随机抽取最多 [count] 条，不重复且不改变池内容
-  List<PoolItem> sample(int count, Random random) {
-    if (count <= 0 || _items.isEmpty) {
-      return const <PoolItem>[];
-    }
-    final copy = _items.values.toList(growable: false)..shuffle(random);
-    return copy.take(count).toList(growable: false);
-  }
-
   /// 按 id 删除条目
   void removeIds(Iterable<String> ids) {
     final targets = ids.toSet();
@@ -208,10 +198,5 @@ class CalibrationPool {
     _items.clear();
     _next = 1;
     _dirty = false;
-  }
-
-  /// 去掉首尾空白并把连续空白折叠成一个空格
-  static String _normalize(String text) {
-    return text.trim().replaceAll(RegExp(r'\s+'), ' ');
   }
 }

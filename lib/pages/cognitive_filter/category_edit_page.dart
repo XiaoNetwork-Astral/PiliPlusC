@@ -47,9 +47,11 @@ class _CategoryEditPageState extends State<CategoryEditPage> {
     _question = category?.question ?? '';
     _trueCriteria = category?.trueCriteria ?? '';
     _falseCriteria = category?.falseCriteria ?? '';
-    _threshold = (category?.threshold ?? FilterCategory.defaultThreshold)
-        .clamp(0.30, 0.95)
-        .toDouble();
+    _threshold = _builtin
+        ? FilterCategory.defaultThreshold
+        : (category?.threshold ?? FilterCategory.defaultThreshold)
+            .clamp(0.30, 0.95)
+            .toDouble();
     _surfaces = Set<FilterSurface>.of(
       category?.surfaces ?? FilterSurface.values,
     );
@@ -123,7 +125,6 @@ class _CategoryEditPageState extends State<CategoryEditPage> {
     } else {
       current['falseCriteria'] = _falseCriteria;
     }
-    current.remove('threshold');
     if (_sameSurfaces(_surfaces, factory.surfaces)) {
       current.remove('surfaces');
     } else {

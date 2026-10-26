@@ -53,15 +53,6 @@ class LegacyRuleSource {
 
   /// 旧弹幕用户哈希
   final Set<String> danmakuUidHashes;
-
-  bool get isEmpty =>
-      replyPattern.trim().isEmpty &&
-      dynamicPattern.trim().isEmpty &&
-      videoPattern.trim().isEmpty &&
-      zonePattern.trim().isEmpty &&
-      danmakuKeywords.isEmpty &&
-      danmakuRegexps.isEmpty &&
-      danmakuUidHashes.isEmpty;
 }
 
 /// 按顶层竖线拆分旧设置串
@@ -148,22 +139,6 @@ List<FilterRule> migrateLegacy(LegacyRuleSource source) {
     final hash = raw.trim().toLowerCase();
     if (hash.isEmpty) continue;
     add(RuleType.user, '', const {RuleScope.danmaku}, midHash: hash);
-  }
-  return result;
-}
-
-/// 合并已有规则与迁移结果，按 id 和语义去重
-List<FilterRule> mergeMigrated(
-  List<FilterRule> existing,
-  Iterable<FilterRule> migrated,
-) {
-  final result = <FilterRule>[...existing];
-  final ids = {for (final rule in existing) rule.id};
-  final keys = {for (final rule in existing) _semanticKey(rule)};
-  for (final rule in migrated) {
-    if (!ids.add(rule.id)) continue;
-    if (!keys.add(_semanticKey(rule))) continue;
-    result.add(rule);
   }
   return result;
 }

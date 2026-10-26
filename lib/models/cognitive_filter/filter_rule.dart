@@ -18,9 +18,6 @@ class FilterRule {
     this.midHash,
   });
 
-  /// 该类型允许的全部范围
-  static Set<RuleScope> allowedScopes(RuleType type) => type.allowedScopes;
-
   /// 只有哈希的弹幕用户规则
   bool get isHashOnly =>
       type == RuleType.user &&
@@ -128,10 +125,7 @@ class FilterRule {
 
     final id = _stringOf(json['id']).trim();
     if (id.isEmpty) return null;
-    // 旧版本曾有独立的「分区」类型，现在是正则加视频分区范围
-    final typeName = _stringOf(json['type']);
-    final legacyZone = typeName == 'zone';
-    final type = legacyZone ? RuleType.regex : RuleType.byName(typeName);
+    final type = RuleType.byName(_stringOf(json['type']));
     if (type == null) return null;
 
     var content = _stringOf(json['content']);
@@ -142,9 +136,7 @@ class FilterRule {
     final enabled = rawEnabled is bool ? rawEnabled : true;
 
     Set<RuleScope> scopes;
-    if (legacyZone) {
-      scopes = {RuleScope.zone};
-    } else if (type == RuleType.user &&
+    if (type == RuleType.user &&
         contentTrimmed.isEmpty &&
         midHash != null) {
       // 只有哈希的规则范围固定为弹幕
@@ -220,13 +212,6 @@ class FilterRule {
   /// UID 规则在存储里没有独立记录，id 由 UID 直接派生
   static String userRuleId(int mid) => 'user-mid-$mid';
 
-  /// 反解 [userRuleId]，其他 id 返回 null
-  static int? midOfUserId(String id) {
-    const prefix = 'user-mid-';
-    if (!id.startsWith(prefix)) return null;
-    return int.tryParse(id.substring(prefix.length));
-  }
-
   /// 由类型、范围与内容生成稳定 id，重复迁移不会产生新 id
   static String stableId({
     required RuleType type,
@@ -256,8 +241,8 @@ class FilterRule {
 
   /// 用户 UID 对应的弹幕发送者哈希
   ///
-  /// 等价于 `DmUtils.midToHash`：UID 十进制 ASCII 字节的 CRC32 小写十六进制，
-  /// 不补前导零。这里独立实现，纯核心不依赖 canvas_danmaku。
+  /// UID 十进制 ASCII 字节的 CRC32 小写十六进制，不补前导零；纯核心实现，
+  /// 不依赖 canvas_danmaku。
   static String midToHash(int mid) =>
       getCrc32(ascii.encode(mid.toString()), 0).toRadixString(16);
 }

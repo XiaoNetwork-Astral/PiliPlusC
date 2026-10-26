@@ -20,17 +20,6 @@ abstract class JudgeBudget {
   void record({required int inputTokens, required int outputTokens});
 }
 
-/// 不限预算，适合未配置预算的场景
-class UnlimitedJudgeBudget implements JudgeBudget {
-  const UnlimitedJudgeBudget();
-
-  @override
-  bool canSpend() => true;
-
-  @override
-  void record({required int inputTokens, required int outputTokens}) {}
-}
-
 /// 判定结果的来源
 enum JudgeSource {
   cache,
@@ -63,10 +52,6 @@ class JudgeVerdict {
 
 /// 一次判定的统计
 class JudgeStats {
-  int requests = 0;
-  int cacheHits = 0;
-  int inputTokens = 0;
-  int outputTokens = 0;
   int failedRequests = 0;
 
   /// 最近一次失败的原始说明，供界面提示
@@ -199,7 +184,6 @@ class JudgeService {
     List<FilterCategory>? builtinDefinitions,
     String title = '',
     String context = '',
-    String? contextKey,
   }) async {
     final stats = JudgeStats();
     final verdicts = <String, JudgeVerdict>{};
@@ -211,7 +195,6 @@ class JudgeService {
         builtinDefinitions: builtinDefinitions,
         title: title,
         context: context,
-        contextKey: contextKey,
         stats: stats,
         verdicts: verdicts,
       );
@@ -238,7 +221,6 @@ class JudgeService {
     required List<FilterCategory>? builtinDefinitions,
     required String title,
     required String context,
-    required String? contextKey,
     required JudgeStats stats,
     required Map<String, JudgeVerdict> verdicts,
   }) async {
@@ -319,7 +301,6 @@ class JudgeService {
             JudgeSource.cache,
           ),
         );
-        stats.cacheHits++;
       } else {
         pending.add(item);
       }
@@ -333,7 +314,6 @@ class JudgeService {
       surface: surface,
       title: title,
       context: context,
-      contextKey: contextKey,
       stats: stats,
       verdicts: verdicts,
     );
@@ -347,7 +327,6 @@ class JudgeService {
     required FilterSurface surface,
     required String title,
     required String context,
-    required String? contextKey,
     required JudgeStats stats,
     required Map<String, JudgeVerdict> verdicts,
   }) async {
@@ -368,7 +347,6 @@ class JudgeService {
               builtinDefinitions: builtinDefinitions,
               title: title,
               context: context,
-              contextKey: contextKey,
             ),
             parse: (response) => JevRequest.parseResponse(
               response,
@@ -436,20 +414,16 @@ class JudgeService {
       if (skip != null) {
         return _BatchResult<T>.skip(skip);
       }
-      stats.requests++;
       try {
         final response = await transport(buildBody());
         final value = parse(response);
         _consecutiveFailures = 0;
         try {
-          _recordUsage(response, stats);
+          _recordUsage(response);
         } catch (_) {
           // 预算实现异常不影响判定结果
         }
         return _BatchResult<T>.value(value);
-      } on JevException catch (error) {
-        _onFailure(error, stats);
-        return _BatchResult<T>.failed();
       } catch (error) {
         _onFailure(error, stats);
         return _BatchResult<T>.failed();
@@ -467,13 +441,11 @@ class JudgeService {
     return null;
   }
 
-  void _onFailure(Object? error, JudgeStats stats) {
+  void _onFailure(Object error, JudgeStats stats) {
     stats.failedRequests++;
     final jev = error is JevException ? error : null;
     if (jev != null) {
       stats.lastError = jev.message;
-    } else if (error == null) {
-      stats.lastError = '未知错误';
     } else {
       stats.lastError = truncateError(redactSecrets(error.toString()));
     }
@@ -484,7 +456,7 @@ class JudgeService {
     }
   }
 
-  void _recordUsage(Map<String, dynamic> response, JudgeStats stats) {
+  void _recordUsage(Map<String, dynamic> response) {
     final usage = response['usage'];
     var input = 0;
     var output = 0;
@@ -492,8 +464,6 @@ class JudgeService {
       input = _tokenOf(usage['input_tokens']);
       output = _tokenOf(usage['output_tokens']);
     }
-    stats.inputTokens += input;
-    stats.outputTokens += output;
     budget.record(inputTokens: input, outputTokens: output);
   }
 
@@ -519,9 +489,7 @@ class JudgeService {
     var sum = 0.0;
     FilterCategory? topBuiltin;
     var topBuiltinProb = -1.0;
-    var threshold = 0.0;
-    for (var i = 0; i < builtins.length; i++) {
-      final category = builtins[i];
+    for (final category in builtins) {
       final probability =
           options[JevRequest.builtinOptionNames[category.id]] ?? 0.0;
       sum += probability;
@@ -529,12 +497,9 @@ class JudgeService {
         topBuiltinProb = probability;
         topBuiltin = category;
       }
-      final value = category.threshold;
-      if (i == 0 || value > threshold) {
-        threshold = value;
-      }
     }
-    final builtinBlocked = builtins.isNotEmpty && sum >= threshold;
+    final builtinBlocked =
+        builtins.isNotEmpty && sum >= builtins.first.threshold;
 
     FilterCategory? topCustom;
     var topCustomProb = -1.0;
@@ -592,9 +557,7 @@ class JudgeService {
 
   int _batchSize(int customCount) {
     final perText = 1 + customCount;
-    final maxByQuestions = perText <= 0
-        ? JevRequest.maxQuestions
-        : JevRequest.maxQuestions ~/ perText;
+    final maxByQuestions = JevRequest.maxQuestions ~/ perText;
     var size = categoryBatch;
     if (size > maxByQuestions) {
       size = maxByQuestions;

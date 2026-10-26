@@ -211,18 +211,14 @@ class AiFilterRuntime {
     required List<JudgeItem> items,
     String title = '',
     String context = '',
-    String? contextKey,
-    bool recordHistory = true,
-    bool applyWhitelist = true,
   }) {
     return _judge(
       surface: surface,
       items: items,
       title: title,
       context: context,
-      contextKey: contextKey,
-      recordHistory: recordHistory,
-      applyWhitelist: applyWhitelist,
+      recordHistory: true,
+      applyWhitelist: true,
       trial: false,
     );
   }
@@ -233,7 +229,6 @@ class AiFilterRuntime {
     required List<JudgeItem> items,
     required String title,
     required String context,
-    required String? contextKey,
     required bool recordHistory,
     required bool applyWhitelist,
     required bool trial,
@@ -288,7 +283,6 @@ class AiFilterRuntime {
               .toList(),
           title: title,
           context: context,
-          contextKey: contextKey,
         );
       } finally {
         if (countBusy) busy.value--;
@@ -347,7 +341,6 @@ class AiFilterRuntime {
               text: text,
               categoryId: verdict.categoryId,
               score: verdict.score,
-              source: verdict.source.name,
               label: _categoryName(verdict.categoryId),
               scores: verdict.scores.isEmpty ? null : verdict.scores,
               meta: item?.meta,
@@ -355,17 +348,6 @@ class AiFilterRuntime {
             ),
           );
         });
-      }
-
-      final budget = _budget;
-      if (budget != null) {
-        var aiCount = 0;
-        for (final verdict in result.verdicts.values) {
-          if (verdict.source == JudgeSource.ai) {
-            aiCount++;
-          }
-        }
-        budget.addItems(aiCount);
       }
 
       // 得分偏高的内容静默存进校准向导的收集池，只存本机
@@ -400,7 +382,7 @@ class AiFilterRuntime {
     FilterSurface surface,
     String text,
   ) {
-    final entryText = _truncateRuleText(text);
+    final entryText = JudgeHistoryEntry.truncateText(text);
     var checked = 0;
     for (final entry in history.entries) {
       if (checked++ >= _ruleDedupWindow) {
@@ -427,7 +409,6 @@ class AiFilterRuntime {
       items: [JudgeItem(id: id, text: text)],
       title: '',
       context: context,
-      contextKey: null,
       recordHistory: false,
       applyWhitelist: false,
       trial: true,
@@ -476,7 +457,7 @@ class AiFilterRuntime {
     if (times.length >= _ruleRateLimit) {
       return;
     }
-    final entryText = _truncateRuleText(text);
+    final entryText = JudgeHistoryEntry.truncateText(text);
     var checked = 0;
     for (final entry in history.entries) {
       if (checked++ >= _ruleDedupWindow) {
@@ -496,7 +477,6 @@ class AiFilterRuntime {
         surface: surface.label,
         text: text,
         score: 1,
-        source: JudgeHistoryEntry.rule,
         kind: JudgeHistoryEntry.rule,
         label: content,
         ruleType: ruleType,
@@ -504,14 +484,6 @@ class AiFilterRuntime {
       ),
     );
     _scheduleFlush();
-  }
-
-  static String _truncateRuleText(String text) {
-    final runes = text.runes.toList(growable: false);
-    if (runes.length <= JudgeHistoryEntry.maxTextLength) {
-      return text;
-    }
-    return String.fromCharCodes(runes.take(JudgeHistoryEntry.maxTextLength));
   }
 
   String _categoryName(String? id) {
@@ -535,11 +507,7 @@ class AiFilterRuntime {
     _scheduleFlush();
   }
 
-  DailyUsage get usageToday => _budget?.today ?? const DailyUsage();
-
   double get usdToday => _budget?.usdToday ?? 0;
-
-  bool get breakerOpen => _service?.breakerOpen ?? false;
 
   void resetBreaker() {
     _service?.resetBreaker();
@@ -611,17 +579,11 @@ class AiFilterRuntime {
     return DailyUsage(
       day: Pref.cfAiUsageDay,
       inputTokens: Pref.cfAiUsageInputTokens,
-      outputTokens: Pref.cfAiUsageOutputTokens,
-      requests: Pref.cfAiUsageRequests,
-      items: Pref.cfAiUsageItems,
     );
   }
 
   void _saveUsage(DailyUsage usage) {
     Pref.cfAiUsageDay = usage.day;
     Pref.cfAiUsageInputTokens = usage.inputTokens;
-    Pref.cfAiUsageOutputTokens = usage.outputTokens;
-    Pref.cfAiUsageRequests = usage.requests;
-    Pref.cfAiUsageItems = usage.items;
   }
 }

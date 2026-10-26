@@ -147,27 +147,13 @@ void main() {
       expect(user.isHashOnly, isTrue);
     });
 
-    test('迁移 id 稳定，重复调用与合并都不会产生重复', () {
+    test('迁移 id 稳定，重复调用结果一致', () {
       final first = migrateLegacy(source);
       final second = migrateLegacy(source);
       expect(
         first.map((rule) => rule.id).toList(),
         second.map((rule) => rule.id).toList(),
       );
-      expect(mergeMigrated(first, second).length, first.length);
-    });
-
-    test('合并已有同语义规则时按类型、范围与内容去重', () {
-      const existing = FilterRule(
-        id: 'custom-id',
-        type: RuleType.keyword,
-        content: 'r1',
-        scopes: {RuleScope.reply},
-      );
-      final merged = mergeMigrated([existing], migrateLegacy(source));
-      expect(merged.length, 9);
-      expect(merged.where((rule) => rule.content == 'r1').length, 1);
-      expect(merged.first.id, 'custom-id');
     });
 
     test('分区里的转义字面量还原成视频分区范围的关键词', () {
@@ -190,12 +176,11 @@ void main() {
       expect(rules.single.type, RuleType.regex);
       expect(rules.single.content, 'ok|(');
       expect(rules.single.validate(), isNotNull);
-      expect(RuleSet.text(rules, RuleScope.reply).isEmpty, isTrue);
+      expect(RuleSet.text(rules, RuleScope.reply).matchesText('ok'), isFalse);
     });
 
     test('空来源不产生规则', () {
       expect(migrateLegacy(const LegacyRuleSource()), isEmpty);
-      expect(const LegacyRuleSource().isEmpty, isTrue);
     });
   });
 }

@@ -56,18 +56,6 @@ class RuleEngine {
     return snapshot(scope).matchText(text);
   }
 
-  /// 某个范围内该 UID 是否被屏蔽，被禁用或被收窄的 UID 返回 false
-  bool userBlocked(RuleScope scope, int mid, {String? text}) {
-    if (mid <= 0) return false;
-    return snapshot(scope).userBlocked(mid, text: text);
-  }
-
-  /// 弹幕发送者哈希是否被屏蔽，包含 UID 派生哈希与只有哈希的规则
-  bool danmakuHashBlocked(String midHash, {String? text}) {
-    if (midHash.isEmpty) return false;
-    return snapshot(RuleScope.danmaku).hashBlocked(midHash, text: text);
-  }
-
   /// 取某个范围当前规则的快照，适合在循环里反复判断
   ///
   /// 总开关与编译结果只在取快照时读取一次；总开关关闭时返回的快照不屏蔽任何内容。

@@ -1383,26 +1383,9 @@ abstract final class Pref {
   static set cfAiUsageInputTokens(int value) =>
       _setting.put(SettingBoxKey.cfAiUsageInputTokens, _nonNegative(value));
 
-  static int get cfAiUsageOutputTokens =>
-      _usageInt(SettingBoxKey.cfAiUsageOutputTokens);
-
-  static set cfAiUsageOutputTokens(int value) =>
-      _setting.put(SettingBoxKey.cfAiUsageOutputTokens, _nonNegative(value));
-
-  static int get cfAiUsageRequests =>
-      _usageInt(SettingBoxKey.cfAiUsageRequests);
-
-  static set cfAiUsageRequests(int value) =>
-      _setting.put(SettingBoxKey.cfAiUsageRequests, _nonNegative(value));
-
-  static int get cfAiUsageItems => _usageInt(SettingBoxKey.cfAiUsageItems);
-
-  static set cfAiUsageItems(int value) =>
-      _setting.put(SettingBoxKey.cfAiUsageItems, _nonNegative(value));
-
   /// 内置类别的总阈值，数值越小越敏感；没设过时取出厂门槛
-  static double get cfProThreshold {
-    final value = _setting.get(SettingBoxKey.cfProThreshold);
+  static double get cfBlockThreshold {
+    final value = _setting.get(SettingBoxKey.cfBlockThreshold);
     if (value is num) {
       final threshold = value.toDouble();
       if (threshold.isFinite) return threshold.clamp(0.30, 0.95).toDouble();
@@ -1410,8 +1393,8 @@ abstract final class Pref {
     return kDefaultBlockThreshold;
   }
 
-  static set cfProThreshold(double value) => _setting.put(
-    SettingBoxKey.cfProThreshold,
+  static set cfBlockThreshold(double value) => _setting.put(
+    SettingBoxKey.cfBlockThreshold,
     value.clamp(0.30, 0.95).toDouble(),
   );
 
@@ -1688,22 +1671,6 @@ abstract final class Pref {
     SettingBoxKey.cfAiWhitelistRules,
     jsonEncode([for (final rule in value) rule.toJson()]),
   );
-
-  /// 旧版 AI 白名单，只在迁移时读取
-  static List<FilterRule> get cfLegacyAiWhitelistRules {
-    final raw = _setting.get(SettingBoxKey.cfAiWhitelist);
-    if (raw is! String || raw.isEmpty) return const <FilterRule>[];
-    try {
-      return legacyAiWhitelistRules(jsonDecode(raw));
-    } catch (_) {
-      return const <FilterRule>[];
-    }
-  }
-
-  /// 迁移完成后清掉旧键，之后不再读它
-  static void clearLegacyAiWhitelist() {
-    _setting.delete(SettingBoxKey.cfAiWhitelist);
-  }
 
   static int _usageInt(String key) {
     final value = _setting.get(key, defaultValue: 0);

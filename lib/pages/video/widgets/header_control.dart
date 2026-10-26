@@ -47,7 +47,6 @@ import 'package:PiliPlus/utils/accounts/account.dart';
 import 'package:PiliPlus/utils/android/android_helper.dart';
 import 'package:PiliPlus/utils/cognitive_filter/rule_store.dart';
 import 'package:PiliPlus/utils/connectivity_utils.dart';
-import 'package:PiliPlus/utils/debug_export.dart';
 import 'package:PiliPlus/utils/extension/num_ext.dart';
 import 'package:PiliPlus/utils/extension/string_ext.dart';
 import 'package:PiliPlus/utils/image_utils.dart';
@@ -320,20 +319,6 @@ class HeaderControl extends StatefulWidget {
         withContent: ReportOptions.liveDanmakuReportCheck,
         contentRequired: ReportOptions.liveDanmakuReportCheck,
         (reasonType, reasonDesc, banUid) {
-          // if (banUid) {
-          //   final filter = ctr.filters;
-          //   if (filter.dmUid.add(extra.mid)) {
-          //     filter.count++;
-          //     GStorage.localCache.put(
-          //       LocalCacheKey.danmakuFilterRules,
-          //       filter,
-          //     );
-          //   }
-          //   DanmakuFilterHttp.danmakuFilterAdd(
-          //     filter: extra.mid,
-          //     type: 2,
-          //   );
-          // }
           return LiveHttp.liveDmReport(
             roomId: roomId,
             mid: extra.mid,
@@ -804,26 +789,6 @@ class HeaderControlState extends State<HeaderControl>
                     },
                     leading: const Icon(Icons.download_outlined, size: 20),
                     title: const Text('保存字幕', style: titleStyle),
-                  ),
-                if (!videoDetailCtr.isFileSource)
-                  ListTile(
-                    dense: true,
-                    onTap: () {
-                      Get.back();
-                      DebugExport.exportDanmakuAndSubtitles(
-                        bvid: videoDetailCtr.bvid,
-                        aid: videoDetailCtr.aid,
-                        cid: videoDetailCtr.cid.value,
-                        title: introController.videoDetail.value.title ?? '',
-                        durationMs: videoDetailCtr.timeLength,
-                        subtitles: videoDetailCtr.subtitles.toList(),
-                      );
-                    },
-                    leading: const Icon(Icons.save_alt_outlined, size: 20),
-                    title: const Text(
-                      '导出弹幕和字幕（调试）',
-                      style: titleStyle,
-                    ),
                   ),
                 if (plPlayerController.videoPlayerController case final player?)
                   ListTile(

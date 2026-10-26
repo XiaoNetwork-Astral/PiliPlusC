@@ -23,10 +23,8 @@ class RoundResult {
     required this.questions,
     required this.usedIds,
     required this.droppedIds,
-    required this.refusedChunks,
     this.abortedBy,
     this.abortMessage,
-    required this.processedChunks,
   });
 
   /// 这一轮归出来的题目
@@ -38,17 +36,13 @@ class RoundResult {
   /// 确定处理不了、应从池里删除的条目 id
   final Set<String> droppedIds;
 
-  /// 因服务商拒绝或返回无法解析而丢弃的批数
-  final int refusedChunks;
-
-  /// 非空表示因网络/密钥/限流/服务端/超时/用量上限中止，池里条目保持不动
+  /// 非空表示因网络/密钥/限流/服务端/超时/费用上限中止；用户点停止也会归入
+  /// [LlmErrorKind.budget] 且消息为合成文案。中止前已出题的条目仍算用掉，
+  /// 中止时当前批的条目留在池里
   final LlmErrorKind? abortedBy;
 
-  /// 中止时最后那个异常的原始说明；没有异常可用时为空
+  /// 中止时给用户看的说明，可能是异常原文，也可能是“未填写 API Key”这类合成文案
   final String? abortMessage;
-
-  /// 实际处理过的批数
-  final int processedChunks;
 }
 
 /// 跑一轮整理：过滤不该上传的内容，分批交给模型归类，攒出题目
@@ -103,16 +97,15 @@ Future<RoundResult> runRound({
   final total = chunks.length;
   LlmErrorKind? abortedBy;
   String? abortMessage;
-  var refusedChunks = 0;
   var processedChunks = 0;
 
   for (var index = 0; index < chunks.length; index++) {
     if (questions.length >= questionLimit) {
       break;
     }
-    // 每批开始前确认今日用量额度；已到上限就停掉整轮，已得的题保留
+    // 每批开始前确认今日费用是否到上限；已到上限就停掉整轮，已得的题保留
     if (shouldStop?.call() ?? false) {
-      const budgetError = LlmException(LlmErrorKind.budget, '已达今日用量上限');
+      const budgetError = LlmException(LlmErrorKind.budget, '已达今日费用上限');
       abortedBy = budgetError.kind;
       abortMessage = budgetError.message;
       break;
@@ -144,7 +137,7 @@ Future<RoundResult> runRound({
         final kind = error is LlmException ? error.kind : LlmErrorKind.network;
         if (kind == LlmErrorKind.auth || kind == LlmErrorKind.budget) {
           abortedBy = kind;
-          abortMessage = _errorMessage(error);
+          abortMessage = llmErrorMessage(error);
           abort = true;
           break;
         }
@@ -159,7 +152,7 @@ Future<RoundResult> runRound({
           if (otherFailures >= maxOtherAttempts) {
             // 与模型输出无关，说明网络或服务有问题：停掉整轮，池里条目不动
             abortedBy = kind;
-            abortMessage = _errorMessage(error);
+            abortMessage = llmErrorMessage(error);
             abort = true;
             break;
           }
@@ -172,7 +165,6 @@ Future<RoundResult> runRound({
 
     if (batchFailed) {
       droppedIds.addAll(chunk.map((item) => item.id));
-      refusedChunks++;
     }
     processedChunks++;
     onProgress?.call(processedChunks, total);
@@ -188,10 +180,8 @@ Future<RoundResult> runRound({
         for (final member in question.members) member.id,
     },
     droppedIds: droppedIds,
-    refusedChunks: refusedChunks,
     abortedBy: abortedBy,
     abortMessage: abortMessage,
-    processedChunks: processedChunks,
   );
 }
 
@@ -200,7 +190,7 @@ bool _isOutputProblem(LlmErrorKind kind) =>
     kind == LlmErrorKind.parse || kind == LlmErrorKind.refused;
 
 /// 取异常里给用户看的原始说明，非 [LlmException] 也脱敏并截断
-String _errorMessage(Object error) {
+String llmErrorMessage(Object error) {
   if (error is LlmException) {
     return error.message;
   }
@@ -249,10 +239,10 @@ List<CalibrationQuestion> _parseReply(
       continue;
     }
     final description = _clip(
-      _clean(_stringField(cluster, '描述', 'description')),
+      flattenText(_stringField(cluster, '描述', 'description')),
       60,
     );
-    var name = _clip(_clean(_stringField(cluster, '名称', 'name')), 12);
+    var name = _clip(flattenText(_stringField(cluster, '名称', 'name')), 12);
     if (name.isEmpty) {
       name = _clip(description, 8);
     }
@@ -352,9 +342,6 @@ String _stringField(
   final value = cluster[primary] ?? cluster[fallback];
   return value is String ? value : '';
 }
-
-/// 空白压成单个空格并去掉首尾空白
-String _clean(String text) => text.replaceAll(RegExp(r'\s+'), ' ').trim();
 
 /// 按字符数截断，避免把表情符号的代理对切开
 String _clip(String text, int max) {

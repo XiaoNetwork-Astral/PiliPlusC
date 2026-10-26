@@ -26,22 +26,13 @@ void main() {
     });
 
     test('跨天时先清零再判断', () {
-      stored = const DailyUsage(
-        day: '2024-05-05',
-        inputTokens: 2000000,
-        outputTokens: 500,
-        requests: 4,
-        items: 9,
-      );
+      stored = const DailyUsage(day: '2024-05-05', inputTokens: 2000000);
       final budget = build(1);
 
       expect(budget.canSpend(), isTrue);
       expect(saves, 1);
       expect(stored.day, '2024-05-06');
       expect(stored.inputTokens, 0);
-      expect(stored.outputTokens, 0);
-      expect(stored.requests, 0);
-      expect(stored.items, 0);
       expect(budget.today.inputTokens, 0);
     });
 
@@ -97,7 +88,7 @@ void main() {
       expect(budget.canSpend(), isFalse);
     });
 
-    test('record 累加 token 与请求数，每次调用保存一次', () {
+    test('record 累加 token，每次调用保存一次', () {
       final budget = build(1);
 
       budget.record(inputTokens: 100, outputTokens: 10);
@@ -105,41 +96,18 @@ void main() {
 
       expect(stored.day, '2024-05-06');
       expect(stored.inputTokens, 300);
-      expect(stored.outputTokens, 30);
-      expect(stored.requests, 2);
-      expect(stored.items, 0);
       expect(saves, 2);
       expect(budget.usdToday, closeTo(300 * 0.042 / 1e6, 1e-15));
     });
 
     test('record 跨天先清零再累加', () {
-      stored = const DailyUsage(
-        day: '2024-05-05',
-        inputTokens: 500,
-        outputTokens: 60,
-        requests: 4,
-        items: 9,
-      );
+      stored = const DailyUsage(day: '2024-05-05', inputTokens: 500);
       final budget = build(1);
 
       budget.record(inputTokens: 10, outputTokens: 2);
 
       expect(stored.day, '2024-05-06');
       expect(stored.inputTokens, 10);
-      expect(stored.outputTokens, 2);
-      expect(stored.requests, 1);
-      expect(stored.items, 0);
-      expect(saves, 1);
-    });
-
-    test('addItems 累加判定条数', () {
-      final budget = build(1);
-
-      budget.addItems(3);
-      budget.addItems(0);
-
-      expect(stored.day, '2024-05-06');
-      expect(stored.items, 3);
       expect(saves, 1);
     });
   });

@@ -16,7 +16,7 @@ const double kDefaultBlockThreshold = 0.90;
 ///
 /// 出厂默认只开 attack、discrim、promo，其余关闭，适用面均为五个全选；
 /// 内置类别共用一个总阈值（出厂见 [kDefaultBlockThreshold]），
-/// 这里的 threshold 只是占位。
+/// 这里的 threshold 是占位值，会被全局门槛覆盖，不会被读取。
 const List<FilterCategory> builtinCategories = [
   FilterCategory(
     id: 'attack',

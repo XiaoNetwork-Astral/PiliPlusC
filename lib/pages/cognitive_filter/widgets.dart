@@ -112,27 +112,6 @@ class CfSwitchTile extends StatelessWidget {
   }
 }
 
-/// 列表里的灰色说明文字
-class CfHint extends StatelessWidget {
-  const CfHint(this.text, {super.key});
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-      child: Text(
-        text,
-        style: theme.textTheme.labelMedium!.copyWith(
-          color: theme.colorScheme.outline,
-        ),
-      ),
-    );
-  }
-}
-
 /// 列表里一组设置的小标题
 class CfGroupHeader extends StatelessWidget {
   const CfGroupHeader(this.text, {super.key});

@@ -27,14 +27,6 @@ List<FilterCategory> resolveCategories({
 double _shifted(double threshold, double delta) =>
     (threshold + delta).clamp(0.30, 0.99).toDouble();
 
-/// 在某个适用面下实际生效的类别
-List<FilterCategory> activeCategoriesFor(
-  FilterSurface surface,
-  List<FilterCategory> all,
-) => all
-    .where((category) => category.enabled && category.surfaces.contains(surface))
-    .toList();
-
 FilterCategory _applyOverride(FilterCategory category, Object? raw) {
   if (raw is! Map) return category;
   var result = category;

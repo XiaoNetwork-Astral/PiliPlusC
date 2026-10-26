@@ -323,20 +323,6 @@ void main() {
       );
     });
 
-    test('旧版本的分区类型读成正则加视频分区范围', () {
-      final rule = FilterRule.fromJson({
-        'id': 'old-zone',
-        'type': 'zone',
-        'content': '动画',
-        'scopes': ['video'],
-      });
-      expect(rule, isNotNull);
-      expect(rule!.type, RuleType.regex);
-      expect(rule.scopes, {RuleScope.zone});
-      expect(rule.content, '动画');
-      expect(rule.validate(), isNull);
-    });
-
     test('copyWith 能清空 midHash', () {
       final rule = _rule(
         type: RuleType.user,
@@ -369,8 +355,6 @@ void main() {
       expect(a, b);
       expect(a, isNot(c));
       expect(FilterRule.userRuleId(42), 'user-mid-42');
-      expect(FilterRule.midOfUserId('user-mid-42'), 42);
-      expect(FilterRule.midOfUserId('other'), isNull);
     });
 
     test('UID 哈希与 CRC32 标准值一致', () {

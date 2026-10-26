@@ -39,9 +39,6 @@ class CloudSyncResult {
   /// 附加说明，例如直播屏蔽词结果、限流停止原因
   final String? note;
 
-  bool get hasChange =>
-      success > 0 || skipped > 0 || failed > 0 || (note?.isNotEmpty ?? false);
-
   /// 带单位的数量摘要
   String summary(String unit) {
     final text = '成功 $success $unit，跳过 $skipped $unit，失败 $failed $unit';
@@ -55,8 +52,6 @@ class CloudSyncReport {
   const CloudSyncReport(this.results);
 
   final Map<CloudSyncKind, CloudSyncResult> results;
-
-  bool get hasChange => results.values.any((result) => result.hasChange);
 
   bool get hasFailure => results.values.any((result) => result.failed > 0);
 

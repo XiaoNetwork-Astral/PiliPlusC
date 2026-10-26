@@ -298,7 +298,6 @@ void main() {
         CloudSyncKind.danmakuRules: CloudSyncResult(success: 1),
         CloudSyncKind.blacklist: CloudSyncResult(skipped: 2),
       });
-      expect(report.hasChange, isTrue);
       expect(
         report.summary,
         '弹幕屏蔽规则：成功 1 条，跳过 0 条，失败 0 条；'

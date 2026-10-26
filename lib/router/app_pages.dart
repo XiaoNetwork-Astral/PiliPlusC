@@ -154,7 +154,7 @@ class Routes {
     GetPage(name: '/subscription', page: () => const SubPage()),
     // 订阅详情
     GetPage(name: '/subDetail', page: () => const SubDetailPage()),
-    // 弹幕屏蔽管理
+    // 弹幕屏蔽规则列表
     GetPage(name: '/danmakuBlock', page: () => const RuleListPage()),
     GetPage(name: '/sponsorBlock', page: () => const SponsorBlockPage()),
     GetPage(name: '/createFav', page: () => const CreateFavPage()),

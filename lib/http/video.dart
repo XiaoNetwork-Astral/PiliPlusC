@@ -49,10 +49,6 @@ import 'package:protobuf/protobuf.dart';
 
 /// view层根据 status 判断渲染逻辑
 abstract final class VideoHttp {
-  // 仅兼容旧版设置页的写入，分区过滤已统一读规则引擎
-  static RegExp zoneRegExp = RegExp('');
-  static bool enableFilter = false;
-
   static bool _blocked(dynamic mid, RuleSnapshot snap, {String? text}) =>
       mid is int && snap.userBlocked(mid, text: text);
 
@@ -270,11 +266,8 @@ abstract final class VideoHttp {
         when RecommendFilter.filterTitle(title, snap)) {
       return false;
     }
-    if (RecommendFilter.filterLikeRatio(
-      i['stat']['like'],
-      i['stat']['view'],
-      enabled: enabled,
-    )) {
+    if (enabled &&
+        RecommendFilter.filterLikeRatio(i['stat']['like'], i['stat']['view'])) {
       return false;
     }
     if (i['tname'] case final String tname

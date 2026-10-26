@@ -55,7 +55,7 @@ class BlockStatsCore {
     }
     _ensureLoaded();
     if (_since!.isEmpty) {
-      _since = _dayKey(_now());
+      _since = dayKeyOf(_now());
     }
     _count = _count! + n;
     _dirty = true;
@@ -94,13 +94,6 @@ class BlockStatsCore {
     return DateTime.utc(time.year, time.month, time.day);
   }
 
-  static String _dayKey(DateTime time) {
-    final year = time.year.toString().padLeft(4, '0');
-    final month = time.month.toString().padLeft(2, '0');
-    final day = time.day.toString().padLeft(2, '0');
-    return '$year-$month-$day';
-  }
-
   static DateTime? _parseDay(String value) {
     final match = _dayPattern.firstMatch(value);
     if (match == null) {
@@ -120,4 +113,12 @@ class BlockStatsCore {
   }
 
   static final RegExp _dayPattern = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$');
+}
+
+/// 本地日期键，格式 yyyy-MM-dd
+String dayKeyOf(DateTime time) {
+  final year = time.year.toString().padLeft(4, '0');
+  final month = time.month.toString().padLeft(2, '0');
+  final day = time.day.toString().padLeft(2, '0');
+  return '$year-$month-$day';
 }

@@ -8,9 +8,6 @@ abstract final class RecommendFilter {
   static int minLikeRatioForRecommend = Pref.minLikeRatioForRecommend;
   static bool exemptFilterForFollowed = Pref.exemptFilterForFollowed;
   static bool applyFilterToRelatedVideos = Pref.applyFilterToRelatedVideos;
-  // 仅兼容旧版设置页的写入，标题/分区过滤已统一读规则引擎
-  static RegExp rcmdRegExp = RegExp('');
-  static bool enableFilter = false;
 
   // (web/app)rcmd
   static bool filterWithExempt(
@@ -18,7 +15,6 @@ abstract final class RecommendFilter {
     RuleSnapshot snap, {
     required bool enabled,
   }) {
-    if (!enabled) return false;
     //由于相关视频中没有已关注标签，只能视为非关注视频
     if (videoItem.isFollowed && exemptFilterForFollowed) {
       return false;
@@ -27,12 +23,8 @@ abstract final class RecommendFilter {
   }
 
   /// hot/rank/[filterAll]
-  static bool filterLikeRatio(
-    int? like,
-    int? view, {
-    required bool enabled,
-  }) {
-    if (!enabled || view == null) return false;
+  static bool filterLikeRatio(int? like, int? view) {
+    if (view == null) return false;
     return (view > -1 && view < minPlayForRcmd) ||
         (like != null &&
             like > -1 &&
@@ -44,8 +36,8 @@ abstract final class RecommendFilter {
       snap.matchText(title);
 
   /// [filterAll]
-  static bool filterDuration(int duration, {required bool enabled}) =>
-      enabled && duration > 0 && duration < minDurationForRcmd;
+  static bool filterDuration(int duration) =>
+      duration > 0 && duration < minDurationForRcmd;
 
   /// related/[filterWithExempt]
   static bool filterAll(
@@ -54,12 +46,8 @@ abstract final class RecommendFilter {
     required bool enabled,
   }) {
     if (!enabled) return false;
-    return filterDuration(videoItem.duration, enabled: enabled) ||
-        filterLikeRatio(
-          videoItem.stat.like,
-          videoItem.stat.view,
-          enabled: enabled,
-        ) ||
+    return filterDuration(videoItem.duration) ||
+        filterLikeRatio(videoItem.stat.like, videoItem.stat.view) ||
         filterTitle(videoItem.title, snap);
   }
 }

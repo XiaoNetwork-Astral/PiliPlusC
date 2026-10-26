@@ -21,8 +21,6 @@ class AiWhitelist implements RuleSource {
   late final AiWhitelistStore _store = AiWhitelistStore(
     read: () => Pref.cfAiWhitelistRules,
     write: (rules) => Pref.cfAiWhitelistRules = rules,
-    readLegacy: () => Pref.cfLegacyAiWhitelistRules,
-    clearLegacy: Pref.clearLegacyAiWhitelist,
     onChanged: _bump,
   );
 

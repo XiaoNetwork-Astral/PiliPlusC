@@ -17,7 +17,6 @@ JudgeHistoryEntry _entry(
     text: text,
     categoryId: categoryId,
     score: 0.82,
-    source: kind,
     kind: kind,
     scores: scores,
     meta: meta,
@@ -58,7 +57,6 @@ void main() {
       expect(restored.text, '测试文本');
       expect(restored.categoryId, 'attack');
       expect(restored.score, 0.82);
-      expect(restored.source, 'ai');
       expect(restored.scores, entry.scores);
       expect(restored.meta, entry.meta);
       expect(restored.snapshot, entry.snapshot);
@@ -71,7 +69,6 @@ void main() {
       expect(entry.text, '');
       expect(entry.categoryId, isNull);
       expect(entry.score, 0);
-      expect(entry.source, '');
       expect(entry.scores, isNull);
       expect(entry.meta, isNull);
       expect(entry.snapshot, isNull);
@@ -83,7 +80,6 @@ void main() {
         'surface': '评论',
         'text': '旧记录',
         'score': 0.5,
-        'source': 'cache',
         'kind': 'ai',
         'label': '攻击',
       });
@@ -149,7 +145,6 @@ void main() {
       expect(restored.entries.first.text, '第二条');
       expect(restored.entries.last.text, '第一条');
       expect(restored.entries.last.categoryId, 'mock');
-      expect(restored.entries.last.source, 'ai');
       expect(restored.entries.last.scores, history.entries.last.scores);
       expect(restored.entries.last.meta, history.entries.last.meta);
       expect(restored.entries.last.snapshot, history.entries.last.snapshot);

@@ -19,7 +19,6 @@ import 'package:PiliPlus/services/service_locator.dart';
 import 'package:PiliPlus/pages/cognitive_filter/ai_busy_indicator.dart';
 import 'package:PiliPlus/utils/cache_manager.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/ai_runtime.dart';
-import 'package:PiliPlus/utils/cognitive_filter/ai_config_reset.dart';
 import 'package:PiliPlus/utils/cognitive_filter/rule_store.dart';
 import 'package:PiliPlus/utils/danmaku_font.dart';
 import 'package:PiliPlus/utils/date_utils.dart';
@@ -126,11 +125,6 @@ void main() async {
     await Utils.copyText(e.toString(), needToast: false);
     if (kDebugMode) debugPrint('GStorage init error: $e');
     DeviceUtils.exitApp();
-  }
-  try {
-    AiConfigReset.runIfNeeded();
-  } catch (e) {
-    if (kDebugMode) debugPrint('ai config reset error: $e');
   }
   try {
     RuleMigration.runIfNeeded();

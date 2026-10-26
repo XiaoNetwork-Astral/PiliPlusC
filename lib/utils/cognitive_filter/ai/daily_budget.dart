@@ -1,38 +1,19 @@
 import 'package:PiliPlus/utils/cognitive_filter/ai/judge_service.dart';
+import 'package:PiliPlus/utils/cognitive_filter/block_stats_core.dart';
 
 /// 一天的本机用量
 class DailyUsage {
-  const DailyUsage({
-    this.day = '',
-    this.inputTokens = 0,
-    this.outputTokens = 0,
-    this.requests = 0,
-    this.items = 0,
-  });
+  const DailyUsage({this.day = '', this.inputTokens = 0});
 
   /// 用量所属的本地日期，格式 yyyy-MM-dd
   final String day;
 
   final int inputTokens;
-  final int outputTokens;
-  final int requests;
 
-  /// 判定条数
-  final int items;
-
-  DailyUsage copyWith({
-    String? day,
-    int? inputTokens,
-    int? outputTokens,
-    int? requests,
-    int? items,
-  }) {
+  DailyUsage copyWith({String? day, int? inputTokens}) {
     return DailyUsage(
       day: day ?? this.day,
       inputTokens: inputTokens ?? this.inputTokens,
-      outputTokens: outputTokens ?? this.outputTokens,
-      requests: requests ?? this.requests,
-      items: items ?? this.items,
     );
   }
 }
@@ -62,7 +43,7 @@ class DailyUsageBudget implements JudgeBudget {
 
   @override
   bool canSpend() {
-    final day = _dayKey(now());
+    final day = dayKeyOf(now());
     var usage = load();
     if (usage.day != day) {
       usage = DailyUsage(day: day);
@@ -77,34 +58,20 @@ class DailyUsageBudget implements JudgeBudget {
 
   @override
   void record({required int inputTokens, required int outputTokens}) {
-    final day = _dayKey(now());
+    final day = dayKeyOf(now());
     final stored = load();
     final base = stored.day == day ? stored : DailyUsage(day: day);
     save(
       DailyUsage(
         day: day,
         inputTokens: base.inputTokens + _nonNegative(inputTokens),
-        outputTokens: base.outputTokens + _nonNegative(outputTokens),
-        requests: base.requests + 1,
-        items: base.items,
       ),
     );
   }
 
-  /// 累加判定条数
-  void addItems(int count) {
-    if (count <= 0) {
-      return;
-    }
-    final day = _dayKey(now());
-    final stored = load();
-    final base = stored.day == day ? stored : DailyUsage(day: day);
-    save(base.copyWith(day: day, items: base.items + count));
-  }
-
   /// 今天的用量，跨天时返回清零后的值
   DailyUsage get today {
-    final day = _dayKey(now());
+    final day = dayKeyOf(now());
     final usage = load();
     return usage.day == day ? usage : DailyUsage(day: day);
   }
@@ -116,10 +83,4 @@ class DailyUsageBudget implements JudgeBudget {
       inputTokens.toDouble() * 0.042 / 1e6;
 
   static int _nonNegative(int value) => value < 0 ? 0 : value;
-
-  static String _dayKey(DateTime time) {
-    final month = time.month.toString().padLeft(2, '0');
-    final day = time.day.toString().padLeft(2, '0');
-    return '${time.year}-$month-$day';
-  }
 }

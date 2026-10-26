@@ -76,7 +76,7 @@ class JudgeCache {
   }) : _store = store,
        _now = now ?? DateTime.now;
 
-  /// 选项概率格式与旧版（门控 + 逐类别）不同，升到 2 并丢弃旧数据
+  /// 缓存格式版本，读取到不同版本时整份丢弃重建
   static const int _version = 2;
 
   final JudgeCacheStore _store;

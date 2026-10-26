@@ -30,9 +30,6 @@ abstract final class GStorage {
   static const Set<String> _deviceLocalSettingKeys = {
     SettingBoxKey.cfAiUsageDay,
     SettingBoxKey.cfAiUsageInputTokens,
-    SettingBoxKey.cfAiUsageOutputTokens,
-    SettingBoxKey.cfAiUsageRequests,
-    SettingBoxKey.cfAiUsageItems,
     SettingBoxKey.cfLlmUsageDay,
     SettingBoxKey.cfLlmUsageInputTokens,
     SettingBoxKey.cfLlmUsageOutputTokens,

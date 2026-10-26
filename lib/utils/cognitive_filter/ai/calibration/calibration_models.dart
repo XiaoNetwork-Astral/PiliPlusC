@@ -83,3 +83,6 @@ class CalibrationQuestion {
     return sorted[sorted.length ~/ 2];
   }
 }
+
+/// 去掉首尾空白并把连续空白折叠成一个空格
+String flattenText(String text) => text.replaceAll(RegExp(r'\s+'), ' ').trim();
