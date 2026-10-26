@@ -296,6 +296,7 @@ abstract final class LiveHttp {
             final item = e.cardData?.smallCardV1;
             return _liveText(item?.title, item?.uname);
           },
+          midOf: (e) => e.cardData?.smallCardV1?.uid,
         );
         if (!identical(filtered, cards)) {
           data.cardList = filtered;
@@ -307,6 +308,7 @@ abstract final class LiveHttp {
           surface: FilterSurface.live,
           items: followList,
           textOf: (e) => _liveText(e.title, e.uname),
+          midOf: (e) => e.uid,
         );
         if (!identical(filtered, followList)) {
           followList
@@ -348,6 +350,7 @@ abstract final class LiveHttp {
           surface: FilterSurface.live,
           items: list,
           textOf: (e) => _liveText(e.title, e.uname),
+          midOf: (e) => e.uid,
         );
         if (!identical(filtered, list)) {
           data.list = filtered;
@@ -431,6 +434,7 @@ abstract final class LiveHttp {
           surface: FilterSurface.live,
           items: cards,
           textOf: (e) => _liveText(e.title, e.uname),
+          midOf: (e) => e.uid,
         );
         if (!identical(filtered, cards)) {
           data.cardList = filtered;
@@ -618,6 +622,7 @@ abstract final class LiveHttp {
           surface: FilterSurface.live,
           items: rooms,
           textOf: (e) => _liveText(e.title, e.name),
+          midOf: (e) => e.uid,
         );
         if (!identical(filtered, rooms)) {
           rooms

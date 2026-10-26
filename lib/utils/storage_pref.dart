@@ -7,6 +7,7 @@ import 'package:PiliPlus/common/widgets/pair.dart';
 import 'package:PiliPlus/http/constants.dart';
 import 'package:PiliPlus/models/cognitive_filter/filter_category.dart';
 import 'package:PiliPlus/models/cognitive_filter/filter_rule.dart';
+import 'package:PiliPlus/models/cognitive_filter/filter_surface.dart';
 import 'package:PiliPlus/models/cognitive_filter/filter_tier.dart';
 import 'package:PiliPlus/models/cognitive_filter/user_rule_extra.dart';
 import 'package:PiliPlus/models/common/bar_hide_type.dart';
@@ -39,7 +40,7 @@ import 'package:PiliPlus/plugin/pl_player/models/bottom_progress_behavior.dart';
 import 'package:PiliPlus/plugin/pl_player/models/fullscreen_mode.dart';
 import 'package:PiliPlus/plugin/pl_player/models/hwdec_type.dart';
 import 'package:PiliPlus/plugin/pl_player/models/play_repeat.dart';
-import 'package:PiliPlus/utils/cognitive_filter/ai/ai_whitelist_rules.dart';
+import 'package:PiliPlus/utils/cognitive_filter/ai/ai_whitelist_core.dart';
 import 'package:PiliPlus/utils/device_utils.dart';
 import 'package:PiliPlus/utils/extension/iterable_ext.dart';
 import 'package:PiliPlus/utils/extension/num_ext.dart';
@@ -1321,6 +1322,25 @@ abstract final class Pref {
   static set cfApiKey(String value) =>
       _setting.put(SettingBoxKey.cfApiKey, value);
 
+  /// AI 屏蔽生效的适用面，没设过时全部生效
+  static Set<FilterSurface> get cfAiSurfaces {
+    final raw = _setting.get(SettingBoxKey.cfAiSurfaces);
+    if (raw is! List) return FilterSurface.values.toSet();
+    final names = FilterSurface.values.asNameMap();
+    return {
+      for (final name in raw)
+        if (name is String && names[name] != null) names[name]!,
+    };
+  }
+
+  static set cfAiSurfaces(Set<FilterSurface> value) => _setting.put(
+    SettingBoxKey.cfAiSurfaces,
+    [
+      for (final surface in FilterSurface.values)
+        if (value.contains(surface)) surface.name,
+    ],
+  );
+
   /// 每日 AI 用量上限（美元），0 表示不限制
   static double get cfAiDailyCapUsd {
     final value = _setting.get(
@@ -1473,20 +1493,37 @@ abstract final class Pref {
   static set cfRuleMigrationDone(bool value) =>
       _setting.put(SettingBoxKey.cfRuleMigrationDone, value);
 
-  static List<AiWhitelistEntry> get cfAiWhitelist {
-    final raw = _setting.get(SettingBoxKey.cfAiWhitelist);
-    if (raw is! String || raw.isEmpty) return const <AiWhitelistEntry>[];
+  /// AI 白名单规则，与屏蔽规则共用 [FilterRule]
+  static List<FilterRule> get cfAiWhitelistRules {
+    final raw = _setting.get(SettingBoxKey.cfAiWhitelistRules);
+    if (raw is! String || raw.isEmpty) return const <FilterRule>[];
     try {
-      return AiWhitelistEntry.listFromJson(jsonDecode(raw));
+      return whitelistRulesFromJson(jsonDecode(raw));
     } catch (_) {
-      return const <AiWhitelistEntry>[];
+      return const <FilterRule>[];
     }
   }
 
-  static set cfAiWhitelist(List<AiWhitelistEntry> value) => _setting.put(
-    SettingBoxKey.cfAiWhitelist,
-    jsonEncode([for (final entry in value) entry.toJson()]),
+  static set cfAiWhitelistRules(List<FilterRule> value) => _setting.put(
+    SettingBoxKey.cfAiWhitelistRules,
+    jsonEncode([for (final rule in value) rule.toJson()]),
   );
+
+  /// 旧版 AI 白名单，只在迁移时读取
+  static List<FilterRule> get cfLegacyAiWhitelistRules {
+    final raw = _setting.get(SettingBoxKey.cfAiWhitelist);
+    if (raw is! String || raw.isEmpty) return const <FilterRule>[];
+    try {
+      return legacyAiWhitelistRules(jsonDecode(raw));
+    } catch (_) {
+      return const <FilterRule>[];
+    }
+  }
+
+  /// 迁移完成后清掉旧键，之后不再读它
+  static void clearLegacyAiWhitelist() {
+    _setting.delete(SettingBoxKey.cfAiWhitelist);
+  }
 
   static int _usageInt(String key) {
     final value = _setting.get(key, defaultValue: 0);

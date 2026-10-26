@@ -3,20 +3,38 @@ import 'package:PiliPlus/common/widgets/flutter/list_tile.dart';
 import 'package:PiliPlus/common/widgets/scaffold/simple_scaffold.dart';
 import 'package:PiliPlus/common/widgets/view_safe_area.dart';
 import 'package:PiliPlus/models/cognitive_filter/filter_rule.dart';
+import 'package:PiliPlus/models/cognitive_filter/rule_scope.dart';
 import 'package:PiliPlus/models/cognitive_filter/rule_type.dart';
 import 'package:PiliPlus/pages/cognitive_filter/rule_edit_page.dart';
+import 'package:PiliPlus/utils/cognitive_filter/rule_source.dart';
 import 'package:PiliPlus/utils/cognitive_filter/rule_store.dart';
 import 'package:get/get.dart';
 import 'package:material_ui/material_ui.dart' hide ListTile;
 
-/// 屏蔽规则列表
+/// 规则列表
 ///
-/// 一行一条规则，右侧是开关和删除，点击左侧进入编辑页
+/// 一行一条规则，右侧是开关和删除，点击左侧进入编辑页；默认展示屏蔽规则，
+/// 传入 [source] 后也可以展示 AI 白名单。
 class RuleListPage extends StatefulWidget {
-  const RuleListPage({super.key, this.initialType});
+  const RuleListPage({
+    super.key,
+    this.initialType,
+    this.source,
+    this.title = '屏蔽规则',
+    this.allowedScopes,
+  });
 
   /// 进入时默认筛选的类型，为空表示全部
   final RuleType? initialType;
+
+  /// 数据源，为空时使用屏蔽规则
+  final RuleSource? source;
+
+  /// 页面标题
+  final String title;
+
+  /// 可选的适用范围，为空表示不限
+  final Set<RuleScope>? allowedScopes;
 
   @override
   State<RuleListPage> createState() => _RuleListPageState();
@@ -26,8 +44,16 @@ class _RuleListPageState extends State<RuleListPage> {
   late RuleType? _filter = widget.initialType;
   String _query = '';
 
+  RuleSource get _source => widget.source ?? RuleStore.instance;
+
   void _openEdit([FilterRule? rule]) {
-    Get.to(() => RuleEditPage(rule: rule));
+    Get.to(
+      () => RuleEditPage(
+        rule: rule,
+        source: _source,
+        allowedScopes: widget.allowedScopes,
+      ),
+    );
   }
 
   List<FilterRule> _filtered(List<FilterRule> rules) {
@@ -74,7 +100,7 @@ class _RuleListPageState extends State<RuleListPage> {
       context: context,
       title: const Text('确定删除该规则？'),
     );
-    if (confirmed) RuleStore.instance.remove(rule.id);
+    if (confirmed) _source.remove(rule.id);
   }
 
   @override
@@ -82,12 +108,12 @@ class _RuleListPageState extends State<RuleListPage> {
     final theme = Theme.of(context);
     final padding = MediaQuery.viewPaddingOf(context);
     return SimpleScaffold(
-      appBar: AppBar(title: const Text('屏蔽规则')),
+      appBar: AppBar(title: Text(widget.title)),
       body: ViewSafeArea(
         child: ValueListenableBuilder<int>(
-          valueListenable: RuleStore.instance.version,
+          valueListenable: _source.version,
           builder: (context, _, _) {
-            final rules = _filtered(RuleStore.instance.rules);
+            final rules = _filtered(_source.rules);
             return Column(
               children: [
                 Padding(
@@ -162,6 +188,8 @@ class _RuleListPageState extends State<RuleListPage> {
     final outline = theme.colorScheme.outline;
     final deleteButton = IconButton(
       tooltip: '删除',
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
       icon: Icon(Icons.delete_outline, color: theme.colorScheme.error),
       onPressed: () => _confirmDelete(rule),
     );
@@ -175,7 +203,7 @@ class _RuleListPageState extends State<RuleListPage> {
           style: theme.textTheme.titleMedium,
         ),
         subtitle: Text(
-          '来自 B 站，只有哈希，不能启停或修改',
+          '无法修改',
           style: theme.textTheme.labelMedium?.copyWith(color: outline),
         ),
         trailing: deleteButton,
@@ -211,10 +239,11 @@ class _RuleListPageState extends State<RuleListPage> {
           deleteButton,
           Transform.scale(
             scale: 0.8,
+            alignment: Alignment.centerRight,
             child: Switch(
               value: rule.enabled,
               onChanged: (value) =>
-                  RuleStore.instance.setEnabled(rule.id, value),
+                  _source.setEnabled(rule.id, value),
             ),
           ),
         ],

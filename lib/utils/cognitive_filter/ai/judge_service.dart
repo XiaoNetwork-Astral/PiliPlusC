@@ -70,10 +70,21 @@ class JudgeStats {
 
 /// 待判定的文字
 class JudgeItem {
-  const JudgeItem({required this.id, required this.text});
+  const JudgeItem({
+    required this.id,
+    required this.text,
+    this.mid,
+    this.midHash,
+  });
 
   final String id;
   final String text;
+
+  /// 作者 UID，能拿到时用于白名单的用户规则
+  final int? mid;
+
+  /// 弹幕发送者哈希，用于白名单里按 UID 派生的哈希匹配
+  final String? midHash;
 }
 
 /// 一次判定的完整结果

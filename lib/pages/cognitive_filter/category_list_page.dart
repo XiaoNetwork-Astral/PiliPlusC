@@ -137,6 +137,7 @@ class _CategoryRulesPageState extends State<CategoryRulesPage> {
                       ),
                     Transform.scale(
                       scale: 0.8,
+                      alignment: Alignment.centerRight,
                       child: Switch(
                         value: category.enabled,
                         onChanged: (value) => _toggle(category, value),

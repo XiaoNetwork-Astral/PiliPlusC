@@ -1,6 +1,7 @@
 import 'package:PiliPlus/common/widgets/dialog/dialog.dart';
 import 'package:PiliPlus/common/widgets/scaffold/simple_scaffold.dart';
 import 'package:PiliPlus/common/widgets/view_safe_area.dart';
+import 'package:PiliPlus/models/cognitive_filter/filter_surface.dart';
 import 'package:PiliPlus/pages/cognitive_filter/widgets.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/ai_runtime.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/ai_whitelist.dart';
@@ -71,7 +72,12 @@ class _JudgeHistoryPageState extends State<JudgeHistoryPage> {
         final id = entry.ruleId;
         if (id != null) RuleStore.instance.remove(id);
       case .whitelist:
-        AiWhitelist.instance.addKeywordFromText(entry.text);
+        AiWhitelist.instance.addKeywordFromText(
+          entry.text,
+          surface: FilterSurface.values
+              .where((surface) => surface.label == entry.surface)
+              .firstOrNull,
+        );
     }
   }
 
@@ -120,6 +126,11 @@ class _JudgeHistoryPageState extends State<JudgeHistoryPage> {
           ],
         ),
         PopupMenuButton<_EntryAction>(
+          padding: EdgeInsets.zero,
+          style: IconButton.styleFrom(
+            minimumSize: const Size(32, 40),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
           icon: Icon(
             Icons.more_vert,
             size: 20,

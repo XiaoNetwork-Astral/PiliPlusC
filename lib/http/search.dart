@@ -137,6 +137,7 @@ abstract final class SearchHttp {
                 surface: FilterSurface.video,
                 items: items,
                 textOf: _videoText,
+                midOf: (e) => e.owner.mid,
               );
             }
           }

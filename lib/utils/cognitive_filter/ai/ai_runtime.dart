@@ -174,6 +174,9 @@ class AiFilterRuntime {
     if (!active) {
       return false;
     }
+    if (!Pref.cfAiSurfaces.contains(surface)) {
+      return false;
+    }
     return _enabledCategories().any(
       (category) => category.surfaces.contains(surface),
     );
@@ -202,7 +205,12 @@ class AiFilterRuntime {
       final whitelisted = <String>{};
       if (applyWhitelist) {
         for (final item in items) {
-          if (whitelist.matches(item.text)) {
+          if (whitelist.matches(
+            surface: surface,
+            text: item.text,
+            mid: item.mid,
+            midHash: item.midHash,
+          )) {
             whitelisted.add(item.id);
           } else {
             pending.add(item);

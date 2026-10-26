@@ -3,6 +3,7 @@ import 'package:PiliPlus/models/cognitive_filter/rule_migration.dart';
 import 'package:PiliPlus/models/cognitive_filter/rule_scope.dart';
 import 'package:PiliPlus/models/cognitive_filter/rule_type.dart';
 import 'package:PiliPlus/models/cognitive_filter/user_rule_extra.dart';
+import 'package:PiliPlus/utils/cognitive_filter/rule_source.dart';
 import 'package:PiliPlus/utils/global_data.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
 import 'package:flutter/foundation.dart';
@@ -11,7 +12,7 @@ import 'package:flutter/foundation.dart';
 ///
 /// UID 用户规则不存进规则列表：`blackMids` 是「哪些 UID 被拉黑」的唯一来源，
 /// 这里只额外保存被禁用或收窄范围的信息。只有哈希的弹幕用户规则存在列表里。
-class RuleStore {
+class RuleStore implements RuleSource {
   RuleStore._();
 
   static final RuleStore instance = RuleStore._();

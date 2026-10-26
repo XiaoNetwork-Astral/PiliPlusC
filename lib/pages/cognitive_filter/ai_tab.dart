@@ -1,10 +1,13 @@
 import 'package:PiliPlus/common/widgets/dialog/text_input_dialog.dart';
-import 'package:PiliPlus/pages/cognitive_filter/ai_whitelist_page.dart';
+import 'package:PiliPlus/pages/cognitive_filter/ai_surface_page.dart';
 import 'package:PiliPlus/pages/cognitive_filter/category_list_page.dart';
 import 'package:PiliPlus/pages/cognitive_filter/judge_trial_dialog.dart';
 import 'package:PiliPlus/pages/cognitive_filter/provider_page.dart';
+import 'package:PiliPlus/pages/cognitive_filter/rule_list_page.dart';
 import 'package:PiliPlus/pages/cognitive_filter/widgets.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/ai_runtime.dart';
+import 'package:PiliPlus/utils/cognitive_filter/ai/ai_whitelist.dart';
+import 'package:PiliPlus/utils/cognitive_filter/ai/ai_whitelist_core.dart';
 import 'package:PiliPlus/utils/storage.dart';
 import 'package:PiliPlus/utils/storage_key.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
@@ -161,9 +164,20 @@ class _AiFilterTabState extends State<AiFilterTab> {
           onTap: _editDailyCap,
         ),
         CfTile(
+          icon: Icons.apps,
+          title: '生效范围',
+          onTap: () => Get.to(() => const AiSurfacePage()),
+        ),
+        CfTile(
           icon: Icons.verified_user_outlined,
           title: '白名单',
-          onTap: () => Get.to(() => const AiWhitelistPage()),
+          onTap: () => Get.to(
+            () => RuleListPage(
+              source: AiWhitelist.instance,
+              title: '白名单',
+              allowedScopes: aiWhitelistScopes,
+            ),
+          ),
         ),
         if (widget.proMode) ...[
           CfTile(

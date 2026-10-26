@@ -89,6 +89,7 @@ abstract final class DynamicsHttp {
             surface: FilterSurface.dynamic,
             items: items,
             textOf: DynamicsDataModel.matchText,
+            midOf: (e) => e.modules.moduleAuthor?.mid,
           );
           if (!identical(filtered, items)) {
             data.items = filtered;

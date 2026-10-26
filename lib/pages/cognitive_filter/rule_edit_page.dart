@@ -4,6 +4,7 @@ import 'package:PiliPlus/common/widgets/view_safe_area.dart';
 import 'package:PiliPlus/models/cognitive_filter/filter_rule.dart';
 import 'package:PiliPlus/models/cognitive_filter/rule_scope.dart';
 import 'package:PiliPlus/models/cognitive_filter/rule_type.dart';
+import 'package:PiliPlus/utils/cognitive_filter/rule_source.dart';
 import 'package:PiliPlus/utils/cognitive_filter/rule_store.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
@@ -29,11 +30,24 @@ Set<RuleScope> defaultRuleScopes(RuleType type) => {
 
 /// 规则编辑页
 ///
-/// 传入 null 表示新建规则，此时可以选类型；编辑已有规则时类型不能改
+/// 传入 null 表示新建规则，此时可以选类型；编辑已有规则时类型不能改。
+/// 默认读写屏蔽规则，传入 [source] 后也可以编辑 AI 白名单；[allowedScopes]
+/// 用于收窄可选的适用范围。
 class RuleEditPage extends StatefulWidget {
-  const RuleEditPage({super.key, this.rule});
+  const RuleEditPage({
+    super.key,
+    this.rule,
+    this.source,
+    this.allowedScopes,
+  });
 
   final FilterRule? rule;
+
+  /// 数据源，为空时使用屏蔽规则
+  final RuleSource? source;
+
+  /// 可选的适用范围，为空表示不限
+  final Set<RuleScope>? allowedScopes;
 
   @override
   State<RuleEditPage> createState() => _RuleEditPageState();
@@ -46,6 +60,29 @@ class _RuleEditPageState extends State<RuleEditPage> {
 
   bool get _isNew => widget.rule == null;
 
+  RuleSource get _source => widget.source ?? RuleStore.instance;
+
+  /// 某类型新建时的默认范围，收窄到 [RuleEditPage.allowedScopes]
+  Set<RuleScope> _defaultScopes(RuleType type) {
+    final allowed = widget.allowedScopes;
+    final defaults = defaultRuleScopes(type);
+    if (allowed == null) return defaults;
+    final scopes = defaults.intersection(allowed);
+    if (scopes.isNotEmpty) return scopes;
+    final fallback = type.allowedScopes.intersection(allowed);
+    return fallback.isEmpty ? defaults : fallback;
+  }
+
+  /// 界面里显示的适用范围，只显示允许的范围
+  List<RuleScope> get _visibleScopes {
+    final allowed = widget.allowedScopes;
+    if (allowed == null) return ruleScopeOrder;
+    return [
+      for (final scope in ruleScopeOrder)
+        if (allowed.contains(scope)) scope,
+    ];
+  }
+
   @override
   void initState() {
     super.initState();
@@ -53,9 +90,9 @@ class _RuleEditPageState extends State<RuleEditPage> {
     _type = rule?.type ?? RuleType.keyword;
     _contentController = TextEditingController(text: rule?.content ?? '');
     _scopes = rule == null
-        ? defaultRuleScopes(_type)
+        ? _defaultScopes(_type)
         : Set<RuleScope>.of(rule.scopes);
-    if (_scopes.isEmpty) _scopes = defaultRuleScopes(_type);
+    if (_scopes.isEmpty) _scopes = _defaultScopes(_type);
   }
 
   @override
@@ -68,7 +105,7 @@ class _RuleEditPageState extends State<RuleEditPage> {
     if (type == _type) return;
     setState(() {
       _type = type;
-      _scopes = defaultRuleScopes(type);
+      _scopes = _defaultScopes(type);
     });
   }
 
@@ -98,9 +135,9 @@ class _RuleEditPageState extends State<RuleEditPage> {
     }
     try {
       if (_isNew) {
-        RuleStore.instance.add(rule);
+        _source.add(rule);
       } else {
-        RuleStore.instance.update(rule);
+        _source.update(rule);
       }
     } on ArgumentError catch (e) {
       SmartDialog.showToast(e.message?.toString() ?? '保存失败');
@@ -173,7 +210,7 @@ class _RuleEditPageState extends State<RuleEditPage> {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  for (final scope in ruleScopeOrder)
+                  for (final scope in _visibleScopes)
                     FilterChip(
                       label: Text(scope.label),
                       selected: _scopes.contains(scope),

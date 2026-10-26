@@ -165,7 +165,11 @@ class PlDanmakuController {
         surface: FilterSurface.danmaku,
         items: <JudgeItem>[
           for (var i = 0; i < chunk.length; i++)
-            JudgeItem(id: ids[i], text: chunk[i].content),
+            JudgeItem(
+              id: ids[i],
+              text: chunk[i].content,
+              midHash: chunk[i].midHash,
+            ),
         ],
         title: title,
       );

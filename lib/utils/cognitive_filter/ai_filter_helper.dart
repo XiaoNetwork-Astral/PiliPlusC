@@ -7,6 +7,7 @@ Future<List<T>> aiFilterList<T>({
   required FilterSurface surface,
   required List<T> items,
   required String Function(T item) textOf,
+  int? Function(T item)? midOf,
   String title = '',
   String context = '',
 }) async {
@@ -19,7 +20,9 @@ Future<List<T>> aiFilterList<T>({
       final text = textOf(items[i]);
       // 空文本不送判定，直接保留
       if (text.isNotEmpty) {
-        judgeItems.add(JudgeItem(id: '$i', text: text));
+        judgeItems.add(
+          JudgeItem(id: '$i', text: text, mid: midOf?.call(items[i])),
+        );
       }
     }
     if (judgeItems.isEmpty) {

@@ -166,6 +166,7 @@ abstract final class ReplyGrpc {
             surface: FilterSurface.reply,
             items: [response.upTop],
             textOf: (e) => e.content.message,
+            midOf: (e) => e.mid.toInt(),
           );
           if (kept.isEmpty) {
             response.clearUpTop();
@@ -188,6 +189,7 @@ abstract final class ReplyGrpc {
           surface: FilterSurface.reply,
           items: response.replies,
           textOf: (item) => item.content.message,
+          midOf: (item) => item.mid.toInt(),
         );
         final nested = <ReplyInfo>[
           for (final item in filtered)
@@ -198,6 +200,7 @@ abstract final class ReplyGrpc {
             surface: FilterSurface.reply,
             items: nested,
             textOf: (e) => e.content.message,
+            midOf: (e) => e.mid.toInt(),
           );
           if (!identical(kept, nested)) {
             final keptSet = Set<ReplyInfo>.identity()..addAll(kept);
@@ -247,6 +250,7 @@ abstract final class ReplyGrpc {
         surface: FilterSurface.reply,
         items: replies,
         textOf: (e) => e.content.message,
+        midOf: (e) => e.mid.toInt(),
       );
       if (!identical(filtered, replies)) {
         replies
@@ -283,6 +287,7 @@ abstract final class ReplyGrpc {
         surface: FilterSurface.reply,
         items: replies,
         textOf: (e) => e.content.message,
+        midOf: (e) => e.mid.toInt(),
       );
       if (!identical(filtered, replies)) {
         replies

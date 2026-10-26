@@ -104,6 +104,7 @@ abstract final class VideoHttp {
         surface: FilterSurface.video,
         items: list,
         textOf: _rcmdText,
+        midOf: (e) => e.owner.mid,
       );
       return Success(filtered);
     } else {
@@ -208,6 +209,7 @@ abstract final class VideoHttp {
         surface: FilterSurface.video,
         items: list,
         textOf: _rcmdText,
+        midOf: (e) => e.owner.mid,
       );
       return Success(filtered);
     } else {
@@ -465,6 +467,7 @@ abstract final class VideoHttp {
             surface: FilterSurface.video,
             items: list,
             textOf: _rcmdText,
+            midOf: (e) => e.owner.mid,
           ),
         );
       }
