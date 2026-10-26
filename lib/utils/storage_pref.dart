@@ -1626,6 +1626,29 @@ abstract final class Pref {
   static set cfLlmUsageOutputTokens(int value) =>
       _setting.put(SettingBoxKey.cfLlmUsageOutputTokens, _nonNegative(value));
 
+  /// 校准向导是否在后台自动整理题目
+  static bool get cfCalibAuto {
+    final value = _setting.get(SettingBoxKey.cfCalibAuto);
+    return value is bool ? value : true;
+  }
+
+  static set cfCalibAuto(bool value) =>
+      _setting.put(SettingBoxKey.cfCalibAuto, value);
+
+  /// 校准向导的题库上限，达到后暂停后台自动整理；读取时钳到 10 到 500
+  static int get cfCalibBankCap {
+    final value = _setting.get(SettingBoxKey.cfCalibBankCap);
+    if (value is num && value.isFinite) {
+      return value.toInt().clamp(10, 500).toInt();
+    }
+    return 60;
+  }
+
+  static set cfCalibBankCap(int value) => _setting.put(
+    SettingBoxKey.cfCalibBankCap,
+    value.clamp(10, 500).toInt(),
+  );
+
   /// 校准向导对屏蔽门槛的累计调整量，加在总门槛上
   static double get cfAiThresholdDelta {
     final value = _setting.get(SettingBoxKey.cfAiThresholdDelta);

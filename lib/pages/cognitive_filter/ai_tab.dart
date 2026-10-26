@@ -51,7 +51,7 @@ class _AiFilterTabState extends State<AiFilterTab> {
             title: const Text('开启 AI 屏蔽'),
             content: const Text(
               '开启后，弹幕、评论、动态、视频标题等文字会发送到你配置的外部 AI 服务来判断是否屏蔽\n\n'
-              '使用校准向导时，还会把其中一部分内容发送到你配置的整理服务',
+              '校准向导会在后台把其中一部分内容发送到你配置的整理服务来整理，可以在校准向导的设置里关闭',
             ),
             actions: [
               TextButton(

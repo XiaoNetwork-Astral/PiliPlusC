@@ -68,6 +68,16 @@ class CalibrationQuestion {
     required this.members,
   });
 
+  factory CalibrationQuestion.fromJson(Map<String, dynamic> json) =>
+      CalibrationQuestion(
+        name: json['name'] as String,
+        description: json['description'] as String,
+        members: <PoolItem>[
+          for (final value in json['members'] as List)
+            PoolItem.fromJson(Map<String, dynamic>.from(value as Map)),
+        ],
+      );
+
   /// 类别名称，几个字
   final String name;
 
@@ -77,11 +87,25 @@ class CalibrationQuestion {
   /// 属于这一类的池内条目，至少 3 条
   final List<PoolItem> members;
 
+  /// 稳定唯一的编号，成员编号排序后拼接，答完后据此从题库精确删除
+  String get id {
+    final ids = <String>[for (final member in members) member.id]..sort();
+    return ids.join('_');
+  }
+
   /// 展示给用户看的一条代表：得分居中的成员，回答会应用到整类
   PoolItem get representative {
     final sorted = members.toList()..sort((a, b) => a.score.compareTo(b.score));
     return sorted[sorted.length ~/ 2];
   }
+
+  Map<String, dynamic> toJson() => {
+    'name': name,
+    'description': description,
+    'members': <dynamic>[
+      for (final member in members) member.toJson(),
+    ],
+  };
 }
 
 /// 去掉首尾空白并把连续空白折叠成一个空格

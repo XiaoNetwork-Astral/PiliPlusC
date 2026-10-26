@@ -320,6 +320,8 @@ abstract final class SettingBoxKey {
       cfLlmUsageDay = 'cfLlmUsageDay',
       cfLlmUsageInputTokens = 'cfLlmUsageInputTokens',
       cfLlmUsageOutputTokens = 'cfLlmUsageOutputTokens',
+      cfCalibAuto = 'cfCalibAuto',
+      cfCalibBankCap = 'cfCalibBankCap',
       cfAiThresholdDelta = 'cfAiThresholdDelta',
       cfGuardRules = 'cfGuardRules';
 }

@@ -4,6 +4,7 @@ import 'package:PiliPlus/common/widgets/dialog/dialog.dart';
 import 'package:PiliPlus/common/widgets/scaffold/simple_scaffold.dart';
 import 'package:PiliPlus/common/widgets/view_safe_area.dart';
 import 'package:PiliPlus/models/cognitive_filter/config.dart';
+import 'package:PiliPlus/pages/cognitive_filter/calibration_settings_page.dart';
 import 'package:PiliPlus/pages/cognitive_filter/rule_list_page.dart';
 import 'package:PiliPlus/pages/cognitive_filter/widgets.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/ai_whitelist_core.dart';
@@ -14,12 +15,9 @@ import 'package:PiliPlus/utils/storage_pref.dart';
 import 'package:get/get.dart';
 import 'package:material_ui/material_ui.dart';
 
-/// 思考文字只保留末尾这么多字，够填满显示框即可
-const int _thinkingKeep = 400;
-
 enum _Phase { idle, running, tooFew, error, quiz, done }
 
-enum _MenuAction { guard, reset }
+enum _MenuAction { settings, guard, reset }
 
 /// 校准向导
 ///
@@ -40,18 +38,9 @@ class _CalibrationPageState extends State<CalibrationPage> {
       const <({CalibrationAnswer answer, CalibrationQuestion question})>[];
 
   int _index = 0;
-  int _batchDone = 0;
-  int _batchTotal = 0;
-  bool _cancelled = false;
-  final ValueNotifier<String> _thinking = ValueNotifier<String>('');
+  bool _stopping = false;
   String? _errorMessage;
   ({double before, double? after})? _result;
-
-  @override
-  void dispose() {
-    _thinking.dispose();
-    super.dispose();
-  }
 
   @override
   void initState() {
@@ -67,14 +56,13 @@ class _CalibrationPageState extends State<CalibrationPage> {
 
   int get _poolSize => CalibrationService.instance.poolSize;
 
+  int get _bankSize => CalibrationService.instance.bankSize;
+
   Future<void> _start() async {
     if (_phase == _Phase.running) return;
     setState(() {
       _phase = _Phase.running;
-      _cancelled = false;
-      _batchDone = 0;
-      _batchTotal = 0;
-      _thinking.value = '';
+      _stopping = false;
       _errorMessage = null;
       _questions = const <CalibrationQuestion>[];
       _answers =
@@ -83,47 +71,27 @@ class _CalibrationPageState extends State<CalibrationPage> {
       _result = null;
     });
 
-    final outcome = await CalibrationService.instance.runRound(
-      onProgress: (done, total) {
-        if (!mounted || _phase != _Phase.running) return;
-        // 新的一批开始，思考文字从头来
-        _thinking.value = '';
-        setState(() {
-          _batchDone = done;
-          _batchTotal = total;
-        });
-      },
-      onThinking: (delta) {
-        if (!mounted || _phase != _Phase.running) return;
-        final text = _thinking.value + delta;
-        _thinking.value = text.length > _thinkingKeep
-            ? text.substring(text.length - _thinkingKeep)
-            : text;
-      },
-      shouldCancel: () => _cancelled,
-    );
+    final outcome = await CalibrationService.instance.prepareSession();
     if (!mounted) return;
     setState(() {
-      if (_cancelled && outcome.questions.isEmpty) {
-        _phase = _Phase.idle;
-      } else if (_cancelled) {
+      if (outcome.questions.isNotEmpty) {
         // 用户停止时，已经整理出的题照常拿来答
         _questions = outcome.questions;
         _phase = _Phase.quiz;
+      } else if (_stopping) {
+        _phase = _Phase.idle;
       } else if (outcome.abortedBy != null) {
         _errorMessage = outcome.abortMessage;
         _phase = _Phase.error;
-      } else if (outcome.questions.isEmpty) {
-        _phase = _Phase.tooFew;
       } else {
-        _questions = outcome.questions;
-        _phase = _Phase.quiz;
+        _phase = _Phase.tooFew;
       }
     });
   }
 
   void _stop() {
-    setState(() => _cancelled = true);
+    CalibrationService.instance.stop();
+    setState(() => _stopping = true);
   }
 
   Future<void> _reset() async {
@@ -139,6 +107,8 @@ class _CalibrationPageState extends State<CalibrationPage> {
 
   void _onMenu(_MenuAction action) {
     switch (action) {
+      case _MenuAction.settings:
+        Get.to(() => const CalibrationSettingsPage());
       case _MenuAction.guard:
         Get.to(
           () => RuleListPage(
@@ -168,6 +138,7 @@ class _CalibrationPageState extends State<CalibrationPage> {
       return;
     }
     final result = CalibrationService.instance.apply(next);
+    CalibrationService.instance.finishSession(_questions);
     setState(() {
       _answers = next;
       _result = result;
@@ -179,13 +150,11 @@ class _CalibrationPageState extends State<CalibrationPage> {
   void _backToStart() {
     setState(() {
       _phase = _Phase.idle;
-      _cancelled = false;
+      _stopping = false;
       _questions = const <CalibrationQuestion>[];
       _answers =
           const <({CalibrationAnswer answer, CalibrationQuestion question})>[];
       _index = 0;
-      _batchDone = 0;
-      _batchTotal = 0;
       _errorMessage = null;
       _result = null;
     });
@@ -214,6 +183,7 @@ class _CalibrationPageState extends State<CalibrationPage> {
             PopupMenuButton<_MenuAction>(
               onSelected: _onMenu,
               itemBuilder: (context) => const [
+                PopupMenuItem(value: _MenuAction.settings, child: Text('设置')),
                 PopupMenuItem(value: _MenuAction.guard, child: Text('不外传规则')),
                 PopupMenuItem(
                   value: _MenuAction.reset,
@@ -258,126 +228,151 @@ class _CalibrationPageState extends State<CalibrationPage> {
     );
   }
 
+  Widget _countCard(ThemeData theme, String label, int count, String unit) {
+    return Container(
+      width: 220,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: theme.colorScheme.outline,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text('$count', style: theme.textTheme.headlineMedium),
+              const SizedBox(width: 4),
+              Text(unit, style: theme.textTheme.bodyMedium),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildIdle(BuildContext context) {
     final theme = Theme.of(context);
-    final count = _poolSize;
-    final String? blocker = !_hasKey
-        ? '请先在 AI 提供商里填写整理接口的 API Key'
-        : count == 0
-        ? '还没有可整理的内容，正常使用一阵再来'
-        : null;
-    return _centered([
-      Container(
-        width: 220,
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-        decoration: BoxDecoration(
-          color: theme.colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+    // 数量随后台整理实时变化
+    return ValueListenableBuilder<int>(
+      valueListenable: CalibrationService.instance.revision,
+      builder: (context, _, _) {
+        final count = _poolSize;
+        final bank = _bankSize;
+        // 题库里已有够答的题时，不需要密钥也不需要池里有内容
+        final ready = bank >= calibrationMinQuestions;
+        final String? blocker = ready
+            ? null
+            : !_hasKey
+            ? '请先在 AI 提供商里填写整理接口的 API Key'
+            : count == 0
+            ? '还没有可整理的内容，正常使用一阵再来'
+            : null;
+        return _centered([
+          _countCard(theme, '已攒下可整理的内容', count, '条'),
+          const SizedBox(height: 12),
+          _countCard(theme, '已整理好的题', bank, '道'),
+          const SizedBox(height: 24),
+          FilledButton.tonal(
+            onPressed: blocker == null ? _start : null,
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 20),
+              child: Text('开始校准'),
+            ),
+          ),
+          if (blocker != null) ...[
+            const SizedBox(height: 12),
             Text(
-              '已攒下可整理的内容',
-              style: theme.textTheme.labelMedium?.copyWith(
+              blocker,
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.outline,
               ),
             ),
-            const SizedBox(height: 6),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
-              children: [
-                Text('$count', style: theme.textTheme.headlineMedium),
-                const SizedBox(width: 4),
-                Text('条', style: theme.textTheme.bodyMedium),
-              ],
-            ),
           ],
-        ),
-      ),
-      const SizedBox(height: 24),
-      FilledButton.tonal(
-        onPressed: blocker == null ? _start : null,
-        child: const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 20),
-          child: Text('开始校准'),
-        ),
-      ),
-      if (blocker != null) ...[
-        const SizedBox(height: 12),
-        Text(
-          blocker,
-          textAlign: TextAlign.center,
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.outline,
-          ),
-        ),
-      ],
-    ]);
+        ]);
+      },
+    );
   }
 
   Widget _buildRunning(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final current = _batchTotal == 0
-        ? 0
-        : (_batchDone + 1).clamp(1, _batchTotal).toInt();
-    return _centered([
-      Text(_cancelled ? '正在停止' : '正在整理', style: theme.textTheme.titleMedium),
-      const SizedBox(height: 16),
-      SizedBox(
-        width: 260,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(2),
-          child: LinearProgressIndicator(
-            minHeight: 4,
-            value: _batchTotal == 0 ? null : _batchDone / _batchTotal,
+    return ValueListenableBuilder<OrganizeStatus>(
+      valueListenable: CalibrationService.instance.status,
+      builder: (context, status, _) {
+        final total = status.total;
+        final current = total == 0
+            ? 0
+            : (status.done + 1).clamp(1, total).toInt();
+        return _centered([
+          Text(
+            _stopping ? '正在停止' : '正在整理',
+            style: theme.textTheme.titleMedium,
           ),
-        ),
-      ),
-      if (_batchTotal > 0) ...[
-        const SizedBox(height: 8),
-        Text(
-          '第 $current 批，共 $_batchTotal 批',
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: colorScheme.outline,
+          const SizedBox(height: 16),
+          SizedBox(
+            width: 260,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(2),
+              child: LinearProgressIndicator(
+                minHeight: 4,
+                value: total == 0 ? null : status.done / total,
+              ),
+            ),
           ),
-        ),
-      ],
-      const SizedBox(height: 16),
-      SizedBox(
-        width: 260,
-        height: 132,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: ShaderMask(
-              shaderCallback: (rect) => const LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [Colors.transparent, Colors.black],
-                stops: [0.0, 0.35],
-              ).createShader(rect),
-              blendMode: BlendMode.dstIn,
-              child: ValueListenableBuilder<String>(
-                valueListenable: _thinking,
-                builder: (context, text, _) => Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Align(
-                    alignment: Alignment.bottomLeft,
-                    child: Text(
-                      text,
-                      maxLines: 6,
-                      overflow: TextOverflow.clip,
-                      textAlign: TextAlign.start,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: colorScheme.outline,
-                        height: 1.6,
+          if (total > 0) ...[
+            const SizedBox(height: 8),
+            Text(
+              '第 $current 批，共 $total 批',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colorScheme.outline,
+              ),
+            ),
+          ],
+          const SizedBox(height: 16),
+          SizedBox(
+            width: 260,
+            height: 132,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: ShaderMask(
+                  shaderCallback: (rect) => const LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Colors.transparent, Colors.black],
+                    stops: [0.0, 0.35],
+                  ).createShader(rect),
+                  blendMode: BlendMode.dstIn,
+                  child: ValueListenableBuilder<String>(
+                    valueListenable: CalibrationService.instance.thinking,
+                    builder: (context, text, _) => Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Align(
+                        alignment: Alignment.bottomLeft,
+                        child: Text(
+                          text,
+                          maxLines: 6,
+                          overflow: TextOverflow.clip,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: colorScheme.outline,
+                            height: 1.6,
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -385,14 +380,14 @@ class _CalibrationPageState extends State<CalibrationPage> {
               ),
             ),
           ),
-        ),
-      ),
-      const SizedBox(height: 24),
-      OutlinedButton(
-        onPressed: _cancelled ? null : _stop,
-        child: const Text('停止'),
-      ),
-    ]);
+          const SizedBox(height: 24),
+          OutlinedButton(
+            onPressed: _stopping ? null : _stop,
+            child: const Text('停止'),
+          ),
+        ]);
+      },
+    );
   }
 
   Widget _buildTooFew(BuildContext context) {
