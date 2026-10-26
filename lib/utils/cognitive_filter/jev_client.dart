@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:PiliPlus/utils/cognitive_filter/jev_proxy.dart';
 import 'package:dio/dio.dart';
 
 /// Jev 请求失败的类别
@@ -60,6 +61,7 @@ abstract final class JevClient {
     required String model,
     required Duration timeout,
     required Map<String, dynamic> body,
+    JevProxy? proxy,
   }) async {
     final uri = _checkEndpoint(endpoint);
     final key = apiKey.trim();
@@ -77,6 +79,9 @@ abstract final class JevClient {
       ),
     );
     try {
+      if (proxy != null && proxy.type != JevProxyType.none) {
+        dio.httpClientAdapter = createJevAdapter(proxy, timeout: timeout);
+      }
       final response = await dio.post<String>(
         uri.toString(),
         data: jsonEncode(payload),
@@ -104,6 +109,7 @@ abstract final class JevClient {
     required String apiKey,
     required String model,
     required Duration timeout,
+    JevProxy? proxy,
   }) {
     return (body) => send(
       endpoint: endpoint,
@@ -111,6 +117,7 @@ abstract final class JevClient {
       model: model,
       timeout: timeout,
       body: body,
+      proxy: proxy,
     );
   }
 
@@ -120,6 +127,7 @@ abstract final class JevClient {
     required String apiKey,
     required String model,
     required Duration timeout,
+    JevProxy? proxy,
   }) async {
     if (apiKey.trim().isEmpty) {
       return const JevTestResult(ok: false, message: '请先填写 API Key');
@@ -159,6 +167,7 @@ abstract final class JevClient {
         model: model,
         timeout: timeout,
         body: body,
+        proxy: proxy,
       );
       if (response['answers'] is! Map) {
         throw const JevException(

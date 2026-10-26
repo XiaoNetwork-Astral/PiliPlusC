@@ -184,6 +184,12 @@ class _RuleListPageState extends State<RuleListPage> {
     );
   }
 
+  /// 右侧留 12：开关与删除按钮自带留白，视觉上与左侧 16 对齐
+  static const EdgeInsetsDirectional _tilePadding = EdgeInsetsDirectional.only(
+    start: 16,
+    end: 12,
+  );
+
   Widget _ruleTile(ThemeData theme, FilterRule rule) {
     final outline = theme.colorScheme.outline;
     final deleteButton = IconButton(
@@ -196,6 +202,7 @@ class _RuleListPageState extends State<RuleListPage> {
     // B 站云端只给出发送者哈希，没有 UID，所以只能删除，不能启停或修改
     if (rule.isHashOnly) {
       return ListTile(
+        contentPadding: _tilePadding,
         title: Text(
           _titleOf(rule),
           maxLines: 1,
@@ -210,6 +217,7 @@ class _RuleListPageState extends State<RuleListPage> {
       );
     }
     return ListTile(
+      contentPadding: _tilePadding,
       title: Text(
         _titleOf(rule),
         maxLines: 1,

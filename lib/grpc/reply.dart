@@ -157,21 +157,8 @@ abstract final class ReplyGrpc {
     if (res case Success(:final response)) {
       final snap = RuleEngine.instance.snapshot(RuleScope.reply);
       final enabled = Pref.cfRuleFilterEnabled;
-      if (response.hasUpTop()) {
-        if (needRemoveGrpc(response.upTop, snap, enabled)) {
-          response.clearUpTop();
-        } else {
-          // 置顶同样是评论，规则未命中时交给 AI
-          final kept = await aiFilterList<ReplyInfo>(
-            surface: FilterSurface.reply,
-            items: [response.upTop],
-            textOf: (e) => e.content.message,
-            midOf: (e) => e.mid.toInt(),
-          );
-          if (kept.isEmpty) {
-            response.clearUpTop();
-          }
-        }
+      if (response.hasUpTop() && needRemoveGrpc(response.upTop, snap, enabled)) {
+        response.clearUpTop();
       }
 
       if (response.replies.isNotEmpty) {
@@ -184,37 +171,30 @@ abstract final class ReplyGrpc {
           }
           return hasMatch;
         });
-        // 规则过滤后再交给 AI，楼中楼一并判定
-        final filtered = await aiFilterList<ReplyInfo>(
-          surface: FilterSurface.reply,
-          items: response.replies,
-          textOf: (item) => item.content.message,
-          midOf: (item) => item.mid.toInt(),
-        );
-        final nested = <ReplyInfo>[
-          for (final item in filtered)
-            if (item.replies.isNotEmpty) ...item.replies,
-        ];
-        if (nested.isNotEmpty) {
-          final kept = await aiFilterList<ReplyInfo>(
-            surface: FilterSurface.reply,
-            items: nested,
-            textOf: (e) => e.content.message,
-            midOf: (e) => e.mid.toInt(),
-          );
-          if (!identical(kept, nested)) {
-            final keptSet = Set<ReplyInfo>.identity()..addAll(kept);
-            for (final item in filtered) {
-              if (item.replies.isNotEmpty) {
-                item.replies.removeWhere((e) => !keptSet.contains(e));
-              }
-            }
-          }
+      }
+
+      // 规则过滤后，置顶、主评论与楼中楼合成一次请求交给 AI
+      final candidates = <ReplyInfo>[
+        if (response.hasUpTop()) response.upTop,
+        ...response.replies,
+        for (final item in response.replies) ...item.replies,
+      ];
+      final kept = await aiFilterList<ReplyInfo>(
+        surface: FilterSurface.reply,
+        items: candidates,
+        textOf: (item) => item.content.message,
+        midOf: (item) => item.mid.toInt(),
+      );
+      if (!identical(kept, candidates)) {
+        final keptSet = Set<ReplyInfo>.identity()..addAll(kept);
+        if (response.hasUpTop() && !keptSet.contains(response.upTop)) {
+          response.clearUpTop();
         }
-        if (!identical(filtered, response.replies)) {
-          response.replies
-            ..clear()
-            ..addAll(filtered);
+        response.replies.removeWhere((item) => !keptSet.contains(item));
+        for (final item in response.replies) {
+          if (item.replies.isNotEmpty) {
+            item.replies.removeWhere((e) => !keptSet.contains(e));
+          }
         }
       }
     }

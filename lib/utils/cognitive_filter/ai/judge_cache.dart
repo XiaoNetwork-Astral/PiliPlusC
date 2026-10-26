@@ -197,6 +197,18 @@ class JudgeCache {
     _dirty = true;
   }
 
+  /// 清空内存缓存并把空缓存落盘
+  Future<void> clear() async {
+    _entries.clear();
+    _dirty = false;
+    await _store.write(
+      jsonEncode(<String, dynamic>{
+        'version': _version,
+        'entries': <String, dynamic>{},
+      }),
+    );
+  }
+
   /// 清理过期项并按 LRU 裁到容量后写入 store
   Future<void> flush() async {
     _pruneExpired();

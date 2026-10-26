@@ -142,6 +142,19 @@ abstract final class JevRequest {
         );
       }
       final probabilities = answer['probabilities'];
+      if (probabilities is! Map) {
+        throw JevException(
+          JevErrorKind.parse,
+          '接口返回的结构不正确，第 $i 条缺少 probabilities',
+        );
+      }
+      final sum = _probabilitiesSum(probabilities);
+      if (!sum.isFinite || sum < 0.5) {
+        throw JevException(
+          JevErrorKind.parse,
+          '接口返回的第 $i 条概率不可用',
+        );
+      }
       result.add(
         JevItemScores(
           options: <String, double>{
@@ -150,12 +163,28 @@ abstract final class JevRequest {
           },
           custom: <String, double>{
             for (final category in customCategories)
-              category.id: _noulOf(answers['i${i}_${category.id}']),
+              category.id: _noulOf(
+                answers['i${i}_${category.id}'],
+                i,
+                category.id,
+              ),
           },
         ),
       );
     }
     return result;
+  }
+
+  /// 八个选项概率之和，非有限值会让和变成非有限数
+  static double _probabilitiesSum(Map probabilities) {
+    var sum = 0.0;
+    for (final name in optionNames) {
+      final value = probabilities[name];
+      if (value is num) {
+        sum += value.toDouble();
+      }
+    }
+    return sum;
   }
 
   static Map _answersOf(Map response) {
@@ -181,19 +210,28 @@ abstract final class JevRequest {
     return number.clamp(0.0, 1.0).toDouble();
   }
 
-  static double _noulOf(Object? answer) {
+  static double _noulOf(Object? answer, int number, String categoryId) {
     if (answer is! Map) {
-      return 0.0;
+      throw JevException(
+        JevErrorKind.parse,
+        '接口返回的结构不正确，第 $number 条缺少自定义类别「$categoryId」的答案',
+      );
     }
     final value = answer['noul'];
     if (value is! num) {
-      return 0.0;
+      throw JevException(
+        JevErrorKind.parse,
+        '接口返回的第 $number 条自定义类别「$categoryId」答案不可用',
+      );
     }
-    final number = value.toDouble();
-    if (!number.isFinite) {
-      return 0.0;
+    final result = value.toDouble();
+    if (!result.isFinite) {
+      throw JevException(
+        JevErrorKind.parse,
+        '接口返回的第 $number 条自定义类别「$categoryId」答案不可用',
+      );
     }
-    return number.clamp(0.0, 1.0).toDouble();
+    return result.clamp(0.0, 1.0).toDouble();
   }
 
   static Map<String, dynamic> _buildState({

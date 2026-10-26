@@ -1,3 +1,4 @@
+import 'package:PiliPlus/common/widgets/dialog/dialog.dart';
 import 'package:PiliPlus/common/widgets/dialog/text_input_dialog.dart';
 import 'package:PiliPlus/pages/cognitive_filter/ai_surface_page.dart';
 import 'package:PiliPlus/pages/cognitive_filter/category_list_page.dart';
@@ -124,6 +125,15 @@ class _AiFilterTabState extends State<AiFilterTab> {
     return text.replaceFirst(RegExp(r'\.?0+$'), '');
   }
 
+  Future<void> _clearCache() async {
+    final confirmed = await showConfirmDialog(
+      context: context,
+      title: const Text('确定清除 AI 判定缓存？'),
+    );
+    if (!confirmed) return;
+    await AiFilterRuntime.instance.clearCache();
+  }
+
   Future<void> _openCategories() async {
     await Get.to(() => const CategoryRulesPage());
     if (!mounted) return;
@@ -178,6 +188,11 @@ class _AiFilterTabState extends State<AiFilterTab> {
               allowedScopes: aiWhitelistScopes,
             ),
           ),
+        ),
+        CfTile(
+          icon: Icons.cleaning_services_outlined,
+          title: '清除缓存',
+          onTap: _clearCache,
         ),
         if (widget.proMode) ...[
           CfTile(

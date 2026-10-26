@@ -88,7 +88,7 @@ List<int> _questionCounts(Iterable<Map<String, dynamic>> bodies) {
 class _FakeTransport {
   _FakeTransport({
     this.optionsByText = const <String, Map<String, double>>{},
-    this.defaultOptions = const <String, double>{},
+    this.defaultOptions = const <String, double>{'正常': 1.0},
     this.customByText = const <String, Map<String, double>>{},
     this.defaultCustom = const <String, double>{},
     this.delay,
@@ -623,18 +623,59 @@ void main() {
       expect(result.stats.requests, 1);
     });
 
-    test('响应结构不对时也只放行', () async {
+    test('响应结构不对时只放行且不写缓存', () async {
+      final cache = JudgeCache(store: MemoryJudgeCacheStore());
       final fake = _FakeTransport(badResponse: true);
-      final service = _service(fake);
+      final service = _service(fake, cache: cache);
+      final text = '响应结构错误的弹幕';
       final result = await service.judge(
         surface: FilterSurface.danmaku,
-        items: _items(<String>['响应结构错误的弹幕']),
+        items: _items(<String>[text]),
         categories: <FilterCategory>[_builtin('attack')],
       );
       final verdict = result.verdicts['t0']!;
       expect(verdict.blocked, isFalse);
       expect(verdict.source, JudgeSource.failed);
       expect(result.stats.failedRequests, 1);
+      expect(result.stats.lastError, '返回内容无法解析');
+      expect(cache.dirty, isFalse);
+      expect(
+        cache.lookup(
+          normalizeJudgeText(text),
+          customCategories: const <FilterCategory>[],
+        ),
+        isNull,
+      );
+    });
+
+    test('失败原因按 JevErrorKind 映射成人话', () async {
+      final cases = <(Object, String)>[
+        (const JevException(JevErrorKind.auth, 'x'), '密钥无效'),
+        (const JevException(JevErrorKind.rateLimit, 'x'), '请求太频繁'),
+        (const JevException(JevErrorKind.badRequest, 'x'), '请求被拒绝'),
+        (
+          const JevException(JevErrorKind.timeout, 'x'),
+          '连接超时，可能需要配置代理',
+        ),
+        (
+          const JevException(JevErrorKind.network, 'x'),
+          '网络连接失败，可能需要配置代理',
+        ),
+        (const JevException(JevErrorKind.server, 'x'), '服务端出错'),
+        (const JevException(JevErrorKind.parse, 'x'), '返回内容无法解析'),
+        (StateError('x'), '请求失败'),
+      ];
+      for (final item in cases) {
+        final fake = _FakeTransport(failures: 1, error: item.$1);
+        final service = _service(fake);
+        final result = await service.judge(
+          surface: FilterSurface.danmaku,
+          items: _items(<String>['失败映射测试弹幕']),
+          categories: <FilterCategory>[_builtin('attack')],
+        );
+        expect(result.stats.failedRequests, 1);
+        expect(result.stats.lastError, item.$2);
+      }
     });
 
     test('连续失败达到阈值后熔断，冷却结束恢复', () async {

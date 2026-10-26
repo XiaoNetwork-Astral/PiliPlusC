@@ -10,9 +10,11 @@ import 'package:PiliPlus/utils/cognitive_filter/ai/judge_cache.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/judge_history.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/judge_service.dart';
 import 'package:PiliPlus/utils/cognitive_filter/jev_client.dart';
+import 'package:PiliPlus/utils/cognitive_filter/jev_proxy.dart';
 import 'package:PiliPlus/utils/path_utils.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
 import 'package:flutter/foundation.dart' show ValueNotifier;
+import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:path/path.dart' as path;
 
 /// 简单文本文件读写，所有异常都吞掉
@@ -74,6 +76,10 @@ class AiFilterRuntime {
   static const int _ruleDedupWindow = 300;
   static const int _ruleRateLimit = 20;
   static const Duration _ruleRateWindow = Duration(seconds: 1);
+  static const Duration _failureToastWindow = Duration(seconds: 20);
+
+  /// 每种失败提示最近一次弹出的时间，用于 20 秒去重
+  final Map<String, DateTime> _lastFailureToastAt = <String, DateTime>{};
 
   /// 命中白名单的条目不送 AI，直接视为不屏蔽
   static const JudgeVerdict _whitelistVerdict = JudgeVerdict(
@@ -151,8 +157,19 @@ class AiFilterRuntime {
       apiKey: Pref.cfApiKey,
       model: Pref.cfApiModel,
       timeout: Duration(seconds: Pref.cfApiTimeout),
+      proxy: _currentProxy(),
     );
     return transport(body);
+  }
+
+  /// 当前设置对应的代理，未启用或地址非法时返回 null（直连）
+  JevProxy? _currentProxy() {
+    final type = switch (Pref.cfApiProxyType) {
+      1 => JevProxyType.http,
+      2 => JevProxyType.socks5,
+      _ => JevProxyType.none,
+    };
+    return JevProxy.parse(type, Pref.cfApiProxyAddress);
   }
 
   /// 开关、Key 与至少一个启用类别都满足时才算激活
@@ -191,6 +208,29 @@ class AiFilterRuntime {
     String? contextKey,
     bool recordHistory = true,
     bool applyWhitelist = true,
+  }) {
+    return _judge(
+      surface: surface,
+      items: items,
+      title: title,
+      context: context,
+      contextKey: contextKey,
+      recordHistory: recordHistory,
+      applyWhitelist: applyWhitelist,
+      trial: false,
+    );
+  }
+
+  /// [trial] 为 true 时失败提示不受 20 秒去重限制
+  Future<JudgeResult?> _judge({
+    required FilterSurface surface,
+    required List<JudgeItem> items,
+    required String title,
+    required String context,
+    required String? contextKey,
+    required bool recordHistory,
+    required bool applyWhitelist,
+    required bool trial,
   }) async {
     try {
       if (!isActiveFor(surface)) {
@@ -242,6 +282,9 @@ class AiFilterRuntime {
         );
       } finally {
         if (countBusy) busy.value--;
+      }
+      if (result.stats.failedRequests > 0) {
+        _notifyFailure(result.stats.lastError, trial: trial);
       }
       for (final id in whitelisted) {
         result.verdicts[id] = _whitelistVerdict;
@@ -296,14 +339,35 @@ class AiFilterRuntime {
     String context = '',
   }) async {
     const id = 'trial';
-    final result = await judge(
+    final result = await _judge(
       surface: surface,
       items: [JudgeItem(id: id, text: text)],
+      title: '',
       context: context,
+      contextKey: null,
       recordHistory: false,
       applyWhitelist: false,
+      trial: true,
     );
     return result?.verdicts[id];
+  }
+
+  /// 判定失败时提示用户；非试判定时同一文本 20 秒内只提示一次
+  void _notifyFailure(String? error, {required bool trial}) {
+    final text = error ?? '请求失败';
+    if (!trial) {
+      final now = DateTime.now();
+      final last = _lastFailureToastAt[text];
+      if (last != null && now.difference(last) < _failureToastWindow) {
+        return;
+      }
+      _lastFailureToastAt[text] = now;
+    }
+    try {
+      SmartDialog.showToast('AI 判定失败：$text，已放行');
+    } catch (_) {
+      // 界面未就绪时不打断判定流程
+    }
   }
 
   /// 记一条规则屏蔽；[ruleType] 是规则类型名，[content] 是命中的规则内容
@@ -394,6 +458,19 @@ class AiFilterRuntime {
 
   void resetBreaker() {
     _service?.resetBreaker();
+  }
+
+  /// 清除 AI 判定缓存并复位熔断器
+  Future<void> clearCache() async {
+    final cache = _cache;
+    if (cache != null) {
+      try {
+        await cache.clear();
+      } catch (_) {
+        // 落盘失败时内存已经清空，下次仍会覆盖
+      }
+    }
+    resetBreaker();
   }
 
   /// 立即把缓存与历史写到磁盘，供退出或暂停时调用

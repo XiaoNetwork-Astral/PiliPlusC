@@ -66,6 +66,9 @@ class JudgeStats {
   int inputTokens = 0;
   int outputTokens = 0;
   int failedRequests = 0;
+
+  /// 最近一次失败的人话说明，供界面提示
+  String? lastError;
 }
 
 /// 待判定的文字
@@ -435,12 +438,25 @@ class JudgeService {
 
   void _onFailure(JevException? error, JudgeStats stats) {
     stats.failedRequests++;
+    stats.lastError = _errorText(error?.kind);
     _consecutiveFailures++;
     final auth = error?.kind == JevErrorKind.auth;
     if (auth || _consecutiveFailures >= breakerFailures) {
       _breakerUntil = _now().add(auth ? _authCooldown : breakerCooldown);
     }
   }
+
+  /// 把失败类别映射成给用户看的一句话
+  static String _errorText(JevErrorKind? kind) => switch (kind) {
+    JevErrorKind.auth => '密钥无效',
+    JevErrorKind.rateLimit => '请求太频繁',
+    JevErrorKind.badRequest => '请求被拒绝',
+    JevErrorKind.timeout => '连接超时，可能需要配置代理',
+    JevErrorKind.network => '网络连接失败，可能需要配置代理',
+    JevErrorKind.server => '服务端出错',
+    JevErrorKind.parse => '返回内容无法解析',
+    null => '请求失败',
+  };
 
   void _recordUsage(Map<String, dynamic> response, JudgeStats stats) {
     final usage = response['usage'];

@@ -1322,6 +1322,36 @@ abstract final class Pref {
   static set cfApiKey(String value) =>
       _setting.put(SettingBoxKey.cfApiKey, value);
 
+  /// AI 接口的代理类型：0 不用代理，1 HTTP，2 SOCKS5；坏数据回落为 0
+  static int get cfApiProxyType {
+    final value = _setting.get(SettingBoxKey.cfApiProxyType, defaultValue: 0);
+    if (value is int) {
+      return value >= 0 && value <= 2 ? value : 0;
+    }
+    if (value is num) {
+      final index = value.toInt();
+      if (value == index && index >= 0 && index <= 2) {
+        return index;
+      }
+    }
+    return 0;
+  }
+
+  static set cfApiProxyType(int value) =>
+      _setting.put(SettingBoxKey.cfApiProxyType, value.clamp(0, 2).toInt());
+
+  /// AI 接口的代理地址，形如 `127.0.0.1:7890`；坏数据回落为空串
+  static String get cfApiProxyAddress {
+    final value = _setting.get(
+      SettingBoxKey.cfApiProxyAddress,
+      defaultValue: '',
+    );
+    return value is String ? value : '';
+  }
+
+  static set cfApiProxyAddress(String value) =>
+      _setting.put(SettingBoxKey.cfApiProxyAddress, value);
+
   /// AI 屏蔽生效的适用面，没设过时全部生效
   static Set<FilterSurface> get cfAiSurfaces {
     final raw = _setting.get(SettingBoxKey.cfAiSurfaces);

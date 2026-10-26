@@ -335,8 +335,8 @@ void main() {
                 '嘲讽': '0.9',
                 '引战': null,
                 '歧视': true,
-                '低俗': double.nan,
-                '广告': double.infinity,
+                '低俗': 0.1,
+                '广告': 0.1,
               },
             },
           },
@@ -348,9 +348,128 @@ void main() {
       expect(scores.single.options['嘲讽'], 0.0);
       expect(scores.single.options['引战'], 0.0);
       expect(scores.single.options['歧视'], 0.0);
-      expect(scores.single.options['低俗'], 0.0);
-      expect(scores.single.options['广告'], 0.0);
+      expect(scores.single.options['低俗'], 0.1);
+      expect(scores.single.options['广告'], 0.1);
       expect(scores.single.options['乱码'], 0.0);
+    });
+
+    test('probabilities 缺失或不是 Map 时抛 parse 异常', () {
+      final matcher = throwsA(
+        isA<JevException>().having(
+          (error) => error.kind,
+          'kind',
+          JevErrorKind.parse,
+        ),
+      );
+      for (final answer in <dynamic>[
+        <String, dynamic>{},
+        <String, dynamic>{'probabilities': null},
+        <String, dynamic>{'probabilities': 'oops'},
+      ]) {
+        expect(
+          () => JevRequest.parseResponse(<String, dynamic>{
+            'answers': <String, dynamic>{'i1': answer},
+          }, 1),
+          matcher,
+        );
+      }
+    });
+
+    test('八个选项概率之和小于 0.5 时抛 parse 异常', () {
+      expect(
+        () => JevRequest.parseResponse(<String, dynamic>{
+          'answers': <String, dynamic>{
+            'i1': <String, dynamic>{
+              'probabilities': <String, dynamic>{
+                '正常': 0.1,
+                '攻击': 0.1,
+                '嘲讽': 0.1,
+                '引战': 0.1,
+                '乱码': 0.05,
+              },
+            },
+          },
+        }, 1),
+        throwsA(
+          isA<JevException>().having(
+            (error) => error.kind,
+            'kind',
+            JevErrorKind.parse,
+          ),
+        ),
+      );
+    });
+
+    test('概率之和不是有限数时抛 parse 异常', () {
+      for (final bad in <double>[double.nan, double.infinity]) {
+        expect(
+          () => JevRequest.parseResponse(<String, dynamic>{
+            'answers': <String, dynamic>{
+              'i1': <String, dynamic>{
+                'probabilities': <String, dynamic>{
+                  '正常': 0.6,
+                  '攻击': bad,
+                },
+              },
+            },
+          }, 1),
+          throwsA(
+            isA<JevException>().having(
+              (error) => error.kind,
+              'kind',
+              JevErrorKind.parse,
+            ),
+          ),
+        );
+      }
+    });
+
+    test('自定义类别缺少 noul 答案时抛 parse 异常而不是记 0', () {
+      expect(
+        () => JevRequest.parseResponse(
+          <String, dynamic>{
+            'answers': <String, dynamic>{
+              'i1': <String, dynamic>{
+                'probabilities': <String, dynamic>{
+                  for (final name in JevRequest.optionNames) name: 0.125,
+                },
+              },
+            },
+          },
+          1,
+          customCategories: custom,
+        ),
+        throwsA(
+          isA<JevException>().having(
+            (error) => error.kind,
+            'kind',
+            JevErrorKind.parse,
+          ),
+        ),
+      );
+      expect(
+        () => JevRequest.parseResponse(
+          <String, dynamic>{
+            'answers': <String, dynamic>{
+              'i1': <String, dynamic>{
+                'probabilities': <String, dynamic>{
+                  for (final name in JevRequest.optionNames) name: 0.125,
+                },
+              },
+              'i1_c1': <String, dynamic>{'noul': double.nan},
+            },
+          },
+          1,
+          customCategories: custom,
+        ),
+        throwsA(
+          isA<JevException>().having(
+            (error) => error.kind,
+            'kind',
+            JevErrorKind.parse,
+          ),
+        ),
+      );
     });
 
     test('缺少某条答案时抛 parse 异常', () {

@@ -14,12 +14,16 @@ class CfTile extends StatelessWidget {
     this.subtitleMaxLines,
     this.titleMaxLines,
     this.subtitleWidget,
+    this.contentPadding,
   });
 
   final String title;
   final IconData? icon;
   final String? subtitle;
   final Widget? trailing;
+
+  /// 行内边距，为空时用 ListTile 默认值（右侧 24）
+  final EdgeInsetsGeometry? contentPadding;
   final VoidCallback? onTap;
 
   /// 为 false 时整行置灰且不响应点击
@@ -38,6 +42,7 @@ class CfTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return ListTile(
+      contentPadding: contentPadding,
       onTap: enabled ? onTap : null,
       enabled: enabled,
       leading: icon == null ? null : Icon(icon),

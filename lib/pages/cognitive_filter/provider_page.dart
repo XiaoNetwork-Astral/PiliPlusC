@@ -2,7 +2,9 @@ import 'package:PiliPlus/common/widgets/dialog/text_input_dialog.dart';
 import 'package:PiliPlus/common/widgets/scaffold/simple_scaffold.dart';
 import 'package:PiliPlus/common/widgets/view_safe_area.dart';
 import 'package:PiliPlus/pages/cognitive_filter/widgets.dart';
+import 'package:PiliPlus/pages/setting/widgets/select_dialog.dart';
 import 'package:PiliPlus/utils/cognitive_filter/jev_client.dart';
+import 'package:PiliPlus/utils/cognitive_filter/jev_proxy.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
 import 'package:flutter/services.dart' show FilteringTextInputFormatter;
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
@@ -24,6 +26,8 @@ class _FilterProviderPageState extends State<FilterProviderPage> {
   String _apiKey = Pref.cfApiKey;
   String _model = Pref.cfApiModel;
   int _timeout = Pref.cfApiTimeout;
+  int _proxyType = Pref.cfApiProxyType;
+  String _proxyAddress = Pref.cfApiProxyAddress;
 
   bool _testing = false;
 
@@ -94,6 +98,52 @@ class _FilterProviderPageState extends State<FilterProviderPage> {
     setState(() => _timeout = seconds);
   }
 
+  static const List<(int, String)> _proxyTypes = [
+    (0, '不使用'),
+    (1, 'HTTP'),
+    (2, 'SOCKS5'),
+  ];
+
+  String get _proxyTypeLabel =>
+      _proxyTypes.firstWhere((item) => item.$1 == _proxyType).$2;
+
+  Future<void> _editProxyType() async {
+    final result = await showDialog<int>(
+      context: context,
+      builder: (context) => SelectDialog<int>(
+        title: '代理类型',
+        value: _proxyType,
+        values: _proxyTypes,
+      ),
+    );
+    if (result == null || result == _proxyType) return;
+    Pref.cfApiProxyType = result;
+    setState(() => _proxyType = result);
+  }
+
+  Future<void> _editProxyAddress() async {
+    final result = await showTextInputDialog(
+      context: context,
+      title: '代理地址',
+      hintText: '127.0.0.1:7890',
+      initialValue: _proxyAddress,
+      validator: (value) {
+        if (value.isEmpty) return null;
+        return JevProxy.parse(JevProxyType.http, value) == null
+            ? '请填写 地址:端口'
+            : null;
+      },
+    );
+    if (result == null) return;
+    Pref.cfApiProxyAddress = result;
+    setState(() => _proxyAddress = result);
+  }
+
+  JevProxy? get _currentProxy => JevProxy.parse(
+    JevProxyType.values[_proxyType.clamp(0, JevProxyType.values.length - 1)],
+    _proxyAddress,
+  );
+
   Future<void> _testConnection() async {
     final error = _validateUrl(_baseUrl);
     if (error != null) {
@@ -112,6 +162,7 @@ class _FilterProviderPageState extends State<FilterProviderPage> {
         apiKey: _apiKey,
         model: _model,
         timeout: Duration(seconds: _timeout),
+        proxy: _currentProxy,
       );
       message = result.message.isEmpty
           ? (result.ok ? '连接成功' : '连接失败')
@@ -158,6 +209,19 @@ class _FilterProviderPageState extends State<FilterProviderPage> {
               subtitle: '$_timeout 秒',
               onTap: _editTimeout,
             ),
+            CfTile(
+              icon: Icons.vpn_lock_outlined,
+              title: '代理类型',
+              subtitle: _proxyTypeLabel,
+              onTap: _editProxyType,
+            ),
+            if (_proxyType != 0)
+              CfTile(
+                icon: Icons.dns_outlined,
+                title: '代理地址',
+                subtitle: _proxyAddress.isEmpty ? '未填写' : _proxyAddress,
+                onTap: _editProxyAddress,
+              ),
             CfTestButton(testing: _testing, onPressed: _testConnection),
           ],
         ),

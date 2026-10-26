@@ -119,6 +119,10 @@ class _CategoryRulesPageState extends State<CategoryRulesPage> {
             ),
             for (final category in _categories)
               CfTile(
+                contentPadding: const EdgeInsetsDirectional.only(
+                  start: 16,
+                  end: 12,
+                ),
                 title: category.name,
                 subtitle: category.id == 'mock'
                     ? '${category.summary}，误伤偏高'

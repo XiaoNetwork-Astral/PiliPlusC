@@ -324,4 +324,45 @@ void main() {
       expect(cache.dirty, isFalse);
     });
   });
+
+  group('清空', () {
+    test('clear 清空内存、落盘空缓存并把 dirty 复位', () async {
+      final store = MemoryJudgeCacheStore();
+      final cache = JudgeCache(store: store);
+      cache.putOptions('k', <String, double>{'正常': 0.9});
+      cache.putCustomScores('k', <String, double>{'a': 0.8}, <FilterCategory>[
+        categoryA,
+      ]);
+      expect(cache.dirty, isTrue);
+
+      await cache.clear();
+      expect(cache.dirty, isFalse);
+      expect(
+        cache.lookup('k', customCategories: <FilterCategory>[categoryA]),
+        isNull,
+      );
+
+      final decoded = jsonDecode(store.value!) as Map<String, dynamic>;
+      expect(decoded['version'], 2);
+      expect(decoded['entries'], isEmpty);
+
+      final loaded = JudgeCache(store: store);
+      await loaded.load();
+      expect(
+        loaded.lookup('k', customCategories: <FilterCategory>[categoryA]),
+        isNull,
+      );
+    });
+
+    test('没有内容时 clear 也写入空缓存', () async {
+      final store = MemoryJudgeCacheStore('{"version":2,"entries":{"k":{}}}');
+      final cache = JudgeCache(store: store);
+      await cache.clear();
+      expect(cache.dirty, isFalse);
+      expect(
+        jsonDecode(store.value!),
+        <String, dynamic>{'version': 2, 'entries': <String, dynamic>{}},
+      );
+    });
+  });
 }

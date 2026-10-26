@@ -200,6 +200,10 @@ class _JudgeHistoryPageState extends State<JudgeHistoryPage> {
                       itemBuilder: (context, index) {
                         final entry = shown[index];
                         return CfTile(
+                          contentPadding: const EdgeInsetsDirectional.only(
+                            start: 16,
+                            end: 10,
+                          ),
                           title: entry.text,
                           titleMaxLines: 2,
                           subtitleWidget: _buildBadges(entry),
