@@ -506,19 +506,63 @@ class _CalibrationPageState extends State<CalibrationPage> {
     );
   }
 
-  /// 完成页顶部的圆角卡片，左右留边，不占满整行
-  Widget _doneCard(BuildContext context, {required String title, String? subtitle}) {
-    final colorScheme = Theme.of(context).colorScheme;
+  /// 完成页顶部的圆角卡片，成功用绿色、失败用红色，左右留边不占满整行
+  Widget _doneCard(
+    BuildContext context, {
+    required bool success,
+    required String title,
+    String? subtitle,
+  }) {
+    final theme = Theme.of(context);
+    final dark = theme.brightness == Brightness.dark;
+    final Color background;
+    final Color foreground;
+    if (success) {
+      background = dark ? const Color(0xFF1F3D2B) : const Color(0xFFD7F0DE);
+      foreground = dark ? const Color(0xFFB9E6C5) : const Color(0xFF14532D);
+    } else {
+      background = dark ? const Color(0xFF4A1F1F) : const Color(0xFFFBDADA);
+      foreground = dark ? const Color(0xFFF5C2C2) : const Color(0xFF7F1D1D);
+    }
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-      child: Material(
-        color: colorScheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(16),
-        clipBehavior: Clip.antiAlias,
-        child: CfTile(
-          icon: Icons.check_circle_outline,
-          title: title,
-          subtitle: subtitle,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+        decoration: BoxDecoration(
+          color: background,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              success ? Icons.check_circle_outline : Icons.error_outline,
+              color: foreground,
+              size: 32,
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: foreground,
+                    ),
+                  ),
+                  if (subtitle != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: foreground.withValues(alpha: 0.8),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -531,7 +575,7 @@ class _CalibrationPageState extends State<CalibrationPage> {
       return ListView(
         padding: _listPadding(context),
         children: [
-          _doneCard(context, title: '回答太少，门槛没有改动'),
+          _doneCard(context, success: false, title: '回答太少，门槛没有改动'),
         ],
       );
     }
@@ -543,6 +587,7 @@ class _CalibrationPageState extends State<CalibrationPage> {
       children: [
         _doneCard(
           context,
+          success: true,
           title: '已完成校准',
           subtitle: '现已使用新的数值进行拦截',
         ),
