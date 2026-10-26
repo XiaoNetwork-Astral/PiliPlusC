@@ -12,8 +12,10 @@ on:
 
 jobs:
   build-linux-app:
-    name: Release Linux x64
+    name: Linux x64
     runs-on: ubuntu-latest
+    env:
+      TAG: ${{ inputs.tag != '' && inputs.tag || 'dev' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -228,44 +230,12 @@ jobs:
           printf "完成: PiliPlus_linux_%s_amd64.AppImage\n" "${{ env.version }}"
         shell: bash
 
-      - name: Release
-        if: ${{ inputs.tag != '' && !contains(inputs.tag, 'test') }}
-        uses: softprops/action-gh-release@v3
+      - name: Upload
+        uses: actions/upload-artifact@v7
         with:
-          tag_name: ${{ inputs.tag }}
-          name: ${{ inputs.tag }}
-          draft: true
-          prerelease: true
-          files: |
+          name: linux
+          path: |
             PiliPlus_linux_*.tar.gz
             PiliPlus_linux_*.deb
             PiliPlus_linux_*.rpm
             PiliPlus_linux_*.AppImage
-
-      - name: Upload linux targz package
-        uses: actions/upload-artifact@v7
-        with:
-          archive: false
-          name: Linux_targz_amd64_packege
-          path: PiliPlus_linux_*.tar.gz
-
-      - name: Upload linux deb package
-        uses: actions/upload-artifact@v7
-        with:
-          archive: false
-          name: Linux_deb_amd64_package
-          path: PiliPlus_linux_*.deb
-
-      - name: Upload linux rpm package
-        uses: actions/upload-artifact@v7
-        with:
-          archive: false
-          name: Linux_rpm_amd64_package
-          path: PiliPlus_linux_*.rpm
-
-      - name: Upload linux AppImage package
-        uses: actions/upload-artifact@v7
-        with:
-          archive: false
-          name: Linux_AppImage_amd64_package
-          path: PiliPlus_linux_*.AppImage

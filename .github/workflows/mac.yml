@@ -12,8 +12,10 @@ on:
 
 jobs:
   build-mac-app:
-    name: Release Mac
+    name: macOS
     runs-on: macos-26
+    env:
+      TAG: ${{ inputs.tag != '' && inputs.tag || 'dev' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -46,22 +48,10 @@ jobs:
         continue-on-error: true
 
       - name: Rename DMG
-        run: mv PiliPlusC*.dmg PiliPlusC_macos_${{ inputs.tag }}.dmg
+        run: mv PiliPlusC*.dmg PiliPlusC_macos_${{ env.TAG }}.dmg
 
-      - name: Release
-        if: ${{ inputs.tag != '' && !contains(inputs.tag, 'test') }}
-        uses: softprops/action-gh-release@v3
-        with:
-          tag_name: ${{ inputs.tag }}
-          name: ${{ inputs.tag }}
-          draft: true
-          prerelease: true
-          files: |
-            PiliPlusC_macos_${{ inputs.tag }}.dmg
-
-      - name: Upload macos release
+      - name: Upload
         uses: actions/upload-artifact@v7
         with:
-          archive: false
-          name: macOS-release
+          name: macos
           path: PiliPlusC_macos_*.dmg

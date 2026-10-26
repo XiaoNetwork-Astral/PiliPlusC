@@ -12,8 +12,10 @@ on:
 
 jobs:
   build-windows-app:
-    name: Release Windows x64
+    name: Windows x64
     runs-on: windows-latest
+    env:
+      TAG: ${{ inputs.tag != '' && inputs.tag || 'dev' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -25,7 +27,6 @@ jobs:
         with:
           channel: stable
           flutter-version-file: pubspec.yaml
-
 
       - name: Add fastforge and Inno Setup
         run: |
@@ -53,37 +54,18 @@ jobs:
       - name: Prepare Upload
         run: |
           mkdir -p Release/PiliPlusC-Win
-          mkdir -p PiliPlusC-Win-Setup
           mv build/windows/x64/runner/Release/* Release/PiliPlusC-Win/
-          mv dist/**/*.exe PiliPlusC-Win-Setup/PiliPlusC_windows_${{ inputs.tag }}_x64_setup.exe
+          mv dist/**/*.exe PiliPlusC_windows_${{ env.TAG }}_x64_setup.exe
 
       - name: Compress
         run: |
-          Compress-Archive -Path "Release/PiliPlusC-Win" -DestinationPath "PiliPlusC_windows_${{ inputs.tag }}_x64_portable.zip"
+          Compress-Archive -Path "Release/PiliPlusC-Win" -DestinationPath "PiliPlusC_windows_${{ env.TAG }}_x64_portable.zip"
         shell: pwsh
 
-      - name: Release
-        if: ${{ inputs.tag != '' && !contains(inputs.tag, 'test') }}
-        uses: softprops/action-gh-release@v3
+      - name: Upload
+        uses: actions/upload-artifact@v7
         with:
-          tag_name: ${{ inputs.tag }}
-          name: ${{ inputs.tag }}
-          draft: true
-          prerelease: true
-          files: |
+          name: windows
+          path: |
             PiliPlusC_windows_*.zip
-            PiliPlusC-Win-Setup/PiliPlusC_windows_*.exe
-
-      - name: Upload windows file release
-        uses: actions/upload-artifact@v7
-        with:
-          archive: false
-          name: Windows-file-x64-release
-          path: PiliPlusC_windows_*.zip
-
-      - name: Upload windows setup release
-        uses: actions/upload-artifact@v7
-        with:
-          archive: false
-          name: Windows-setup-x64-release
-          path: PiliPlusC-Win-Setup/PiliPlusC_windows_*.exe
+            PiliPlusC_windows_*.exe
