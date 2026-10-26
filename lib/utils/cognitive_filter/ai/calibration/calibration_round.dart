@@ -14,6 +14,7 @@ const String calibrationSystemPrompt =
 const String calibrationUserPromptHead =
     '下面是编号文本，请把属于同一类型的归在一起（例如同一种辱骂方式、同一种玩梗、'
     '同一种广告引流）。只有明显同类的才归在一起，没有同类的编号不要输出。'
+    '尽量分得细一些：每类 3 到 10 条，宁可多分几类，也不要把不同类型混在一起。'
     '每类给 名称（不超过 8 个字）、描述（一句话，说明这类内容的共同特点，语气中性）、'
     '成员编号。输出格式：[{"名称":"","描述":"","成员编号":[1,2,3]}]';
 
@@ -58,7 +59,7 @@ Future<RoundResult> runRound({
   int maxItems = 150,
   int chunkSize = 40,
   int minClusterSize = 3,
-  int maxQuestions = 20,
+  int maxQuestions = calibrationMaxQuestions,
   void Function(int done, int total)? onProgress,
   bool Function()? shouldStop,
   Duration retryDelay = const Duration(seconds: 2),
@@ -98,6 +99,9 @@ Future<RoundResult> runRound({
   LlmErrorKind? abortedBy;
   String? abortMessage;
   var processedChunks = 0;
+
+  // 分好批就先报一次总数，界面不用等第一批完成才知道总批数
+  onProgress?.call(0, total);
 
   for (var index = 0; index < chunks.length; index++) {
     if (questions.length >= questionLimit) {

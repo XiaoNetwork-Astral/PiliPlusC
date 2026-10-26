@@ -14,6 +14,9 @@ import 'package:PiliPlus/utils/storage_pref.dart';
 import 'package:get/get.dart';
 import 'package:material_ui/material_ui.dart';
 
+/// 思考文字只保留末尾这么多字，够填满显示框即可
+const int _thinkingKeep = 400;
+
 enum _Phase { idle, running, tooFew, error, quiz, done }
 
 enum _MenuAction { guard, reset }
@@ -40,8 +43,15 @@ class _CalibrationPageState extends State<CalibrationPage> {
   int _batchDone = 0;
   int _batchTotal = 0;
   bool _cancelled = false;
+  final ValueNotifier<String> _thinking = ValueNotifier<String>('');
   String? _errorMessage;
   ({double before, double? after})? _result;
+
+  @override
+  void dispose() {
+    _thinking.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -64,6 +74,7 @@ class _CalibrationPageState extends State<CalibrationPage> {
       _cancelled = false;
       _batchDone = 0;
       _batchTotal = 0;
+      _thinking.value = '';
       _errorMessage = null;
       _questions = const <CalibrationQuestion>[];
       _answers =
@@ -75,17 +86,30 @@ class _CalibrationPageState extends State<CalibrationPage> {
     final outcome = await CalibrationService.instance.runRound(
       onProgress: (done, total) {
         if (!mounted || _phase != _Phase.running) return;
+        // 新的一批开始，思考文字从头来
+        _thinking.value = '';
         setState(() {
           _batchDone = done;
           _batchTotal = total;
         });
       },
+      onThinking: (delta) {
+        if (!mounted || _phase != _Phase.running) return;
+        final text = _thinking.value + delta;
+        _thinking.value = text.length > _thinkingKeep
+            ? text.substring(text.length - _thinkingKeep)
+            : text;
+      },
       shouldCancel: () => _cancelled,
     );
     if (!mounted) return;
     setState(() {
-      if (_cancelled) {
+      if (_cancelled && outcome.questions.isEmpty) {
         _phase = _Phase.idle;
+      } else if (_cancelled) {
+        // 用户停止时，已经整理出的题照常拿来答
+        _questions = outcome.questions;
+        _phase = _Phase.quiz;
       } else if (outcome.abortedBy != null) {
         _errorMessage = outcome.abortMessage;
         _phase = _Phase.error;
@@ -295,23 +319,74 @@ class _CalibrationPageState extends State<CalibrationPage> {
 
   Widget _buildRunning(BuildContext context) {
     final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final current = _batchTotal == 0
+        ? 0
+        : (_batchDone + 1).clamp(1, _batchTotal).toInt();
     return _centered([
-      const SizedBox(
-        width: 28,
-        height: 28,
-        child: CircularProgressIndicator(strokeWidth: 3),
-      ),
-      const SizedBox(height: 16),
       Text(_cancelled ? '正在停止' : '正在整理', style: theme.textTheme.titleMedium),
+      const SizedBox(height: 16),
+      SizedBox(
+        width: 260,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(2),
+          child: LinearProgressIndicator(
+            minHeight: 4,
+            value: _batchTotal == 0 ? null : _batchDone / _batchTotal,
+          ),
+        ),
+      ),
       if (_batchTotal > 0) ...[
-        const SizedBox(height: 6),
+        const SizedBox(height: 8),
         Text(
-          '第 $_batchDone 批，共 $_batchTotal 批',
+          '第 $current 批，共 $_batchTotal 批',
           style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.outline,
+            color: colorScheme.outline,
           ),
         ),
       ],
+      const SizedBox(height: 16),
+      SizedBox(
+        width: 260,
+        height: 132,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: colorScheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: ShaderMask(
+              shaderCallback: (rect) => const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Colors.transparent, Colors.black],
+                stops: [0.0, 0.35],
+              ).createShader(rect),
+              blendMode: BlendMode.dstIn,
+              child: ValueListenableBuilder<String>(
+                valueListenable: _thinking,
+                builder: (context, text, _) => Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Align(
+                    alignment: Alignment.bottomLeft,
+                    child: Text(
+                      text,
+                      maxLines: 6,
+                      overflow: TextOverflow.clip,
+                      textAlign: TextAlign.start,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.outline,
+                        height: 1.6,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
       const SizedBox(height: 24),
       OutlinedButton(
         onPressed: _cancelled ? null : _stop,
@@ -325,7 +400,7 @@ class _CalibrationPageState extends State<CalibrationPage> {
     return _centered([
       Icon(Icons.inbox_outlined, size: 40, color: theme.colorScheme.outline),
       const SizedBox(height: 12),
-      Text('这轮整理出的题不多，攒一些再试', style: theme.textTheme.titleMedium),
+      Text('整理出的题不到 10 道，攒一些再试', style: theme.textTheme.titleMedium),
       const SizedBox(height: 24),
       OutlinedButton(onPressed: _backToStart, child: const Text('返回')),
     ]);
@@ -436,6 +511,24 @@ class _CalibrationPageState extends State<CalibrationPage> {
     );
   }
 
+  /// 完成页顶部的圆角卡片，左右留边，不占满整行
+  Widget _doneCard(BuildContext context, {required String title, String? subtitle}) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      child: Material(
+        color: colorScheme.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(16),
+        clipBehavior: Clip.antiAlias,
+        child: CfTile(
+          icon: Icons.check_circle_outline,
+          title: title,
+          subtitle: subtitle,
+        ),
+      ),
+    );
+  }
+
   Widget _buildDone(BuildContext context) {
     final result = _result;
     final after = result?.after;
@@ -443,49 +536,27 @@ class _CalibrationPageState extends State<CalibrationPage> {
       return ListView(
         padding: _listPadding(context),
         children: [
-          const CfTile(
-            icon: Icons.info_outline,
-            title: '回答太少，门槛没有改动',
-          ),
-          CfTile(
-            icon: Icons.arrow_back,
-            title: '返回',
-            onTap: _backToStart,
-          ),
+          _doneCard(context, title: '回答太少，门槛没有改动'),
         ],
       );
     }
-    final before = result.before;
-    final changed = (after - before).abs() >= 0.005;
     final categories = CognitiveFilterConfig.effectiveCategories
         .where((category) => category.builtin && category.enabled)
         .toList();
     return ListView(
       padding: _listPadding(context),
       children: [
-        const CfTile(
-          icon: Icons.check_circle_outline,
+        _doneCard(
+          context,
           title: '已完成校准',
           subtitle: '现已使用新的数值进行拦截',
         ),
-        if (changed)
-          for (final category in categories)
-            CfTile(
-              icon: Icons.tune,
-              title: category.name,
-              subtitle:
-                  '${before.toStringAsFixed(2)} → ${after.toStringAsFixed(2)}',
-            )
-        else
-          const CfTile(
-            icon: Icons.equalizer,
-            title: '各类别的门槛没有变化',
+        for (final category in categories)
+          CfTile(
+            icon: Icons.tune,
+            title: category.name,
+            subtitle: after.toStringAsFixed(2),
           ),
-        CfTile(
-          icon: Icons.arrow_back,
-          title: '返回',
-          onTap: _backToStart,
-        ),
       ],
     );
   }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -48,10 +49,48 @@ ResponseBody _okContent(String content, {Map<String, Object?>? usage}) =>
       if (usage != null) 'usage': usage,
     });
 
+/// 由多个字节块拼出的流式响应，用来模拟一个网络块含半行或多行
+ResponseBody _sseResponse(List<Uint8List> chunks, {int status = 200}) =>
+    ResponseBody(
+      Stream<Uint8List>.fromIterable(chunks),
+      status,
+      headers: <String, List<String>>{
+        Headers.contentTypeHeader: <String>['text/event-stream'],
+      },
+    );
+
+/// 一行 SSE；载荷是字符串时原样发出（如 [DONE]），否则编码成 JSON
+String _sseData(Object payload) =>
+    'data: ${payload is String ? payload : jsonEncode(payload)}\n';
+
+String _sseReasoning(String reasoning) => _sseData(<String, dynamic>{
+  'choices': <dynamic>[
+    <String, dynamic>{
+      'delta': <String, dynamic>{'reasoning_content': reasoning},
+      'finish_reason': null,
+    },
+  ],
+});
+
+String _sseContent(String content) => _sseData(<String, dynamic>{
+  'choices': <dynamic>[
+    <String, dynamic>{
+      'delta': <String, dynamic>{'content': content},
+      'finish_reason': null,
+    },
+  ],
+});
+
+String _sseUsage(Map<String, Object?> usage) => _sseData(<String, dynamic>{
+  'choices': <dynamic>[],
+  'usage': usage,
+});
+
 LlmClient _client(
   _FakeAdapter adapter, {
   bool jsonMode = true,
   void Function(int inputTokens, int outputTokens)? onUsage,
+  void Function(String delta)? onReasoning,
 }) {
   final dio = Dio();
   dio.httpClientAdapter = adapter;
@@ -63,6 +102,7 @@ LlmClient _client(
     jsonMode: jsonMode,
     dio: dio,
     onUsage: onUsage,
+    onReasoning: onReasoning,
   );
 }
 
@@ -470,6 +510,189 @@ void main() {
 
       expect(error.kind, LlmErrorKind.network);
       expect(error.message, startsWith('badCertificate'));
+    });
+  });
+
+  group('流式整理', () {
+    test('思考与正文交错，块里含两行或半行，usage 照常上报', () async {
+      final lines = <String>[
+        _sseReasoning('先想'),
+        _sseContent('{"名称"'),
+        _sseReasoning('再想'),
+        _sseContent(': "类"}'),
+        _sseUsage(<String, Object?>{
+          'prompt_tokens': 11,
+          'completion_tokens': 22,
+          'total_tokens': 33,
+        }),
+        _sseData('[DONE]'),
+      ];
+      final bytes = utf8.encode(lines.join());
+      // 第一刀落在第三行中间，第二刀落在 [DONE] 中间
+      final firstCut = utf8.encode('${lines[0]}${lines[1]}').length + 10;
+      final secondCut =
+          utf8
+              .encode(
+                '${lines[0]}${lines[1]}${lines[2]}${lines[3]}${lines[4]}',
+              )
+              .length +
+          3;
+      final adapter = _FakeAdapter(
+        (_) async => _sseResponse(<Uint8List>[
+          Uint8List.fromList(bytes.sublist(0, firstCut)),
+          Uint8List.fromList(bytes.sublist(firstCut, secondCut)),
+          Uint8List.fromList(bytes.sublist(secondCut)),
+        ]),
+      );
+      final thinking = <String>[];
+      final usages = <List<int>>[];
+
+      final reply = await _client(
+        adapter,
+        onReasoning: thinking.add,
+        onUsage: (input, output) => usages.add(<int>[input, output]),
+      ).chat(const <LlmMessage>[LlmMessage(role: 'user', content: '你好')]);
+
+      expect(reply, '{"名称": "类"}');
+      expect(thinking, <String>['先想', '再想']);
+      expect(usages, <List<int>>[
+        <int>[11, 22],
+      ]);
+      final request = adapter.requests.single;
+      expect(request.responseType, ResponseType.stream);
+      final body = _bodyOf(request);
+      expect(body['stream'], isTrue);
+      expect(body['stream_options'], <String, dynamic>{'include_usage': true});
+      expect(_header(request, 'Accept'), 'text/event-stream');
+    });
+
+    test('流式 usage 只有 total_tokens 时按输入 0 上报', () async {
+      final adapter = _FakeAdapter(
+        (_) async => _sseResponse(<Uint8List>[
+          Uint8List.fromList(
+            utf8.encode(
+              <String>[
+                _sseContent('ok'),
+                _sseUsage(<String, Object?>{'total_tokens': 46}),
+                _sseData('[DONE]'),
+              ].join(),
+            ),
+          ),
+        ]),
+      );
+      final usages = <List<int>>[];
+
+      final reply = await _client(
+        adapter,
+        onReasoning: (_) {},
+        onUsage: (input, output) => usages.add(<int>[input, output]),
+      ).chat(const <LlmMessage>[LlmMessage(role: 'user', content: '你好')]);
+
+      expect(reply, 'ok');
+      expect(usages, <List<int>>[
+        <int>[0, 46],
+      ]);
+    });
+
+    test('test() 即使带思考回调也走非流式', () async {
+      final adapter = _FakeAdapter((_) async => _okContent('ok'));
+      final thinking = <String>[];
+
+      await _client(adapter, onReasoning: thinking.add).test();
+
+      final body = _bodyOf(adapter.requests.single);
+      expect(body['stream'], isFalse);
+      expect(body.containsKey('stream_options'), isFalse);
+      expect(thinking, isEmpty);
+    });
+
+    test('流式非 2xx 先读出错误体再映射，消息不含密钥', () async {
+      final adapter = _FakeAdapter(
+        (_) async => _sseResponse(
+          <Uint8List>[
+            Uint8List.fromList(
+              utf8.encode(
+                jsonEncode(<String, dynamic>{
+                  'error': <String, dynamic>{'message': '密钥 sk-test-secret 无权限'},
+                }),
+              ),
+            ),
+          ],
+          status: 401,
+        ),
+      );
+
+      final error = await _capture(_client(adapter, onReasoning: (_) {}));
+
+      expect(error.kind, LlmErrorKind.auth);
+      expect(error.statusCode, 401);
+      expect(error.message, startsWith('HTTP 401'));
+      expect(error.message, contains('无权限'));
+      expect(error.message, isNot(contains('sk-test-secret')));
+      expect(error.toString(), isNot(contains('sk-test-secret')));
+    });
+
+    test('流式只有思考没有正文按 parse 处理', () async {
+      final adapter = _FakeAdapter(
+        (_) async => _sseResponse(<Uint8List>[
+          Uint8List.fromList(
+            utf8.encode(
+              <String>[
+                _sseReasoning('想完了'),
+                _sseUsage(<String, Object?>{
+                  'prompt_tokens': 1,
+                  'completion_tokens': 2,
+                }),
+                _sseData('[DONE]'),
+              ].join(),
+            ),
+          ),
+        ]),
+      );
+      final thinking = <String>[];
+
+      final error = await _capture(
+        _client(adapter, onReasoning: thinking.add),
+      );
+
+      expect(error.kind, LlmErrorKind.parse);
+      expect(error.message, contains('内容为空'));
+      expect(thinking, <String>['想完了']);
+    });
+
+    test('流式没有结束标记按 parse 处理', () async {
+      final adapter = _FakeAdapter(
+        (_) async => _sseResponse(<Uint8List>[
+          Uint8List.fromList(utf8.encode(_sseContent('半截'))),
+        ]),
+      );
+
+      final error = await _capture(_client(adapter, onReasoning: (_) {}));
+
+      expect(error.kind, LlmErrorKind.parse);
+      expect(error.message, contains('意外结束'));
+    });
+
+    test('流式中途断开按 parse 处理，不返回半截正文', () async {
+      final controller = StreamController<Uint8List>();
+      controller.add(Uint8List.fromList(utf8.encode(_sseContent('半截'))));
+      controller.addError(StateError('连接被重置'));
+      unawaited(controller.close());
+      final adapter = _FakeAdapter(
+        (_) async => ResponseBody(
+          controller.stream,
+          200,
+          headers: <String, List<String>>{
+            Headers.contentTypeHeader: <String>['text/event-stream'],
+          },
+        ),
+      );
+
+      final error = await _capture(_client(adapter, onReasoning: (_) {}));
+
+      expect(error.kind, LlmErrorKind.parse);
+      expect(error.message, contains('流式响应中断'));
+      expect(error.message, contains('连接被重置'));
     });
   });
 }

@@ -75,6 +75,7 @@ class LlmClient {
     this.jsonMode = true,
     Dio? dio,
     this.onUsage,
+    this.onReasoning,
   }) : _dio = dio ?? _createDio(proxy, timeout);
 
   /// 接口根地址，例如 `https://api.example.com/v1`
@@ -101,7 +102,16 @@ class LlmClient {
   /// `usage.total_tokens` 时按输入 0、输出=总数上报，避免漏记。
   final void Function(int inputTokens, int outputTokens)? onUsage;
 
+  /// 流式响应里每段非空的思考文字到达时回调
+  ///
+  /// 非 null 时整理请求改用流式读取，边想边把增量交给界面；为 null 时
+  /// 保持原来的非流式路径
+  final void Function(String delta)? onReasoning;
+
   final Dio _dio;
+
+  /// 换行符的字节值，流式正文按它切行
+  static const int _lineFeed = 0x0A;
 
   static Dio _createDio(JevProxy? proxy, Duration timeout) {
     final dio = Dio(
@@ -145,6 +155,9 @@ class LlmClient {
       throw const LlmException(LlmErrorKind.auth, '未填写 API Key');
     }
     final url = _chatUrl();
+    // 只有整理请求（think 为真）且调用方要听思考时才走流式，测试连接
+    // 仍用一次性的非流式请求
+    final streaming = onReasoning != null && think;
     final body = <String, dynamic>{
       'model': model,
       'messages': <Map<String, dynamic>>[
@@ -152,8 +165,14 @@ class LlmClient {
           <String, dynamic>{'role': message.role, 'content': message.content},
       ],
       'temperature': temperature,
-      'stream': false,
+      'stream': streaming,
     };
+    if (streaming) {
+      // 让服务商在流末尾补一个带 usage 的分块，费用仍能照常统计
+      body['stream_options'] = const <String, dynamic>{
+        'include_usage': true,
+      };
+    }
     // DeepSeek 官方接口：整理用最高强度的思考，小模型不想清楚归不好类；
     // 测试连接只发一个很小的请求，思考会占满输出额度让正文为空，所以关掉。
     // 开着思考时不发 JSON 模式（文档没说两者能同时用），回复由解析器宽松处理。
@@ -173,6 +192,10 @@ class LlmClient {
     }
     if (maxTokens != null) {
       body['max_tokens'] = maxTokens;
+    }
+
+    if (streaming) {
+      return _streamRequest(url, body, key: key);
     }
 
     try {
@@ -202,6 +225,226 @@ class LlmClient {
         truncateError(redactSecrets(error.toString(), secrets: <String>[key])),
       );
     }
+  }
+
+  /// 流式请求：逐行读 SSE，思考增量交给 [onReasoning]，正文拼起来返回
+  ///
+  /// 一个网络块里可能有半行或多行，按换行缓冲成完整行再解析；没读到
+  /// `[DONE]` 就断流、正文为空都算解析失败
+  Future<String> _streamRequest(
+    String url,
+    Map<String, dynamic> body, {
+    required String key,
+  }) async {
+    final onReasoning = this.onReasoning;
+    final content = StringBuffer();
+    final Response<ResponseBody> response;
+    try {
+      response = await _dio.post<ResponseBody>(
+        url,
+        data: jsonEncode(body),
+        options: Options(
+          responseType: ResponseType.stream,
+          headers: <String, dynamic>{
+            'Authorization': 'Bearer $key',
+            'Content-Type': 'application/json',
+            'Accept': 'text/event-stream',
+          },
+        ),
+      );
+    } on DioException catch (error) {
+      // 非 2xx 的正文也是流，先读出来再套用与普通响应相同的映射
+      throw await _mapStreamDioError(error, secrets: <String>[key]);
+    } catch (error) {
+      throw LlmException(
+        LlmErrorKind.network,
+        truncateError(redactSecrets(error.toString(), secrets: <String>[key])),
+      );
+    }
+
+    final responseBody = response.data;
+    if (responseBody == null) {
+      throw _parseError(
+        null,
+        secrets: <String>[key],
+        text: '服务商返回的内容为空',
+      );
+    }
+
+    var done = false;
+    try {
+      final pending = <int>[];
+      await for (final chunk in responseBody.stream) {
+        pending.addAll(chunk);
+        var lineStart = 0;
+        for (var index = 0; index < pending.length; index++) {
+          if (pending[index] != _lineFeed) {
+            continue;
+          }
+          final line = utf8.decode(
+            pending.sublist(lineStart, index),
+            allowMalformed: true,
+          );
+          lineStart = index + 1;
+          if (_handleSseLine(
+            line,
+            content,
+            onReasoning: onReasoning!,
+            secrets: <String>[key],
+          )) {
+            done = true;
+            break;
+          }
+        }
+        if (done) {
+          break;
+        }
+        if (lineStart > 0) {
+          pending.removeRange(0, lineStart);
+        }
+      }
+      // 最后一行可能没有换行符，流结束后补处理
+      if (!done && pending.isNotEmpty) {
+        done = _handleSseLine(
+          utf8.decode(pending, allowMalformed: true),
+          content,
+          onReasoning: onReasoning!,
+          secrets: <String>[key],
+        );
+      }
+    } on DioException catch (error) {
+      // 读到一半的接收超时仍是超时；其它中断按解析失败处理
+      if (error.type == DioExceptionType.receiveTimeout ||
+          error.type == DioExceptionType.connectionTimeout ||
+          error.type == DioExceptionType.sendTimeout) {
+        throw _mapDioError(error, secrets: <String>[key]);
+      }
+      throw _parseError(
+        redactSecrets(error.toString(), secrets: <String>[key]),
+        secrets: <String>[key],
+        text: '流式响应中断',
+      );
+    } on LlmException {
+      rethrow;
+    } catch (error) {
+      throw _parseError(
+        redactSecrets(error.toString(), secrets: <String>[key]),
+        secrets: <String>[key],
+        text: '流式响应中断',
+      );
+    }
+
+    if (!done) {
+      throw const LlmException(LlmErrorKind.parse, '流式响应意外结束');
+    }
+    final text = content.toString();
+    if (text.trim().isEmpty) {
+      throw _parseError(
+        null,
+        secrets: <String>[key],
+        text: '服务商返回的内容为空',
+      );
+    }
+    return text;
+  }
+
+  /// 处理一行 SSE，返回是否读到结束标记
+  bool _handleSseLine(
+    String line,
+    StringBuffer content, {
+    required void Function(String delta) onReasoning,
+    required List<String> secrets,
+  }) {
+    final text = line.trim();
+    if (!text.startsWith('data:')) {
+      return false;
+    }
+    final payload = text.substring(5).trim();
+    if (payload.isEmpty) {
+      return false;
+    }
+    if (payload == '[DONE]') {
+      return true;
+    }
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(payload);
+    } on FormatException {
+      throw _parseError(
+        payload,
+        secrets: secrets,
+        text: '流式返回的内容不是合法 JSON',
+      );
+    }
+    if (decoded is! Map) {
+      throw _parseError(payload, secrets: secrets);
+    }
+    // 带 usage 的分块可能没有 choices，先上报再跳过
+    _reportUsageValue(decoded);
+    final choices = decoded['choices'];
+    if (choices is! List || choices.isEmpty) {
+      return false;
+    }
+    final choice = choices.first;
+    if (choice is! Map) {
+      throw _parseError(payload, secrets: secrets);
+    }
+    if (choice['finish_reason'] == 'content_filter') {
+      throw const LlmException(
+        LlmErrorKind.refused,
+        '服务商拒绝了这批内容（finish_reason: content_filter）',
+      );
+    }
+    final delta = choice['delta'];
+    if (delta is! Map) {
+      return false;
+    }
+    final reasoning = delta['reasoning_content'];
+    if (reasoning is String && reasoning.isNotEmpty) {
+      onReasoning(reasoning);
+    }
+    final piece = delta['content'];
+    if (piece is String) {
+      content.write(piece);
+    }
+    return false;
+  }
+
+  /// 把流式错误响应体读成文本，再交给 [_mapDioError]
+  static Future<LlmException> _mapStreamDioError(
+    DioException error, {
+    required List<String> secrets,
+  }) async {
+    final response = error.response;
+    final data = response?.data;
+    if (data is! ResponseBody) {
+      return _mapDioError(error, secrets: secrets);
+    }
+    var body = '';
+    try {
+      final bytes = <int>[];
+      await for (final chunk in data.stream) {
+        bytes.addAll(chunk);
+      }
+      body = utf8.decode(bytes, allowMalformed: true);
+    } catch (_) {
+      // 错误正文读不出来时只保留状态码，消息格式仍与非流式一致
+    }
+    return _mapDioError(
+      error.copyWith(
+        response: Response<String>(
+          requestOptions: error.requestOptions,
+          data: body,
+          statusCode: response?.statusCode,
+          statusMessage: response?.statusMessage,
+          isRedirect: response?.isRedirect ?? false,
+          redirects: response?.redirects ?? const [],
+          extra: response?.extra,
+          headers: response?.headers,
+        ),
+      ),
+      secrets: secrets,
+    );
   }
 
   /// 拼出 `${baseUrl 去掉末尾斜杠}/chat/completions`，同时校验地址
@@ -286,7 +529,6 @@ class LlmClient {
   /// `prompt_tokens` 与 `completion_tokens` 都是整数时按两者上报；只有
   /// `total_tokens` 时按输入 0、输出=总数上报，免得整次调用不计费。
   void _reportUsage(String? data) {
-    final onUsage = this.onUsage;
     if (onUsage == null) {
       return;
     }
@@ -294,6 +536,15 @@ class LlmClient {
     try {
       decoded = jsonDecode(data ?? '');
     } catch (_) {
+      return;
+    }
+    _reportUsageValue(decoded);
+  }
+
+  /// 从已解码的分块里取 `usage` 上报，流式与非流式共用同一套语义
+  void _reportUsageValue(Object? decoded) {
+    final onUsage = this.onUsage;
+    if (onUsage == null) {
       return;
     }
     if (decoded is! Map) {

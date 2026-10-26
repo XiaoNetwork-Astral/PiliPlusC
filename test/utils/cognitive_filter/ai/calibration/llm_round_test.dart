@@ -68,6 +68,7 @@ void main() {
     expect(result.abortedBy, isNull);
     expect(result.abortMessage, isNull);
     expect(progress, <List<int>>[
+      <int>[0, 1],
       <int>[1, 1],
     ]);
     expect(result.questions.first.name, '辱骂');
@@ -181,6 +182,7 @@ void main() {
     expect(result.questions, hasLength(1));
     expect(fake.calls, hasLength(1));
     expect(progress, <List<int>>[
+      <int>[0, 3],
       <int>[1, 3],
     ]);
   });
@@ -421,6 +423,7 @@ void main() {
     expect(result.abortedBy, LlmErrorKind.timeout);
     expect(result.abortMessage, '超时');
     expect(progress, <List<int>>[
+      <int>[0, 2],
       <int>[1, 2],
       <int>[2, 2],
     ]);
@@ -499,7 +502,7 @@ void main() {
     expect(result.abortMessage, '已达今日费用上限');
   });
 
-  test('每批结束都回调进度', () async {
+  test('开始前先报总批数，每批结束再报进度', () async {
     final fake = _FakeChat((_, __) async => '[]');
     final progress = <List<int>>[];
 
@@ -514,6 +517,7 @@ void main() {
 
     expect(result.questions, isEmpty);
     expect(progress, <List<int>>[
+      <int>[0, 3],
       <int>[1, 3],
       <int>[2, 3],
       <int>[3, 3],

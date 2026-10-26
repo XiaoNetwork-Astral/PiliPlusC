@@ -121,9 +121,11 @@ class CalibrationService {
   /// 跑一轮整理，结束后删掉已成为题目与确定处理不了的池条目
   ///
   /// [shouldCancel] 为真时在下一批开始前停止；停止时已出题的成员不删，
-  /// 但确定不放上传或整理失败的条目仍会被清掉
+  /// 但确定不放上传或整理失败的条目仍会被清掉。[onThinking] 非空时整理
+  /// 请求改用流式，思考文字的增量通过它实时交给界面
   Future<RoundOutcome> runRound({
     void Function(int done, int total)? onProgress,
+    void Function(String delta)? onThinking,
     bool Function()? shouldCancel,
   }) async {
     final apiKey = Pref.cfLlmApiKey.trim();
@@ -162,6 +164,7 @@ class CalibrationService {
         timeout: Duration(seconds: Pref.cfLlmTimeout),
         proxy: _currentProxy(),
         onUsage: _recordLlmUsage,
+        onReasoning: onThinking,
       );
       final result = await round.runRound(
         pool: pool.items,
@@ -172,16 +175,18 @@ class CalibrationService {
         outputRetries: Pref.cfLlmOutputRetries,
         otherRetries: Pref.cfLlmOtherRetries,
       );
-      final cancelled = shouldCancel?.call() ?? false;
+      // 题数不够 10 道时不出题，已用掉的内容留在池里等下一轮；
+      // 够了就照常使用，即便中途是被用户停止或出错中断的
+      final usable = result.questions.length >= calibrationMinQuestions;
       pool.removeIds(<String>{
-        if (!cancelled) ...result.usedIds,
+        if (usable) ...result.usedIds,
         ...result.droppedIds,
       });
       await pool.flush();
       return RoundOutcome(
-        questions: result.questions,
-        abortedBy: result.abortedBy,
-        abortMessage: result.abortMessage,
+        questions: usable ? result.questions : const <CalibrationQuestion>[],
+        abortedBy: usable ? null : result.abortedBy,
+        abortMessage: usable ? null : result.abortMessage,
       );
     } catch (error) {
       return RoundOutcome(

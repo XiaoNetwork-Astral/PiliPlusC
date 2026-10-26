@@ -86,3 +86,9 @@ class CalibrationQuestion {
 
 /// 去掉首尾空白并把连续空白折叠成一个空格
 String flattenText(String text) => text.replaceAll(RegExp(r'\s+'), ' ').trim();
+
+/// 一轮整理至少要凑出这么多道题才拿来答，不够就保留内容、不出题
+const int calibrationMinQuestions = 10;
+
+/// 一轮整理最多出这么多道题
+const int calibrationMaxQuestions = 20;
