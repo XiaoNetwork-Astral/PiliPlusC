@@ -154,7 +154,8 @@ class CalibrationService {
         baseUrl: Pref.cfLlmBaseUrl,
         apiKey: apiKey,
         model: Pref.cfLlmModel,
-        timeout: const Duration(seconds: 60),
+        // 开着最高强度思考，一批可能要想一两分钟
+        timeout: const Duration(seconds: 240),
         proxy: _currentProxy(),
         onUsage: _recordLlmUsage,
       );

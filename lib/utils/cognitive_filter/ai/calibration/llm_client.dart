@@ -119,6 +119,7 @@ class LlmClient {
       const <LlmMessage>[LlmMessage(role: 'user', content: '回复 ok')],
       maxTokens: 16,
       useJsonMode: false,
+      think: false,
     );
   }
 
@@ -126,6 +127,7 @@ class LlmClient {
     List<LlmMessage> messages, {
     int? maxTokens,
     bool? useJsonMode,
+    bool think = true,
   }) async {
     final key = apiKey.trim();
     if (key.isEmpty) {
@@ -141,16 +143,25 @@ class LlmClient {
       'temperature': temperature,
       'stream': false,
     };
-    if (useJsonMode ?? jsonMode) {
+    // DeepSeek 官方接口：整理用最高强度的思考，小模型不想清楚归不好类；
+    // 测试连接只发一个很小的请求，思考会占满输出额度让正文为空，所以关掉。
+    // 开着思考时不发 JSON 模式（文档没说两者能同时用），回复由解析器宽松处理。
+    // 其它服务商不认这些字段，一概不发
+    final deepseek =
+        Uri.tryParse(baseUrl.trim())?.host.endsWith('deepseek.com') ?? false;
+    if (deepseek) {
+      if (think) {
+        body['thinking'] = const <String, dynamic>{'type': 'enabled'};
+        body['reasoning_effort'] = 'max';
+      } else {
+        body['thinking'] = const <String, dynamic>{'type': 'disabled'};
+      }
+    }
+    if ((useJsonMode ?? jsonMode) && !(deepseek && think)) {
       body['response_format'] = const <String, dynamic>{'type': 'json_object'};
     }
     if (maxTokens != null) {
       body['max_tokens'] = maxTokens;
-    }
-    // DeepSeek 默认开启思考，思考会占满输出额度导致正文为空，归类也用不着，
-    // 所以官方接口一律关掉；其它服务商不认这个字段，不发
-    if (Uri.tryParse(baseUrl.trim())?.host.endsWith('deepseek.com') ?? false) {
-      body['thinking'] = const <String, dynamic>{'type': 'disabled'};
     }
 
     try {

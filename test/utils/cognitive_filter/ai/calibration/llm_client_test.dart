@@ -157,28 +157,38 @@ void main() {
       expect((messages.single as Map<String, dynamic>)['content'], '回复 ok');
     });
 
-    test('只有 DeepSeek 官方地址才带关闭思考的字段', () async {
-      final deepseekAdapter = _FakeAdapter((_) async => _okContent('ok'));
-      final deepseekDio = Dio()..httpClientAdapter = deepseekAdapter;
-      await LlmClient(
+    test('DeepSeek 官方地址：整理开最高思考且不发 JSON 模式，测试关思考', () async {
+      final chatAdapter = _FakeAdapter((_) async => _okContent('ok'));
+      LlmClient deepseek(_FakeAdapter adapter) => LlmClient(
         baseUrl: 'https://api.deepseek.com',
         apiKey: 'sk-test-secret',
         model: 'deepseek-flash',
-        dio: deepseekDio,
-      ).chat(const <LlmMessage>[LlmMessage(role: 'user', content: '你好')]);
-      expect(
-        _bodyOf(deepseekAdapter.requests.single)['thinking'],
-        {'type': 'disabled'},
+        dio: Dio()..httpClientAdapter = adapter,
       );
+      await deepseek(chatAdapter).chat(
+        const <LlmMessage>[LlmMessage(role: 'user', content: '你好')],
+      );
+      final chatBody = _bodyOf(chatAdapter.requests.single);
+      expect(chatBody['thinking'], {'type': 'enabled'});
+      expect(chatBody['reasoning_effort'], 'max');
+      expect(chatBody.containsKey('response_format'), isFalse);
 
+      final testAdapter = _FakeAdapter((_) async => _okContent('ok'));
+      await deepseek(testAdapter).test();
+      final testBody = _bodyOf(testAdapter.requests.single);
+      expect(testBody['thinking'], {'type': 'disabled'});
+      expect(testBody.containsKey('reasoning_effort'), isFalse);
+    });
+
+    test('其它服务商不发思考字段，照常带 JSON 模式', () async {
       final otherAdapter = _FakeAdapter((_) async => _okContent('ok'));
       await _client(otherAdapter).chat(
         const <LlmMessage>[LlmMessage(role: 'user', content: '你好')],
       );
-      expect(
-        _bodyOf(otherAdapter.requests.single).containsKey('thinking'),
-        isFalse,
-      );
+      final body = _bodyOf(otherAdapter.requests.single);
+      expect(body.containsKey('thinking'), isFalse);
+      expect(body.containsKey('reasoning_effort'), isFalse);
+      expect(body['response_format'], {'type': 'json_object'});
     });
 
     test('空密钥直接抛 auth 且不发请求', () async {
