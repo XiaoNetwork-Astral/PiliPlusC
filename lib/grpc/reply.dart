@@ -128,11 +128,21 @@ abstract final class ReplyGrpc {
     return snap.userBlocked(
           reply.mid.toInt(),
           text: reply.content.message,
+          detail: () => (
+            meta: _replyMeta(reply),
+            snapshot: _replySnapshot(reply),
+          ),
         ) ||
         _blockReplyAtCount(reply) ||
         _blockAtOnlyReply(reply) ||
         (antiGoodsReply && _needRemoveGoodGrpc(reply)) ||
-        snap.matchText(reply.content.message);
+        snap.matchText(
+          reply.content.message,
+          detail: () => (
+            meta: _replyMeta(reply),
+            snapshot: _replySnapshot(reply),
+          ),
+        );
   }
 
   /// 把选中文本添加为 reply 范围的关键词规则

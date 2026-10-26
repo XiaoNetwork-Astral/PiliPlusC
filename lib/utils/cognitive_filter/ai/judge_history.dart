@@ -143,7 +143,7 @@ class JudgeHistoryEntry {
 class JudgeHistory {
   JudgeHistory({this.capacity = 300}) : assert(capacity > 0);
 
-  /// 只保留最近这么多条 AI 条目的重快照
+  /// 每种条目只保留最近这么多条的重快照
   static const int _snapshotWindow = 100;
 
   final int capacity;
@@ -166,15 +166,13 @@ class JudgeHistory {
     _dirty = true;
   }
 
-  /// 超出保留窗口的 AI 条目丢掉重快照，meta 与 scores 不动
+  /// AI 条目与规则条目各自只保留最近这么多条的重快照，meta 与 scores 不动
   void _trimSnapshots() {
     var aiCount = 0;
+    var ruleCount = 0;
     for (final entry in _entries) {
-      if (entry.isRule) {
-        continue;
-      }
-      aiCount++;
-      if (aiCount > _snapshotWindow) {
+      final count = entry.isRule ? ++ruleCount : ++aiCount;
+      if (count > _snapshotWindow) {
         entry.dropSnapshot();
       }
     }

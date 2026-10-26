@@ -5,6 +5,7 @@ import 'package:PiliPlus/models/model_avatar.dart';
 import 'package:PiliPlus/models/model_owner.dart';
 import 'package:PiliPlus/models/model_video.dart';
 import 'package:PiliPlus/models/search/search_esports.dart';
+import 'package:PiliPlus/utils/cognitive_filter/ai/ai_runtime.dart';
 import 'package:PiliPlus/utils/cognitive_filter/rule_engine.dart';
 import 'package:PiliPlus/utils/duration_utils.dart';
 import 'package:PiliPlus/utils/em.dart';
@@ -22,8 +23,12 @@ abstract class SearchNumData<T> {
   List<T>? list;
 }
 
-bool _midBlocked(RuleSnapshot snap, Object? mid, {String? text}) =>
-    mid is int && snap.userBlocked(mid, text: text);
+bool _midBlocked(
+  RuleSnapshot snap,
+  Object? mid, {
+  String? text,
+  RuleBlockDetail Function()? detail,
+}) => mid is int && snap.userBlocked(mid, text: text, detail: detail);
 
 String? _firstString(Object? value) => value is String ? value : null;
 
@@ -36,17 +41,66 @@ bool _searchItemBlocked(
   if (e is! Map) return false;
   final mid = e['mid'] ?? e['uid'];
   if (e['type'] != 'live_room') {
-    return _midBlocked(videoSnap, mid, text: _firstString(e['title']));
+    Map<String, dynamic> videoMeta() {
+      final bvid = e['bvid'];
+      final aid = e['aid'];
+      final rawTitle = e['title'];
+      final title = rawTitle is String
+          ? Em.regTitle(rawTitle).map((t) => t.text).join()
+          : '';
+      final uname = e['author'];
+      final cover = e['pic'];
+      return <String, dynamic>{
+        'type': 'video',
+        if (bvid != null) 'bvid': bvid,
+        if (aid != null) 'aid': aid,
+        if (title.isNotEmpty) 'title': title,
+        if (uname is String && uname.isNotEmpty) 'uname': uname,
+        if (mid is int) 'mid': mid,
+        if (cover is String && cover.isNotEmpty) 'cover': cover,
+      };
+    }
+    RuleBlockDetail videoDetail() => (
+      meta: videoMeta(),
+      snapshot: <String, dynamic>{
+        'json': Map<String, dynamic>.from(e),
+        'model': 'SearchVideoItemModel',
+      },
+    );
+    return _midBlocked(
+      videoSnap,
+      mid,
+      text: _firstString(e['title']),
+      detail: videoDetail,
+    );
   }
   final author = e['author'] ?? e['uname'];
-  final title = e['title'];
+  final rawTitle = e['title'];
+  final title = rawTitle is String
+      ? Em.regTitle(rawTitle).map((t) => t.text).join()
+      : '';
   final cate = e['cate_name'] ?? e['area_name'];
-  return _midBlocked(liveSnap, mid, text: _firstString(author)) ||
-      (author is String && liveSnap.matchText(author)) ||
-      liveSnap.matchText(
-        title is String ? Em.regTitle(title).map((t) => t.text).join() : '',
+  final cover = e['cover'];
+  RuleBlockDetail liveDetail() => (
+    meta: <String, dynamic>{
+      'type': 'live',
+      if (e['roomid'] != null) 'roomId': e['roomid'],
+      if (title.isNotEmpty) 'title': title,
+      if (author is String && author.isNotEmpty) 'uname': author,
+      if (cover is String && cover.isNotEmpty) 'cover': cover,
+    },
+    snapshot: null,
+  );
+  return _midBlocked(
+        liveSnap,
+        mid,
+        text: _firstString(author),
+        detail: liveDetail,
       ) ||
-      (cate is String && liveSnap.matchText(cate));
+      (author is String &&
+          liveSnap.matchText(author, detail: liveDetail)) ||
+      liveSnap.matchText(title, detail: liveDetail) ||
+      (cate is String && liveSnap.matchText(cate, detail: liveDetail));
 }
 
 class SearchVideoData extends SearchNumData<SearchVideoItemModel> {
@@ -441,11 +495,25 @@ class SearchLiveItemModel {
   }
 
   /// 标题、主播名、分区名或主播 UID 任一命中即剔除
-  bool blockedBy(RuleSnapshot snap) =>
-      snap.userBlocked(uid ?? 0, text: uname) ||
-      snap.matchText(uname ?? '') ||
-      snap.matchText(cateName ?? '') ||
-      snap.matchText(title.map((e) => e.text).join());
+  bool blockedBy(RuleSnapshot snap) {
+    RuleBlockDetail liveDetail() => (
+      meta: <String, dynamic>{
+        'type': 'live',
+        if (roomid != null) 'roomId': roomid,
+        if (title.isNotEmpty) 'title': title.map((e) => e.text).join(),
+        if (uname != null && uname!.isNotEmpty) 'uname': uname,
+        if (cover != null && cover!.isNotEmpty) 'cover': cover,
+      },
+      snapshot: null,
+    );
+    return snap.userBlocked(uid ?? 0, text: uname, detail: liveDetail) ||
+        snap.matchText(uname ?? '', detail: liveDetail) ||
+        snap.matchText(cateName ?? '', detail: liveDetail) ||
+        snap.matchText(
+          title.map((e) => e.text).join(),
+          detail: liveDetail,
+        );
+  }
 }
 
 class SearchPgcData extends SearchNumData<SearchPgcItemModel> {

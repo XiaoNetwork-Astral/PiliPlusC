@@ -33,6 +33,24 @@ class DynamicsDataModel {
         _getArcTitle(moduleDynamic?.major);
   }
 
+  /// 动态屏蔽历史用的简单摘要，AI 与规则路径共用
+  static Map<String, dynamic> blockMeta(DynamicItemModel item) {
+    final author = item.modules.moduleAuthor;
+    final dynamicModule = item.modules.moduleDynamic;
+    final title =
+        dynamicModule?.major?.opus?.title ?? dynamicModule?.major?.archive?.title;
+    final uname = author?.name;
+    final mid = author?.mid;
+    return <String, dynamic>{
+      'type': 'dynamic',
+      if (item.idStr != null) 'id': '${item.idStr}',
+      if (uname != null && uname.isNotEmpty) 'uname': uname,
+      if (mid != null) 'mid': mid,
+      if (title != null && title.isNotEmpty) 'title': title,
+      'text': matchText(item),
+    };
+  }
+
   static String _getArcTitle(DynamicMajorModel? major) {
     final title = switch (major?.type) {
       'MAJOR_TYPE_ARCHIVE' => major?.archive?.title,
@@ -71,11 +89,33 @@ class DynamicsDataModel {
           continue;
         }
         if (item.orig case final orig?) {
-          if (snap.matchText(matchText(orig))) {
+          if (snap.matchText(
+            matchText(orig),
+            detail: () {
+              final rawOrig = e is Map && e['orig'] is Map
+                  ? Map<String, dynamic>.from(e['orig'] as Map)
+                  : null;
+              return (
+                meta: blockMeta(orig),
+                snapshot: rawOrig == null ? null : {'json': rawOrig},
+              );
+            },
+          )) {
             continue;
           }
         }
-        if (snap.matchText(matchText(item))) {
+        if (snap.matchText(
+          matchText(item),
+          detail: () {
+            final rawItem = e is Map
+                ? Map<String, dynamic>.from(e)
+                : null;
+            return (
+              meta: blockMeta(item),
+              snapshot: rawItem == null ? null : {'json': rawItem},
+            );
+          },
+        )) {
           continue;
         }
         if (filterBan &&

@@ -79,33 +79,50 @@ class RuleSnapshot {
   final RuleSet? _text;
   final UserRuleSet? _users;
 
-  bool matchText(String text) {
+  /// [detail] 只在命中并确定要写入历史时才调用
+  bool matchText(String text, {RuleBlockDetail Function()? detail}) {
     if (text.isEmpty) return false;
     final rule = _text?.firstMatch(text);
     if (rule == null) return false;
-    _record(rule, text);
+    _record(rule, text, detail);
     return true;
   }
 
   /// [text] 是命中的内容，拿不到时记录 UID
-  bool userBlocked(int mid, {String? text}) {
+  bool userBlocked(
+    int mid, {
+    String? text,
+    RuleBlockDetail Function()? detail,
+  }) {
     if (mid <= 0) return false;
     final rule = _users?.ruleOfMid(mid);
     if (rule == null) return false;
-    _record(rule, text == null || text.isEmpty ? mid.toString() : text);
+    _record(rule, text == null || text.isEmpty ? mid.toString() : text, detail);
     return true;
   }
 
   /// [text] 是命中的弹幕内容，拿不到时记录固定说明
-  bool hashBlocked(String midHash, {String? text}) {
+  bool hashBlocked(
+    String midHash, {
+    String? text,
+    RuleBlockDetail Function()? detail,
+  }) {
     if (midHash.isEmpty) return false;
     final rule = _users?.ruleOfHash(midHash);
     if (rule == null) return false;
-    _record(rule, text == null || text.isEmpty ? 'B 站弹幕用户' : text);
+    _record(
+      rule,
+      text == null || text.isEmpty ? 'B 站弹幕用户' : text,
+      detail,
+    );
     return true;
   }
 
-  void _record(FilterRule rule, String text) {
+  void _record(
+    FilterRule rule,
+    String text,
+    RuleBlockDetail Function()? detail,
+  ) {
     final surface = _surfaceOf(_scope);
     if (surface == null) return;
     AiFilterRuntime.instance.recordRuleBlock(
@@ -116,6 +133,7 @@ class RuleSnapshot {
           ? 'B 站弹幕用户${_hashPrefix(rule.midHash!)}'
           : rule.content,
       ruleId: rule.id,
+      detail: detail,
     );
   }
 }

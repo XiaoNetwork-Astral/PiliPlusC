@@ -71,6 +71,7 @@ class _JudgeHistoryDetailPageState extends State<JudgeHistoryDetailPage>
     )..addStatusListener((status) {
       if (status == AnimationStatus.completed && mounted) {
         setState(() => _danmakuDone = true);
+        _previewKey.currentState?.pause();
       }
     });
     _buildSnapshot();
@@ -437,15 +438,21 @@ class _JudgeHistoryDetailPageState extends State<JudgeHistoryDetailPage>
     final color = rawColor == null || rawColor == 0
         ? Colors.white
         : Color(0xFF000000 | (rawColor & 0xFFFFFF));
+    final mode = _int('mode');
+    final textStyle = TextStyle(color: color, fontSize: 18);
     final danmakuLayer = AnimatedBuilder(
       animation: _danmakuAnimation,
       builder: (context, _) {
         if (_danmakuDone) {
-          return Center(
-            child: Text(
-              _entry.text,
-              textAlign: TextAlign.center,
-              style: TextStyle(color: color, fontSize: 18),
+          return const SizedBox.shrink();
+        }
+        // 4 底部、5 顶部的弹幕固定不动，其余从右往左滚
+        if (mode == 4 || mode == 5) {
+          return Align(
+            alignment: mode == 5 ? Alignment.topCenter : Alignment.bottomCenter,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Text(_entry.text, style: textStyle),
             ),
           );
         }
@@ -460,10 +467,7 @@ class _JudgeHistoryDetailPageState extends State<JudgeHistoryDetailPage>
                   top: 0,
                   bottom: 0,
                   child: Center(
-                    child: Text(
-                      _entry.text,
-                      style: TextStyle(color: color, fontSize: 18),
-                    ),
+                    child: Text(_entry.text, style: textStyle),
                   ),
                 ),
               ],
@@ -508,10 +512,15 @@ class _JudgeHistoryDetailPageState extends State<JudgeHistoryDetailPage>
                     IgnorePointer(
                       child: DecoratedBox(
                         decoration: BoxDecoration(
+                          color: Colors.black54,
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: theme.colorScheme.primary,
-                            width: 2,
+                          border: Border.all(color: Colors.amber, width: 2),
+                        ),
+                        child: const Center(
+                          child: Icon(
+                            Icons.replay_rounded,
+                            size: 48,
+                            color: Colors.white,
                           ),
                         ),
                       ),

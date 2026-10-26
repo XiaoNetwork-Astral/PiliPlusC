@@ -1,4 +1,5 @@
 import 'package:PiliPlus/models/model_video.dart';
+import 'package:PiliPlus/utils/cognitive_filter/ai/ai_runtime.dart';
 import 'package:PiliPlus/utils/cognitive_filter/rule_engine.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
 
@@ -14,12 +15,13 @@ abstract final class RecommendFilter {
     BaseVideoItemModel videoItem,
     RuleSnapshot snap, {
     required bool enabled,
+    RuleBlockDetail Function()? detail,
   }) {
     //由于相关视频中没有已关注标签，只能视为非关注视频
     if (videoItem.isFollowed && exemptFilterForFollowed) {
       return false;
     }
-    return filterAll(videoItem, snap, enabled: enabled);
+    return filterAll(videoItem, snap, enabled: enabled, detail: detail);
   }
 
   /// hot/rank/[filterAll]
@@ -32,8 +34,11 @@ abstract final class RecommendFilter {
   }
 
   /// hot/rank/[filterAll]
-  static bool filterTitle(String title, RuleSnapshot snap) =>
-      snap.matchText(title);
+  static bool filterTitle(
+    String title,
+    RuleSnapshot snap, {
+    RuleBlockDetail Function()? detail,
+  }) => snap.matchText(title, detail: detail);
 
   /// [filterAll]
   static bool filterDuration(int duration) =>
@@ -44,10 +49,11 @@ abstract final class RecommendFilter {
     BaseVideoItemModel videoItem,
     RuleSnapshot snap, {
     required bool enabled,
+    RuleBlockDetail Function()? detail,
   }) {
     if (!enabled) return false;
     return filterDuration(videoItem.duration) ||
         filterLikeRatio(videoItem.stat.like, videoItem.stat.view) ||
-        filterTitle(videoItem.title, snap);
+        filterTitle(videoItem.title, snap, detail: detail);
   }
 }

@@ -78,6 +78,17 @@ class DanmakuPreviewPlayerState extends State<DanmakuPreviewPlayer> {
     unawaited(player.dispose());
   }
 
+  /// 弹幕走完后暂停视频，停在当前画面
+  void pause() {
+    final player = _player;
+    if (_disposed || player == null) {
+      return;
+    }
+    unawaited(
+      player.pause().timeout(const Duration(seconds: 8)).catchError((_) {}),
+    );
+  }
+
   /// 点击画布重播：回到弹幕出现的时间点，再通知上层重播动画
   void replay() {
     if (_disposed) {

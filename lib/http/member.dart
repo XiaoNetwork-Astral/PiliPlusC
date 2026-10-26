@@ -42,22 +42,8 @@ import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 
 abstract final class MemberHttp {
   /// 动态的简单快照，键与值都是简单类型
-  static Map<String, dynamic> _dynamicMeta(DynamicItemModel item) {
-    final author = item.modules.moduleAuthor;
-    final dynamicModule = item.modules.moduleDynamic;
-    final title =
-        dynamicModule?.major?.opus?.title ?? dynamicModule?.major?.archive?.title;
-    final uname = author?.name;
-    final mid = author?.mid;
-    return <String, dynamic>{
-      'type': 'dynamic',
-      if (item.idStr != null) 'id': '${item.idStr}',
-      if (uname != null && uname.isNotEmpty) 'uname': uname,
-      if (mid != null) 'mid': mid,
-      if (title != null && title.isNotEmpty) 'title': title,
-      'text': DynamicsDataModel.matchText(item),
-    };
-  }
+  static Map<String, dynamic> _dynamicMeta(DynamicItemModel item) =>
+      DynamicsDataModel.blockMeta(item);
 
   /// 从原始响应里按动态 id 收集 JSON，供屏蔽时做快照
   static Map<String, Map<String, dynamic>> _rawDynamicItemsOf(Object? data) {

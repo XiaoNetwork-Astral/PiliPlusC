@@ -69,8 +69,21 @@ class PlDanmakuController {
       list.removeWhere(
         (element) =>
             !element.isSelf &&
-            (snap.matchText(element.content) ||
-                snap.hashBlocked(element.midHash, text: element.content)),
+            (snap.matchText(
+                  element.content,
+                  detail: () => (
+                    meta: _danmakuMeta(element),
+                    snapshot: null,
+                  ),
+                ) ||
+                snap.hashBlocked(
+                  element.midHash,
+                  text: element.content,
+                  detail: () => (
+                    meta: _danmakuMeta(element),
+                    snapshot: null,
+                  ),
+                )),
       );
     }
   }
@@ -124,8 +137,21 @@ class PlDanmakuController {
           }
         }
 
-        if (snap.matchText(element.content) ||
-            snap.hashBlocked(element.midHash, text: element.content)) {
+        if (snap.matchText(
+              element.content,
+              detail: () => (
+                meta: _danmakuMeta(element),
+                snapshot: null,
+              ),
+            ) ||
+            snap.hashBlocked(
+              element.midHash,
+              text: element.content,
+              detail: () => (
+                meta: _danmakuMeta(element),
+                snapshot: null,
+              ),
+            )) {
           continue;
         }
       }
@@ -180,7 +206,6 @@ class PlDanmakuController {
     var passed = chunk;
     try {
       final ids = _judgeIds(chunk);
-      final (videoTitle, partition) = _judgeContextParts();
       final result = await AiFilterRuntime.instance.judge(
         surface: FilterSurface.danmaku,
         items: <JudgeItem>[
@@ -189,17 +214,7 @@ class PlDanmakuController {
               id: ids[i],
               text: chunk[i].content,
               midHash: chunk[i].midHash,
-              meta: <String, dynamic>{
-                'type': 'danmaku',
-                if (videoTitle.isNotEmpty) 'videoTitle': videoTitle,
-                if (partition.isNotEmpty) 'partition': partition,
-                'progressMs': chunk[i].progress,
-                'cid': _cid,
-                ..._judgeSource(),
-                if (chunk[i].midHash.isNotEmpty) 'midHash': chunk[i].midHash,
-                if (chunk[i].color != 0) 'color': chunk[i].color,
-                if (chunk[i].mode != 0) 'mode': chunk[i].mode,
-              },
+              meta: _danmakuMeta(chunk[i]),
             ),
         ],
         title: title,
@@ -250,6 +265,22 @@ class PlDanmakuController {
   String _judgeBackground() {
     final (title, partition) = _judgeContextParts();
     return partition.isEmpty ? title : '$title（分区：$partition）';
+  }
+
+  /// 弹幕屏蔽历史用的摘要，AI 判定与规则命中共用
+  Map<String, dynamic> _danmakuMeta(DanmakuElem element) {
+    final (videoTitle, partition) = _judgeContextParts();
+    return <String, dynamic>{
+      'type': 'danmaku',
+      if (videoTitle.isNotEmpty) 'videoTitle': videoTitle,
+      if (partition.isNotEmpty) 'partition': partition,
+      'progressMs': element.progress,
+      'cid': _cid,
+      ..._judgeSource(),
+      if (element.midHash.isNotEmpty) 'midHash': element.midHash,
+      if (element.color != 0) 'color': element.color,
+      if (element.mode != 0) 'mode': element.mode,
+    };
   }
 
   /// 能定位到视频的信息，取不到时为空

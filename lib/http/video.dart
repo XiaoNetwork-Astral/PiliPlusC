@@ -32,6 +32,7 @@ import 'package:PiliPlus/models_new/video/video_relation/data.dart';
 import 'package:PiliPlus/models_new/video/video_shot/data.dart';
 import 'package:PiliPlus/utils/accounts.dart';
 import 'package:PiliPlus/utils/app_sign.dart';
+import 'package:PiliPlus/utils/cognitive_filter/ai/ai_runtime.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai_filter_helper.dart';
 import 'package:PiliPlus/utils/cognitive_filter/rule_engine.dart';
 import 'package:PiliPlus/utils/extension/string_ext.dart';
@@ -49,8 +50,12 @@ import 'package:protobuf/protobuf.dart';
 
 /// view层根据 status 判断渲染逻辑
 abstract final class VideoHttp {
-  static bool _blocked(dynamic mid, RuleSnapshot snap, {String? text}) =>
-      mid is int && snap.userBlocked(mid, text: text);
+  static bool _blocked(
+    dynamic mid,
+    RuleSnapshot snap, {
+    String? text,
+    RuleBlockDetail Function()? detail,
+  }) => mid is int && snap.userBlocked(mid, text: text, detail: detail);
 
   static String? _textOf(Object? value) => value is String ? value : null;
 
@@ -120,6 +125,13 @@ abstract final class VideoHttp {
           videoItem,
           snap,
           enabled: enabled,
+          detail: () => (
+            meta: _videoMeta(videoItem),
+            snapshot: _videoSnapshot(
+              i is Map ? Map<String, dynamic>.from(i) : null,
+              'RcmdVideoItemModel',
+            ),
+          ),
         )) {
           list.add(videoItem);
           if (i is Map) {
@@ -144,7 +156,18 @@ abstract final class VideoHttp {
 
   static bool _filterWebRcmd(dynamic i, RuleSnapshot snap) {
     if (i['goto'] != 'av') return true;
-    if (_blocked(i['owner']?['mid'], snap, text: _textOf(i['title']))) {
+    if (_blocked(
+      i['owner']?['mid'],
+      snap,
+      text: _textOf(i['title']),
+      detail: () => (
+        meta: _videoMeta(RcmdVideoItemModel.fromJson(i)),
+        snapshot: _videoSnapshot(
+          i is Map ? Map<String, dynamic>.from(i) : null,
+          'RcmdVideoItemModel',
+        ),
+      ),
+    )) {
       return true;
     }
     return false;
@@ -157,11 +180,25 @@ abstract final class VideoHttp {
         i['can_play'] != 1) {
       return true;
     }
-    if (_blocked(i['args']?['up_id'], snap, text: _textOf(i['title']))) {
+    RuleBlockDetail appDetail() => (
+      meta: _videoMeta(RcmdVideoItemAppModel.fromJson(i)),
+      snapshot: _videoSnapshot(
+        i is Map ? Map<String, dynamic>.from(i) : null,
+        'RcmdVideoItemAppModel',
+      ),
+    );
+    if (_blocked(
+      i['args']?['up_id'],
+      snap,
+      text: _textOf(i['title']),
+      detail: appDetail,
+    )) {
       return true;
     }
     if (i['args']?['tname'] case final String tname
-        when RuleEngine.instance.matchText(RuleScope.zone, tname)) {
+        when RuleEngine.instance
+            .snapshot(RuleScope.zone)
+            .matchText(tname, detail: appDetail)) {
       return true;
     }
     return false;
@@ -232,6 +269,13 @@ abstract final class VideoHttp {
           videoItem,
           snap,
           enabled: enabled,
+          detail: () => (
+            meta: _videoMeta(videoItem),
+            snapshot: _videoSnapshot(
+              i is Map ? Map<String, dynamic>.from(i) : null,
+              'RcmdVideoItemAppModel',
+            ),
+          ),
         )) {
           list.add(videoItem);
           if (i is Map) {
@@ -259,11 +303,23 @@ abstract final class VideoHttp {
     RuleSnapshot snap,
     bool enabled,
   ) {
-    if (_blocked(i['owner']?['mid'], snap, text: _textOf(i['title']))) {
+    RuleBlockDetail hotDetail() => (
+      meta: _videoMeta(HotVideoItemModel.fromJson(i)),
+      snapshot: _videoSnapshot(
+        i is Map ? Map<String, dynamic>.from(i) : null,
+        'HotVideoItemModel',
+      ),
+    );
+    if (_blocked(
+      i['owner']?['mid'],
+      snap,
+      text: _textOf(i['title']),
+      detail: hotDetail,
+    )) {
       return false;
     }
     if (i['title'] case final String title
-        when RecommendFilter.filterTitle(title, snap)) {
+        when RecommendFilter.filterTitle(title, snap, detail: hotDetail)) {
       return false;
     }
     if (enabled &&
@@ -271,7 +327,9 @@ abstract final class VideoHttp {
       return false;
     }
     if (i['tname'] case final String tname
-        when RuleEngine.instance.matchText(RuleScope.zone, tname)) {
+        when RuleEngine.instance
+            .snapshot(RuleScope.zone)
+            .matchText(tname, detail: hotDetail)) {
       return false;
     }
     return true;
@@ -483,6 +541,13 @@ abstract final class VideoHttp {
               e['owner']?['mid'],
               snap,
               text: _textOf(e['title']),
+              detail: () => (
+                meta: _videoMeta(HotVideoItemModel.fromJson(e)),
+                snapshot: _videoSnapshot(
+                  e is Map ? Map<String, dynamic>.from(e) : null,
+                  'HotVideoItemModel',
+                ),
+              ),
             ),
           )
           .map((i) {
@@ -496,7 +561,15 @@ abstract final class VideoHttp {
       if (enabled && RecommendFilter.applyFilterToRelatedVideos) {
         list = items
             ?.where(
-              (i) => !RecommendFilter.filterAll(i, snap, enabled: enabled),
+              (i) => !RecommendFilter.filterAll(
+                i,
+                snap,
+                enabled: enabled,
+                detail: () => (
+                  meta: _videoMeta(i),
+                  snapshot: _videoSnapshot(rawByItem[i], 'HotVideoItemModel'),
+                ),
+              ),
             )
             .toList();
       } else {

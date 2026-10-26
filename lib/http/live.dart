@@ -29,6 +29,7 @@ import 'package:PiliPlus/models_new/live/live_superchat/data.dart';
 import 'package:PiliPlus/utils/accounts.dart';
 import 'package:PiliPlus/utils/accounts/account.dart';
 import 'package:PiliPlus/utils/app_sign.dart';
+import 'package:PiliPlus/utils/cognitive_filter/ai/ai_runtime.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai_filter_helper.dart';
 import 'package:PiliPlus/utils/cognitive_filter/rule_engine.dart';
 import 'package:PiliPlus/utils/wbi_sign.dart';
@@ -44,11 +45,16 @@ abstract final class LiveHttp {
     String? uname,
     String? areaName,
     int? uid,
+    RuleBlockDetail Function()? detail,
   }) =>
-      snap.matchText(title ?? '') ||
-      snap.matchText(uname ?? '') ||
-      snap.matchText(areaName ?? '') ||
-      snap.userBlocked(uid ?? 0, text: title ?? uname ?? areaName);
+      snap.matchText(title ?? '', detail: detail) ||
+      snap.matchText(uname ?? '', detail: detail) ||
+      snap.matchText(areaName ?? '', detail: detail) ||
+      snap.userBlocked(
+        uid ?? 0,
+        text: title ?? uname ?? areaName,
+        detail: detail,
+      );
 
   /// 直播卡片判定文本：标题（主播：xxx）
   static String _liveText(String? title, String? uname) {
@@ -291,6 +297,15 @@ abstract final class LiveHttp {
               uname: item.uname,
               areaName: item.areaName,
               uid: item.uid,
+              detail: () => (
+                meta: _liveMeta(
+                  roomId: item.roomid,
+                  title: item.title,
+                  uname: item.uname,
+                  cover: item.cover,
+                ),
+                snapshot: null,
+              ),
             );
       });
       // 顶部关注直播行同样是直播间列表
@@ -301,6 +316,15 @@ abstract final class LiveHttp {
           uname: e.uname,
           areaName: e.areaName,
           uid: e.uid,
+          detail: () => (
+            meta: _liveMeta(
+              roomId: e.roomid,
+              title: e.title,
+              uname: e.uname,
+              cover: e.cover,
+            ),
+            snapshot: null,
+          ),
         ),
       );
       final cards = data.cardList;
@@ -373,6 +397,15 @@ abstract final class LiveHttp {
           uname: e.uname,
           areaName: e.areaName,
           uid: e.uid,
+          detail: () => (
+            meta: _liveMeta(
+              roomId: e.roomid,
+              title: e.title,
+              uname: e.uname,
+              cover: e.roomCover,
+            ),
+            snapshot: null,
+          ),
         ),
       );
       final list = data.list;
@@ -463,6 +496,15 @@ abstract final class LiveHttp {
           uname: e.uname,
           areaName: e.areaName,
           uid: e.uid,
+          detail: () => (
+            meta: _liveMeta(
+              roomId: e.roomid,
+              title: e.title,
+              uname: e.uname,
+              cover: e.cover,
+            ),
+            snapshot: null,
+          ),
         ),
       );
       final cards = data.cardList;
@@ -657,6 +699,15 @@ abstract final class LiveHttp {
           uname: e.name,
           areaName: e.areaName,
           uid: e.uid,
+          detail: () => (
+            meta: _liveMeta(
+              roomId: e.roomid,
+              title: e.title,
+              uname: e.name,
+              cover: e.cover,
+            ),
+            snapshot: null,
+          ),
         ),
       );
       final rooms = data.room?.list;

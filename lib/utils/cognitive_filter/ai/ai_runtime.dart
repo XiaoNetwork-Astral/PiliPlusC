@@ -65,6 +65,12 @@ class FileJudgeCacheStore implements JudgeCacheStore {
   Future<void> write(String json) => _file.write(json);
 }
 
+/// 屏蔽历史详情用的内容：[meta] 是简单摘要，[snapshot] 是还原原貌用的原始数据
+typedef RuleBlockDetail = ({
+  Map<String, dynamic>? meta,
+  Map<String, dynamic>? snapshot,
+});
+
 /// 认知滤网 AI 屏蔽的运行时接线
 class AiFilterRuntime {
   AiFilterRuntime._();
@@ -444,6 +450,7 @@ class AiFilterRuntime {
     required String ruleType,
     required String content,
     String? ruleId,
+    RuleBlockDetail Function()? detail,
   }) {
     // 统计按命中次数算，不受历史去重和限速影响
     BlockStats.instance.add();
@@ -471,6 +478,14 @@ class AiFilterRuntime {
       }
     }
     times.add(now);
+    RuleBlockDetail? built;
+    if (detail != null) {
+      try {
+        built = detail();
+      } catch (_) {
+        // 详情失败不影响屏蔽与历史
+      }
+    }
     history.add(
       JudgeHistoryEntry(
         time: now,
@@ -481,6 +496,10 @@ class AiFilterRuntime {
         label: content,
         ruleType: ruleType,
         ruleId: ruleId,
+        meta: built?.meta,
+        snapshot: built?.snapshot == null || built!.snapshot!.isEmpty
+            ? null
+            : built.snapshot,
       ),
     );
     _scheduleFlush();

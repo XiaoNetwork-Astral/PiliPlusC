@@ -31,7 +31,6 @@ Future<ExportWarningResult> showExportWarningDialog(
 
 class _ExportWarningDialog extends StatefulWidget {
   const _ExportWarningDialog({
-    super.key,
     required this.title,
     required this.summary,
     required this.points,
@@ -181,7 +180,6 @@ Future<String?> showArchivePasswordDialog(
 
 class _ArchivePasswordDialog extends StatefulWidget {
   const _ArchivePasswordDialog({
-    super.key,
     required this.validate,
     required this.wrongPassword,
   });

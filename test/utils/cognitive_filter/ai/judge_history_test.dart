@@ -172,21 +172,28 @@ void main() {
       expect(entries.every((entry) => entry.scores != null), isTrue);
     });
 
-    test('规则条目不占用快照窗口', () {
+    test('规则条目与 AI 条目各自有快照窗口', () {
       final history = JudgeHistory(capacity: 300);
       for (var i = 1; i <= 100; i++) {
         history.add(
           _entry('ai$i', snapshot: <String, dynamic>{'reply': '$i'}),
         );
       }
-      for (var i = 1; i <= 5; i++) {
-        history.add(_entry('rule$i', kind: JudgeHistoryEntry.rule));
+      for (var i = 1; i <= 105; i++) {
+        history.add(
+          _entry(
+            'rule$i',
+            kind: JudgeHistoryEntry.rule,
+            snapshot: <String, dynamic>{'reply': 'r$i'},
+          ),
+        );
       }
 
-      final snapshots = history.entries.where(
-        (entry) => entry.snapshot != null,
-      );
-      expect(snapshots.length, 100);
+      int count(bool rule) => history.entries
+          .where((entry) => entry.isRule == rule && entry.snapshot != null)
+          .length;
+      expect(count(false), 100);
+      expect(count(true), 100);
     });
 
     test('坏 JSON 当作空历史', () {

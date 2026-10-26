@@ -237,7 +237,6 @@ class _BackupPageState extends State<BackupPage> {
       SmartDialog.dismiss();
     }
     final backupSource = source;
-    if (backupSource == null) return;
 
     BackupPreview? preview;
     String password = BackupService.savedPasswordOf(_method);
