@@ -3,6 +3,7 @@ import 'package:PiliPlus/common/widgets/scaffold/simple_scaffold.dart';
 import 'package:PiliPlus/common/widgets/view_safe_area.dart';
 import 'package:PiliPlus/pages/cognitive_filter/widgets.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/ai_runtime.dart';
+import 'package:PiliPlus/utils/cognitive_filter/ai/ai_whitelist.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/judge_history.dart';
 import 'package:PiliPlus/utils/cognitive_filter/rule_store.dart';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
@@ -18,7 +19,7 @@ enum _HistoryFilter {
   final String label;
 }
 
-enum _EntryAction { copy, deleteRule }
+enum _EntryAction { copy, deleteRule, whitelist }
 
 /// 屏蔽历史
 ///
@@ -69,6 +70,8 @@ class _JudgeHistoryPageState extends State<JudgeHistoryPage> {
       case .deleteRule:
         final id = entry.ruleId;
         if (id != null) RuleStore.instance.remove(id);
+      case .whitelist:
+        AiWhitelist.instance.addKeywordFromText(entry.text);
     }
   }
 
@@ -129,6 +132,11 @@ class _JudgeHistoryPageState extends State<JudgeHistoryPage> {
               const PopupMenuItem(
                 value: _EntryAction.deleteRule,
                 child: Text('删除这条规则'),
+              ),
+            if (!entry.isRule)
+              const PopupMenuItem(
+                value: _EntryAction.whitelist,
+                child: Text('加入白名单'),
               ),
           ],
         ),

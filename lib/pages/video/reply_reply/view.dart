@@ -11,6 +11,8 @@ import 'package:PiliPlus/common/widgets/view_safe_area.dart';
 import 'package:PiliPlus/grpc/bilibili/main/community/reply/v1.pb.dart'
     show ReplyInfo;
 import 'package:PiliPlus/http/loading_state.dart';
+import 'package:PiliPlus/models/cognitive_filter/filter_surface.dart';
+import 'package:PiliPlus/pages/cognitive_filter/ai_reveal_item.dart';
 import 'package:PiliPlus/pages/common/slide/common_slide_page.dart';
 import 'package:PiliPlus/pages/video/reply/widgets/reply_item_grpc.dart';
 import 'package:PiliPlus/pages/video/reply_reply/controller.dart';
@@ -322,6 +324,18 @@ class _VideoReplyReplyPanelState extends State<VideoReplyReplyPanel>
   }
 
   Widget _replyItem(BuildContext context, ReplyInfo replyItem, int index) {
+    return AiRevealItem(
+      surface: FilterSurface.reply,
+      item: replyItem,
+      child: _buildReplyItem(context, replyItem, index),
+    );
+  }
+
+  Widget _buildReplyItem(
+    BuildContext context,
+    ReplyInfo replyItem,
+    int index,
+  ) {
     return ReplyItemGrpc(
       replyItem: replyItem,
       replyLevel: isDialogue ? 3 : 2,

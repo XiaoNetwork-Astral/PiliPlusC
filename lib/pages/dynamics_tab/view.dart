@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:PiliPlus/common/widgets/flutter/refresh_indicator.dart';
 import 'package:PiliPlus/common/widgets/loading_widget/http_error.dart';
 import 'package:PiliPlus/http/loading_state.dart';
+import 'package:PiliPlus/models/cognitive_filter/filter_surface.dart';
 import 'package:PiliPlus/models/common/dynamic/dynamics_type.dart';
 import 'package:PiliPlus/models/dynamics/result.dart';
+import 'package:PiliPlus/pages/cognitive_filter/ai_reveal_item.dart';
 import 'package:PiliPlus/pages/dynamics/controller.dart';
 import 'package:PiliPlus/pages/dynamics/widgets/dynamic_panel.dart';
 import 'package:PiliPlus/pages/dynamics_tab/controller.dart';
@@ -98,11 +100,15 @@ class _DynamicsTabPageState extends State<DynamicsTabPage>
       controller.onLoadMore();
     }
     final item = list[index];
-    return DynamicPanel(
+    return AiRevealItem(
+      surface: FilterSurface.dynamic,
       item: item,
-      onRemove: (idStr) => controller.onRemove(index, idStr),
-      onBlock: () => controller.onBlock(index),
-      onUnfold: () => controller.onUnfold(item, index),
+      child: DynamicPanel(
+        item: item,
+        onRemove: (idStr) => controller.onRemove(index, idStr),
+        onBlock: () => controller.onBlock(index),
+        onUnfold: () => controller.onUnfold(item, index),
+      ),
     );
   }
 }

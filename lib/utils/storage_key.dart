@@ -307,7 +307,8 @@ abstract final class SettingBoxKey {
       cfAiUsageItems = 'cfAiUsageItems',
       cfRuleList = 'cfRuleList',
       cfRuleUserExtras = 'cfRuleUserExtras',
-      cfRuleMigrationDone = 'cfRuleMigrationDone';
+      cfRuleMigrationDone = 'cfRuleMigrationDone',
+      cfAiWhitelist = 'cfAiWhitelist';
 }
 
 abstract final class LocalCacheKey {

@@ -8,6 +8,8 @@ import 'package:PiliPlus/common/widgets/sliver/sliver_floating_header.dart';
 import 'package:PiliPlus/grpc/bilibili/main/community/reply/v1.pb.dart'
     show ReplyInfo;
 import 'package:PiliPlus/http/loading_state.dart';
+import 'package:PiliPlus/models/cognitive_filter/filter_surface.dart';
+import 'package:PiliPlus/pages/cognitive_filter/ai_reveal_item.dart';
 import 'package:PiliPlus/pages/common/fab_mixin.dart';
 import 'package:PiliPlus/pages/video/reply/controller.dart';
 import 'package:PiliPlus/pages/video/reply/vote/reply_vote_item.dart';
@@ -203,13 +205,16 @@ class _VideoReplyPanelState extends State<VideoReplyPanel>
                     _videoReplyController.videoType.replyType,
                   ),
                 );
-                if (item.id == _videoReplyController.targetRootRpId) {
-                  return _videoReplyController.colorAnimWrapper(
-                    colorScheme,
-                    child,
-                  );
-                }
-                return child;
+                return AiRevealItem(
+                  surface: FilterSurface.reply,
+                  item: item,
+                  child: item.id == _videoReplyController.targetRootRpId
+                      ? _videoReplyController.colorAnimWrapper(
+                          colorScheme,
+                          child,
+                        )
+                      : child,
+                );
               }
             },
             itemCount: count,

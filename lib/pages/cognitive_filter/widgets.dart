@@ -77,6 +77,8 @@ class CfSwitchTile extends StatelessWidget {
     required this.onChanged,
     this.icon,
     this.subtitle,
+    this.enabled = true,
+    this.onDisabledTap,
   });
 
   final String title;
@@ -85,17 +87,21 @@ class CfSwitchTile extends StatelessWidget {
   final IconData? icon;
   final String? subtitle;
 
+  /// 为 false 时开关置灰且不能切换，点击行只触发 [onDisabledTap]
+  final bool enabled;
+  final VoidCallback? onDisabledTap;
+
   @override
   Widget build(BuildContext context) {
     return CfTile(
       icon: icon,
       title: title,
       subtitle: subtitle,
-      onTap: () => onChanged(!value),
+      onTap: enabled ? () => onChanged(!value) : onDisabledTap,
       trailing: Transform.scale(
         scale: 0.8,
         alignment: Alignment.centerRight,
-        child: Switch(value: value, onChanged: onChanged),
+        child: Switch(value: value, onChanged: enabled ? onChanged : null),
       ),
     );
   }

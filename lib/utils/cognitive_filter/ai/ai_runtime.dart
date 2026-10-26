@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:PiliPlus/models/cognitive_filter/config.dart';
 import 'package:PiliPlus/models/cognitive_filter/filter_category.dart';
 import 'package:PiliPlus/models/cognitive_filter/filter_surface.dart';
+import 'package:PiliPlus/utils/cognitive_filter/ai/ai_whitelist.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/daily_budget.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/judge_cache.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/judge_history.dart';
@@ -11,6 +12,7 @@ import 'package:PiliPlus/utils/cognitive_filter/ai/judge_service.dart';
 import 'package:PiliPlus/utils/cognitive_filter/jev_client.dart';
 import 'package:PiliPlus/utils/path_utils.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
+import 'package:flutter/foundation.dart' show ValueNotifier;
 import 'package:path/path.dart' as path;
 
 /// 简单文本文件读写，所有异常都吞掉
@@ -72,6 +74,17 @@ class AiFilterRuntime {
   static const int _ruleDedupWindow = 300;
   static const int _ruleRateLimit = 20;
   static const Duration _ruleRateWindow = Duration(seconds: 1);
+
+  /// 命中白名单的条目不送 AI，直接视为不屏蔽
+  static const JudgeVerdict _whitelistVerdict = JudgeVerdict(
+    blocked: false,
+    categoryId: null,
+    score: 0,
+    source: JudgeSource.disabled,
+  );
+
+  /// 正在等待 AI 判定的列表类请求数，界面据此显示"AI 判定中"
+  final ValueNotifier<int> busy = ValueNotifier<int>(0);
 
   JudgeService? _service;
   JudgeCache? _cache;
@@ -174,6 +187,7 @@ class AiFilterRuntime {
     String context = '',
     String? contextKey,
     bool recordHistory = true,
+    bool applyWhitelist = true,
   }) async {
     try {
       if (!isActiveFor(surface)) {
@@ -183,14 +197,47 @@ class AiFilterRuntime {
       if (service == null) {
         return null;
       }
-      final result = await service.judge(
-        surface: surface,
-        items: items,
-        categories: _enabledCategories(),
-        title: title,
-        context: context,
-        contextKey: contextKey,
-      );
+      final whitelist = AiWhitelist.instance;
+      final pending = <JudgeItem>[];
+      final whitelisted = <String>{};
+      if (applyWhitelist) {
+        for (final item in items) {
+          if (whitelist.matches(item.text)) {
+            whitelisted.add(item.id);
+          } else {
+            pending.add(item);
+          }
+        }
+      } else {
+        pending.addAll(items);
+      }
+      if (whitelisted.isNotEmpty && pending.isEmpty) {
+        return JudgeResult(
+          verdicts: <String, JudgeVerdict>{
+            for (final item in items) item.id: _whitelistVerdict,
+          },
+          stats: JudgeStats(),
+        );
+      }
+      // 弹幕有自己的提示，这里只统计列表类适用面
+      final countBusy = surface != FilterSurface.danmaku;
+      if (countBusy) busy.value++;
+      final JudgeResult result;
+      try {
+        result = await service.judge(
+          surface: surface,
+          items: whitelisted.isEmpty ? items : pending,
+          categories: _enabledCategories(),
+          title: title,
+          context: context,
+          contextKey: contextKey,
+        );
+      } finally {
+        if (countBusy) busy.value--;
+      }
+      for (final id in whitelisted) {
+        result.verdicts[id] = _whitelistVerdict;
+      }
 
       final texts = <String, String>{
         for (final item in items) item.id: item.text,
@@ -246,6 +293,7 @@ class AiFilterRuntime {
       items: [JudgeItem(id: id, text: text)],
       context: context,
       recordHistory: false,
+      applyWhitelist: false,
     );
     return result?.verdicts[id];
   }

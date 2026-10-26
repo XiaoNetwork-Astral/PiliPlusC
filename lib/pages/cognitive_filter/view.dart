@@ -101,14 +101,13 @@ class _CognitiveFilterPageState extends State<CognitiveFilterPage>
                 onChanged: _setProMode,
               ),
             ),
-            if (_proMode)
-              SliverToBoxAdapter(
-                child: CfTile(
-                  icon: Icons.history,
-                  title: '屏蔽历史',
-                  onTap: () => Get.to(() => const JudgeHistoryPage()),
-                ),
+            SliverToBoxAdapter(
+              child: CfTile(
+                icon: Icons.history,
+                title: '屏蔽历史',
+                onTap: () => Get.to(() => const JudgeHistoryPage()),
               ),
+            ),
             SliverPersistentHeader(
               pinned: true,
               delegate: _TabBarHeaderDelegate(

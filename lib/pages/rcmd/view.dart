@@ -5,6 +5,8 @@ import 'package:PiliPlus/common/widgets/flutter/refresh_indicator.dart';
 import 'package:PiliPlus/common/widgets/loading_widget/http_error.dart';
 import 'package:PiliPlus/common/widgets/video_card/video_card_v.dart';
 import 'package:PiliPlus/http/loading_state.dart';
+import 'package:PiliPlus/models/cognitive_filter/filter_surface.dart';
+import 'package:PiliPlus/pages/cognitive_filter/ai_reveal_item.dart';
 import 'package:PiliPlus/pages/rcmd/controller.dart';
 import 'package:PiliPlus/utils/grid.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
@@ -97,25 +99,33 @@ class _RcmdPageState extends State<RcmdPage>
                     final actualIndex = index > controller.lastRefreshAt!
                         ? index - 1
                         : index;
-                    return VideoCardV(
-                      videoItem: response[actualIndex],
-                      onRemove: () {
-                        if (controller.lastRefreshAt != null &&
-                            actualIndex < controller.lastRefreshAt!) {
-                          controller.lastRefreshAt =
-                              controller.lastRefreshAt! - 1;
-                        }
-                        controller.loadingState
-                          ..value.data!.removeAt(actualIndex)
-                          ..refresh();
-                      },
+                    return AiRevealItem(
+                      surface: FilterSurface.video,
+                      item: response[actualIndex],
+                      child: VideoCardV(
+                        videoItem: response[actualIndex],
+                        onRemove: () {
+                          if (controller.lastRefreshAt != null &&
+                              actualIndex < controller.lastRefreshAt!) {
+                            controller.lastRefreshAt =
+                                controller.lastRefreshAt! - 1;
+                          }
+                          controller.loadingState
+                            ..value.data!.removeAt(actualIndex)
+                            ..refresh();
+                        },
+                      ),
                     );
                   } else {
-                    return VideoCardV(
-                      videoItem: response[index],
-                      onRemove: () => controller.loadingState
-                        ..value.data!.removeAt(index)
-                        ..refresh(),
+                    return AiRevealItem(
+                      surface: FilterSurface.video,
+                      item: response[index],
+                      child: VideoCardV(
+                        videoItem: response[index],
+                        onRemove: () => controller.loadingState
+                          ..value.data!.removeAt(index)
+                          ..refresh(),
+                      ),
                     );
                   }
                 },

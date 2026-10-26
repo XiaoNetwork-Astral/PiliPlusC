@@ -1,4 +1,5 @@
 import 'package:PiliPlus/common/widgets/dialog/text_input_dialog.dart';
+import 'package:PiliPlus/pages/cognitive_filter/ai_whitelist_page.dart';
 import 'package:PiliPlus/pages/cognitive_filter/category_list_page.dart';
 import 'package:PiliPlus/pages/cognitive_filter/judge_trial_dialog.dart';
 import 'package:PiliPlus/pages/cognitive_filter/provider_page.dart';
@@ -32,15 +33,16 @@ class _AiFilterTabState extends State<AiFilterTab> {
     _enabled = Pref.cfAiFilterEnabled;
   }
 
+  bool get _hasProvider =>
+      Pref.cfApiKey.trim().isNotEmpty &&
+      Pref.cfApiBaseUrl.trim().isNotEmpty &&
+      Pref.cfApiModel.trim().isNotEmpty;
+
   Future<void> _toggle(bool value) async {
     if (!value) {
       Pref.cfAiFilterEnabled = false;
       setState(() => _enabled = false);
       return;
-    }
-
-    if (Pref.cfApiKey.isEmpty) {
-      SmartDialog.showToast('请先在 AI 提供商中填写 API Key');
     }
 
     final rawAccepted = GStorage.setting.get(
@@ -138,6 +140,8 @@ class _AiFilterTabState extends State<AiFilterTab> {
           title: '启用 AI 屏蔽',
           value: _enabled,
           onChanged: _toggle,
+          enabled: _enabled || _hasProvider,
+          onDisabledTap: () => SmartDialog.showToast('请先填写 AI 提供商'),
         ),
         CfTile(
           icon: Icons.dns_outlined,
@@ -155,6 +159,11 @@ class _AiFilterTabState extends State<AiFilterTab> {
             style: Theme.of(context).textTheme.titleSmall,
           ),
           onTap: _editDailyCap,
+        ),
+        CfTile(
+          icon: Icons.verified_user_outlined,
+          title: '白名单',
+          onTap: () => Get.to(() => const AiWhitelistPage()),
         ),
         if (widget.proMode) ...[
           CfTile(

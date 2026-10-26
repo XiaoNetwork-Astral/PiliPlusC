@@ -39,6 +39,7 @@ import 'package:PiliPlus/plugin/pl_player/models/bottom_progress_behavior.dart';
 import 'package:PiliPlus/plugin/pl_player/models/fullscreen_mode.dart';
 import 'package:PiliPlus/plugin/pl_player/models/hwdec_type.dart';
 import 'package:PiliPlus/plugin/pl_player/models/play_repeat.dart';
+import 'package:PiliPlus/utils/cognitive_filter/ai/ai_whitelist_rules.dart';
 import 'package:PiliPlus/utils/device_utils.dart';
 import 'package:PiliPlus/utils/extension/iterable_ext.dart';
 import 'package:PiliPlus/utils/extension/num_ext.dart';
@@ -1471,6 +1472,21 @@ abstract final class Pref {
 
   static set cfRuleMigrationDone(bool value) =>
       _setting.put(SettingBoxKey.cfRuleMigrationDone, value);
+
+  static List<AiWhitelistEntry> get cfAiWhitelist {
+    final raw = _setting.get(SettingBoxKey.cfAiWhitelist);
+    if (raw is! String || raw.isEmpty) return const <AiWhitelistEntry>[];
+    try {
+      return AiWhitelistEntry.listFromJson(jsonDecode(raw));
+    } catch (_) {
+      return const <AiWhitelistEntry>[];
+    }
+  }
+
+  static set cfAiWhitelist(List<AiWhitelistEntry> value) => _setting.put(
+    SettingBoxKey.cfAiWhitelist,
+    jsonEncode([for (final entry in value) entry.toJson()]),
+  );
 
   static int _usageInt(String key) {
     final value = _setting.get(key, defaultValue: 0);

@@ -16,6 +16,7 @@ import 'package:PiliPlus/services/account_service.dart';
 import 'package:PiliPlus/services/download/download_service.dart';
 import 'package:PiliPlus/services/logger.dart';
 import 'package:PiliPlus/services/service_locator.dart';
+import 'package:PiliPlus/pages/cognitive_filter/ai_busy_indicator.dart';
 import 'package:PiliPlus/utils/cache_manager.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/ai_runtime.dart';
 import 'package:PiliPlus/utils/cognitive_filter/rule_store.dart';
@@ -358,6 +359,12 @@ class MyApp extends StatelessWidget {
     final uiScale = Pref.uiScale;
     final mediaQuery = MediaQuery.of(context);
     final textScaler = TextScaler.linear(Pref.defaultTextScale);
+    // 列表等待 AI 判定时显示的顶部提示
+    child = Stack(
+      textDirection: TextDirection.ltr,
+      fit: StackFit.expand,
+      children: [child!, const AiBusyIndicator()],
+    );
     if (uiScale != 1.0) {
       child = MediaQuery(
         data: mediaQuery.copyWith(
@@ -368,7 +375,7 @@ class MyApp extends StatelessWidget {
           viewPadding: tmpPadding ?? mediaQuery.viewPadding / uiScale,
           devicePixelRatio: mediaQuery.devicePixelRatio * uiScale,
         ),
-        child: child!,
+        child: child,
       );
     } else {
       child = MediaQuery(
@@ -377,7 +384,7 @@ class MyApp extends StatelessWidget {
           padding: tmpPadding,
           viewPadding: tmpPadding,
         ),
-        child: child!,
+        child: child,
       );
     }
     final backDetector = BackDetector(

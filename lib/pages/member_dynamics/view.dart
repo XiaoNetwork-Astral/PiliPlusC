@@ -2,7 +2,9 @@ import 'package:PiliPlus/common/widgets/flutter/refresh_indicator.dart';
 import 'package:PiliPlus/common/widgets/loading_widget/http_error.dart';
 import 'package:PiliPlus/common/widgets/scaffold/simple_scaffold.dart';
 import 'package:PiliPlus/http/loading_state.dart';
+import 'package:PiliPlus/models/cognitive_filter/filter_surface.dart';
 import 'package:PiliPlus/models/dynamics/result.dart';
+import 'package:PiliPlus/pages/cognitive_filter/ai_reveal_item.dart';
 import 'package:PiliPlus/pages/dynamics/widgets/dynamic_panel.dart';
 import 'package:PiliPlus/pages/member_dynamics/controller.dart';
 import 'package:PiliPlus/utils/global_data.dart';
@@ -107,10 +109,14 @@ class _MemberDynamicsPageState extends State<MemberDynamicsPage>
     if (index == list.length - 1) {
       _memberDynamicController.onLoadMore();
     }
-    return DynamicPanel(
+    return AiRevealItem(
+      surface: FilterSurface.dynamic,
       item: list[index],
-      onRemove: _memberDynamicController.onRemove,
-      onSetTop: _memberDynamicController.onSetTop,
+      child: DynamicPanel(
+        item: list[index],
+        onRemove: _memberDynamicController.onRemove,
+        onSetTop: _memberDynamicController.onSetTop,
+      ),
     );
   }
 }
