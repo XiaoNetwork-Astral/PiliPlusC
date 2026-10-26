@@ -4,7 +4,7 @@ import 'package:PiliPlus/utils/backup/backup_method.dart';
 enum BackupItem {
   setting('设置', '所有可导出的设置项'),
   account('登录信息', '已登录账户的 cookie 信息等，属于敏感信息，慎重选择'),
-  filterKey('AI 屏蔽密钥', 'AI 屏蔽接口的 API Key，属于敏感信息，慎重选择'),
+  filterKey('AI 屏蔽密钥', 'AI 提供商的 API Key（判定接口与整理接口），属于敏感信息，慎重选择'),
   blacklist('黑名单', '已屏蔽的用户'),
   danmakuRules('弹幕屏蔽规则', '弹幕的关键词和正则规则'),
   whisperRules('私信屏蔽词', '私信的关键词规则'),

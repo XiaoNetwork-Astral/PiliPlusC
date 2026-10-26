@@ -390,7 +390,7 @@ abstract final class BackupService {
       case BackupItem.account:
         return utf8.encode(jsonEncode(Accounts.account.toMap())).length;
       case BackupItem.filterKey:
-        return utf8.encode(Pref.cfApiKey).length;
+        return utf8.encode(Pref.cfApiKey + Pref.cfLlmApiKey).length;
       case BackupItem.blacklist:
         return null;
       case BackupItem.danmakuRules:
@@ -415,7 +415,8 @@ abstract final class BackupService {
       case BackupItem.account:
         return Accounts.account.length;
       case BackupItem.filterKey:
-        return Pref.cfApiKey.isEmpty ? 0 : 1;
+        return (Pref.cfApiKey.isEmpty ? 0 : 1) +
+            (Pref.cfLlmApiKey.isEmpty ? 0 : 1);
       case BackupItem.blacklist:
         return Pref.blackMids.length;
       case BackupItem.danmakuRules:

@@ -104,7 +104,7 @@ abstract final class ConfigArchive {
       files.add(accountFileName);
     }
 
-    if (want(BackupItem.filterKey) && Pref.cfApiKey.isNotEmpty) {
+    if (want(BackupItem.filterKey) && _hasProviderKey) {
       zip.add(ArchiveFile.string(filterKeyFileName, _exportFilterKey()));
       files.add(filterKeyFileName);
     }
@@ -292,8 +292,7 @@ abstract final class ConfigArchive {
       case BackupItem.account:
         return jsonDecode(_exportAccount());
       case BackupItem.filterKey:
-        final key = Pref.cfApiKey;
-        return key.isEmpty ? null : key;
+        return _hasProviderKey ? _providerKeys() : null;
       case BackupItem.blacklist:
         return Pref.blackMids.toList();
       case BackupItem.danmakuRules:
@@ -334,12 +333,25 @@ abstract final class ConfigArchive {
     await Accounts.importJsonAccount(data);
   }
 
-  /// 写入 AI 屏蔽密钥
+  /// 写入 AI 提供商的密钥，判定接口与整理接口各一个
+  ///
+  /// 早先的备份里只有一个字符串，那是判定接口的密钥
   static void applyFilterKey(Object? data) {
-    if (data is! String) {
+    if (data is String) {
+      Pref.cfApiKey = data;
+      return;
+    }
+    if (data is! Map) {
       throw const BackupException('AI 屏蔽密钥格式不正确');
     }
-    Pref.cfApiKey = data;
+    final judge = data['judge'];
+    final organize = data['organize'];
+    if (judge is String && judge.isNotEmpty) {
+      Pref.cfApiKey = judge;
+    }
+    if (organize is String && organize.isNotEmpty) {
+      Pref.cfLlmApiKey = organize;
+    }
   }
 
   /// 写入黑名单，只补不删
@@ -574,7 +586,15 @@ abstract final class ConfigArchive {
 
   static String _exportAccount() => jsonEncode(Accounts.account.toMap());
 
-  static String _exportFilterKey() => jsonEncode(Pref.cfApiKey);
+  static bool get _hasProviderKey =>
+      Pref.cfApiKey.isNotEmpty || Pref.cfLlmApiKey.isNotEmpty;
+
+  static Map<String, String> _providerKeys() => <String, String>{
+    'judge': Pref.cfApiKey,
+    'organize': Pref.cfLlmApiKey,
+  };
+
+  static String _exportFilterKey() => jsonEncode(_providerKeys());
 
   static String _exportBlacklist() => jsonEncode(Pref.blackMids.toList());
 

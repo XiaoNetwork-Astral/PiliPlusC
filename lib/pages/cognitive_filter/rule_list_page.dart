@@ -43,6 +43,8 @@ class RuleListPage extends StatefulWidget {
 class _RuleListPageState extends State<RuleListPage> {
   late RuleType? _filter = widget.initialType;
   String _query = '';
+  bool _selecting = false;
+  final Set<String> _selected = <String>{};
 
   RuleSource get _source => widget.source ?? RuleStore.instance;
 
@@ -95,6 +97,54 @@ class _RuleListPageState extends State<RuleListPage> {
     }
   }
 
+  void _enterSelecting([FilterRule? first]) {
+    setState(() {
+      _selecting = true;
+      _selected
+        ..clear()
+        ..addAll([?first?.id]);
+    });
+  }
+
+  void _exitSelecting() {
+    setState(() {
+      _selecting = false;
+      _selected.clear();
+    });
+  }
+
+  void _toggleSelected(FilterRule rule) {
+    setState(() {
+      if (!_selected.remove(rule.id)) _selected.add(rule.id);
+    });
+  }
+
+  /// 已全选当前筛选结果时再点一次就取消全选
+  void _toggleSelectAll(List<FilterRule> shown) {
+    setState(() {
+      final all = {for (final rule in shown) rule.id};
+      if (all.isNotEmpty && _selected.containsAll(all)) {
+        _selected.removeAll(all);
+      } else {
+        _selected.addAll(all);
+      }
+    });
+  }
+
+  Future<void> _deleteSelected() async {
+    final ids = _selected.toList();
+    if (ids.isEmpty) return;
+    final confirmed = await showConfirmDialog(
+      context: context,
+      title: Text('确定删除选中的 ${ids.length} 条规则？'),
+    );
+    if (!confirmed || !mounted) return;
+    for (final id in ids) {
+      _source.remove(id);
+    }
+    _exitSelecting();
+  }
+
   Future<void> _confirmDelete(FilterRule rule) async {
     final confirmed = await showConfirmDialog(
       context: context,
@@ -107,13 +157,58 @@ class _RuleListPageState extends State<RuleListPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final padding = MediaQuery.viewPaddingOf(context);
+    return PopScope(
+      canPop: !_selecting,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && _selecting) _exitSelecting();
+      },
+      child: ValueListenableBuilder<int>(
+        valueListenable: _source.version,
+        builder: (context, _, _) => _scaffold(theme, padding),
+      ),
+    );
+  }
+
+  Widget _scaffold(ThemeData theme, EdgeInsets padding) {
+    final shown = _filtered(_source.rules);
+    final selectedCount = _selected.length;
     return SimpleScaffold(
-      appBar: AppBar(title: Text(widget.title)),
+      appBar: AppBar(
+        leading: _selecting
+            ? IconButton(
+                tooltip: '退出选择',
+                icon: const Icon(Icons.close),
+                onPressed: _exitSelecting,
+              )
+            : null,
+        title: Text(_selecting ? '已选 $selectedCount 项' : widget.title),
+        actions: [
+          if (_selecting) ...[
+            IconButton(
+              tooltip: '全选',
+              icon: const Icon(Icons.select_all),
+              onPressed: () => _toggleSelectAll(shown),
+            ),
+            IconButton(
+              tooltip: '删除',
+              icon: Icon(
+                Icons.delete_outline,
+                color: selectedCount == 0 ? null : theme.colorScheme.error,
+              ),
+              onPressed: selectedCount == 0 ? null : _deleteSelected,
+            ),
+          ] else if (shown.isNotEmpty)
+            IconButton(
+              tooltip: '批量选择',
+              icon: const Icon(Icons.checklist),
+              onPressed: _enterSelecting,
+            ),
+        ],
+      ),
       body: ViewSafeArea(
-        child: ValueListenableBuilder<int>(
-          valueListenable: _source.version,
-          builder: (context, _, _) {
-            final rules = _filtered(_source.rules);
+        child: Builder(
+          builder: (context) {
+            final rules = shown;
             return Column(
               children: [
                 Padding(
@@ -170,17 +265,19 @@ class _RuleListPageState extends State<RuleListPage> {
           },
         ),
       ),
-      fab: Padding(
-        padding: EdgeInsets.only(
-          right: kFloatingActionButtonMargin + padding.right,
-          bottom: kFloatingActionButtonMargin + padding.bottom,
-        ),
-        child: FloatingActionButton(
-          tooltip: '添加',
-          onPressed: _openEdit,
-          child: const Icon(Icons.add),
-        ),
-      ),
+      fab: _selecting
+          ? null
+          : Padding(
+              padding: EdgeInsets.only(
+                right: kFloatingActionButtonMargin + padding.right,
+                bottom: kFloatingActionButtonMargin + padding.bottom,
+              ),
+              child: FloatingActionButton(
+                tooltip: '添加',
+                onPressed: _openEdit,
+                child: const Icon(Icons.add),
+              ),
+            ),
     );
   }
 
@@ -192,6 +289,34 @@ class _RuleListPageState extends State<RuleListPage> {
 
   Widget _ruleTile(ThemeData theme, FilterRule rule) {
     final outline = theme.colorScheme.outline;
+    if (_selecting) {
+      final selected = _selected.contains(rule.id);
+      return ListTile(
+        contentPadding: _tilePadding,
+        leading: Checkbox(
+          value: selected,
+          onChanged: (_) => _toggleSelected(rule),
+        ),
+        title: Text(
+          _titleOf(rule),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: theme.textTheme.titleMedium?.copyWith(
+            color: rule.enabled || rule.isHashOnly ? null : outline,
+          ),
+        ),
+        subtitle: Text(
+          rule.isHashOnly
+              ? '无法修改'
+              : '${rule.type.label}，${_scopesOf(rule)}',
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: theme.textTheme.labelMedium?.copyWith(color: outline),
+        ),
+        selected: selected,
+        onTap: () => _toggleSelected(rule),
+      );
+    }
     final deleteButton = IconButton(
       tooltip: '删除',
       padding: EdgeInsets.zero,
@@ -214,6 +339,7 @@ class _RuleListPageState extends State<RuleListPage> {
           style: theme.textTheme.labelMedium?.copyWith(color: outline),
         ),
         trailing: deleteButton,
+        onLongPress: () => _enterSelecting(rule),
       );
     }
     return ListTile(
@@ -257,6 +383,7 @@ class _RuleListPageState extends State<RuleListPage> {
         ],
       ),
       onTap: () => _openEdit(rule),
+      onLongPress: () => _enterSelecting(rule),
     );
   }
 }
