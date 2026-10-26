@@ -1,6 +1,7 @@
 import 'package:PiliPlus/http/api.dart';
 import 'package:PiliPlus/http/init.dart';
 import 'package:PiliPlus/http/loading_state.dart';
+import 'package:PiliPlus/models/cognitive_filter/filter_surface.dart';
 import 'package:PiliPlus/models/common/search/search_type.dart';
 import 'package:PiliPlus/models/search/result.dart';
 import 'package:PiliPlus/models/search/suggest.dart';
@@ -9,6 +10,7 @@ import 'package:PiliPlus/models_new/pagelist/page_item.dart';
 import 'package:PiliPlus/models_new/pgc/pgc_info_model/result.dart';
 import 'package:PiliPlus/models_new/search/search_rcmd/data.dart';
 import 'package:PiliPlus/models_new/search/search_trending/data.dart';
+import 'package:PiliPlus/utils/cognitive_filter/ai_filter_helper.dart';
 import 'package:PiliPlus/utils/extension/iterable_ext.dart';
 import 'package:PiliPlus/utils/request_utils.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
@@ -19,6 +21,15 @@ import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:material_ui/material_ui.dart';
 
 abstract final class SearchHttp {
+  /// 视频结果判定文本：标题（UP主：xxx）
+  static String _videoText(SearchVideoItemModel item) {
+    final name = item.owner.name;
+    if (name == null || name.isEmpty) {
+      return item.title;
+    }
+    return '${item.title}（UP主：$name）';
+  }
+
   // 获取搜索建议
   @pragma('vm:notify-debugger-on-exception')
   static Future<LoadingState<SearchSuggestModel>> searchSuggest({
@@ -108,18 +119,28 @@ abstract final class SearchHttp {
           return const Error('触发风控');
         }
         try {
-          return Success(
-            switch (searchType) {
-              .all => SearchVideoData.fromSearchAll(dataData),
-              .video => SearchVideoData.fromJson(dataData),
-              .media_bangumi ||
-              .media_hk_bangumi ||
-              .media_ft => SearchPgcData.fromJson(dataData),
-              .live_room => SearchLiveData.fromJson(dataData),
-              .bili_user => SearchUserData.fromJson(dataData),
-              .article => SearchArticleData.fromJson(dataData),
-            } as R,
-          );
+          final R data = switch (searchType) {
+            .all => SearchVideoData.fromSearchAll(dataData),
+            .video => SearchVideoData.fromJson(dataData),
+            .media_bangumi ||
+            .media_hk_bangumi ||
+            .media_ft => SearchPgcData.fromJson(dataData),
+            .live_room => SearchLiveData.fromJson(dataData),
+            .bili_user => SearchUserData.fromJson(dataData),
+            .article => SearchArticleData.fromJson(dataData),
+          } as R;
+          // 只处理视频结果，用户/番剧/专栏等不接 AI
+          if (data is SearchVideoData) {
+            final items = data.list;
+            if (items != null && items.isNotEmpty) {
+              data.list = await aiFilterList<SearchVideoItemModel>(
+                surface: FilterSurface.video,
+                items: items,
+                textOf: _videoText,
+              );
+            }
+          }
+          return Success(data);
         } catch (e, s) {
           return Error('$e\n\n$s');
         }

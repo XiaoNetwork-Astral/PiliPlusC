@@ -7,6 +7,7 @@ import 'package:PiliPlus/http/constants.dart';
 import 'package:PiliPlus/http/error_msg.dart';
 import 'package:PiliPlus/http/init.dart';
 import 'package:PiliPlus/http/loading_state.dart';
+import 'package:PiliPlus/models/cognitive_filter/filter_surface.dart';
 import 'package:PiliPlus/models/common/member/archive_order_type_app.dart';
 import 'package:PiliPlus/models/common/member/archive_order_type_web.dart';
 import 'package:PiliPlus/models/common/member/archive_sort_type_app.dart';
@@ -33,6 +34,7 @@ import 'package:PiliPlus/models_new/space/space_shop/data.dart';
 import 'package:PiliPlus/models_new/upower_rank/data.dart';
 import 'package:PiliPlus/utils/accounts.dart';
 import 'package:PiliPlus/utils/app_sign.dart';
+import 'package:PiliPlus/utils/cognitive_filter/ai_filter_helper.dart';
 import 'package:PiliPlus/utils/utils.dart';
 import 'package:PiliPlus/utils/wbi_sign.dart';
 import 'package:dio/dio.dart';
@@ -470,6 +472,19 @@ abstract final class MemberHttp {
     if (res.data['code'] == 0) {
       try {
         DynamicsDataModel data = DynamicsDataModel.fromJson(res.data['data']);
+        final items = data.items;
+        if (items != null && items.isNotEmpty) {
+          // 规则过滤后再交给 AI
+          final filtered = await aiFilterList<DynamicItemModel>(
+            surface: FilterSurface.dynamic,
+            items: items,
+            textOf: DynamicsDataModel.matchText,
+          );
+          if (!identical(filtered, items)) {
+            data.items = filtered;
+            if (filtered.isEmpty) data.loadNext = data.hasMore;
+          }
+        }
         if (data.loadNext == true) {
           return await memberDynamic(offset: data.offset, mid: mid);
         }
@@ -500,7 +515,16 @@ abstract final class MemberHttp {
       },
     );
     if (res.data['code'] == 0) {
-      return Success(DynamicsDataModel.fromJson(res.data['data']));
+      final data = DynamicsDataModel.fromJson(res.data['data']);
+      final items = data.items;
+      if (items != null && items.isNotEmpty) {
+        data.items = await aiFilterList<DynamicItemModel>(
+          surface: FilterSurface.dynamic,
+          items: items,
+          textOf: DynamicsDataModel.matchText,
+        );
+      }
+      return Success(data);
     } else {
       return Error(res.data['message']);
     }

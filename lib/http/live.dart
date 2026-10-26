@@ -612,6 +612,19 @@ abstract final class LiveHttp {
           uid: e.uid,
         ),
       );
+      final rooms = data.room?.list;
+      if (rooms != null && rooms.isNotEmpty) {
+        final filtered = await aiFilterList(
+          surface: FilterSurface.live,
+          items: rooms,
+          textOf: (e) => _liveText(e.title, e.name),
+        );
+        if (!identical(filtered, rooms)) {
+          rooms
+            ..clear()
+            ..addAll(filtered);
+        }
+      }
       return Success(data);
     } else {
       return Error(res.data['message']);

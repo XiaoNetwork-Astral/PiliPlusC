@@ -15,6 +15,7 @@ import 'package:PiliPlus/models/common/video/video_type.dart';
 import 'package:PiliPlus/models/home/rcmd/result.dart';
 import 'package:PiliPlus/models/model_hot_video_item.dart';
 import 'package:PiliPlus/models/model_rec_video_item.dart';
+import 'package:PiliPlus/models/model_video.dart';
 import 'package:PiliPlus/models/pgc_lcf.dart';
 import 'package:PiliPlus/models/video/play/url.dart';
 import 'package:PiliPlus/models_new/pgc/pgc_rank/pgc_rank_item_model.dart';
@@ -57,8 +58,8 @@ abstract final class VideoHttp {
 
   static String? _textOf(Object? value) => value is String ? value : null;
 
-  /// 推荐流判定文本：标题（UP主：xxx）
-  static String _rcmdText(BaseRcmdVideoItemModel item) {
+  /// 视频判定文本：标题（UP主：xxx）
+  static String _rcmdText(BaseSimpleVideoItemModel item) {
     final name = item.owner.name;
     if (name == null || name.isEmpty) {
       return item.title;
@@ -457,6 +458,15 @@ abstract final class VideoHttp {
             .toList();
       } else {
         list = items?.toList();
+      }
+      if (list != null && list.isNotEmpty) {
+        return Success(
+          await aiFilterList<HotVideoItemModel>(
+            surface: FilterSurface.video,
+            items: list,
+            textOf: _rcmdText,
+          ),
+        );
       }
       return Success(list);
     } else {
