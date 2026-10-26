@@ -13,6 +13,7 @@ import 'package:PiliPlus/utils/accounts.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/ai_runtime.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/judge_service.dart';
 import 'package:PiliPlus/utils/cognitive_filter/rule_engine.dart';
+import 'package:PiliPlus/utils/cognitive_filter/rule_store.dart';
 import 'package:PiliPlus/utils/danmaku_utils.dart';
 import 'package:PiliPlus/utils/path_utils.dart';
 import 'package:PiliPlus/utils/utils.dart';
@@ -25,7 +26,10 @@ class PlDanmakuController {
     this._plPlayerController,
     this._isFileSource, [
     this._judgeContext,
-  ]) : _mergeDanmaku = _plPlayerController.mergeDanmaku;
+  ]) : _mergeDanmaku = _plPlayerController.mergeDanmaku {
+    // 规则变了（比如刚举报并拉黑了发送者），已经加载的弹幕也要按新规则过滤
+    RuleStore.instance.version.addListener(_refilter);
+  }
 
   final int _cid;
   final PlPlayerController _plPlayerController;
@@ -51,9 +55,24 @@ class PlDanmakuController {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
+    RuleStore.instance.version.removeListener(_refilter);
     _dmSegMap.clear();
     _requestedSeg.clear();
     judging.dispose();
+  }
+
+  /// 按最新规则把已加载但还没播出的弹幕再筛一遍
+  void _refilter() {
+    if (_disposed) return;
+    final snap = RuleEngine.instance.snapshot(RuleScope.danmaku);
+    for (final list in _dmSegMap.values) {
+      list.removeWhere(
+        (element) =>
+            !element.isSelf &&
+            (snap.matchText(element.content) ||
+                snap.hashBlocked(element.midHash, text: element.content)),
+      );
+    }
   }
 
   Future<void> queryDanmaku(int segmentIndex) async {

@@ -25,6 +25,7 @@ Future<void> autoWrapReportDialog(
   OnReport onReport, {
   ValueGetter<int>? mid,
   VoidCallback? onRemove,
+  VoidCallback? onLocalBlock,
   String? reportUrl,
   ReasonCheck withContent = _kReportCheck,
   ReasonCheck contentRequired = _kReportCheck,
@@ -146,7 +147,11 @@ Future<void> autoWrapReportDialog(
           TextButton(
             onPressed: () {
               Get.back();
-              Pref.setBlackMid(mid());
+              if (onLocalBlock != null) {
+                onLocalBlock();
+              } else {
+                Pref.setBlackMid(mid());
+              }
               onRemove?.call();
             },
             child: const Text('本地屏蔽'),

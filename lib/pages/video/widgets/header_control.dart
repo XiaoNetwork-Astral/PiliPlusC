@@ -250,6 +250,31 @@ class HeaderControl extends StatefulWidget {
     }
   }
 
+  /// 本地屏蔽弹幕发送者：加一条只有哈希的弹幕用户规则，与引擎 blocksHash 的口径一致
+  static void _blockDanmakuSender(String midHash) {
+    final hash = midHash.toLowerCase();
+    if (hash.isEmpty) return;
+    final exists = RuleStore.instance.rules.any(
+      (rule) =>
+          rule.isHashOnly && (rule.midHash ?? '').toLowerCase() == hash,
+    );
+    if (exists) return;
+    RuleStore.instance.add(
+      FilterRule(
+        id: FilterRule.stableId(
+          type: RuleType.user,
+          scopes: const {RuleScope.danmaku},
+          content: '',
+          midHash: hash,
+        ),
+        type: RuleType.user,
+        content: '',
+        scopes: const {RuleScope.danmaku},
+        midHash: hash,
+      ),
+    );
+  }
+
   static Future<void> reportDanmaku(
     BuildContext context, {
     required VideoDanmaku extra,
@@ -258,35 +283,15 @@ class HeaderControl extends StatefulWidget {
     if (Accounts.main.isLogin) {
       return autoWrapReportDialog(
         context,
-        mid: () => int.parse(extra.mid),
+        // 弹幕只有发送者哈希没有 UID，这里的 mid 只用来显示"拉黑"与"本地屏蔽"
+        mid: () => 0,
+        onLocalBlock: () => _blockDanmakuSender(extra.mid),
         ReportOptions.danmakuReport,
         withContent: ReportOptions.danmakuReportCheck,
         contentRequired: ReportOptions.danmakuReportCheck,
         (reasonType, reasonDesc, banUid) {
           if (banUid) {
-            // 只有哈希的弹幕用户规则，与引擎 blocksHash 的口径一致
-            final hash = extra.mid.toLowerCase();
-            final exists = RuleStore.instance.rules.any(
-              (rule) =>
-                  rule.isHashOnly &&
-                  (rule.midHash ?? '').toLowerCase() == hash,
-            );
-            if (hash.isNotEmpty && !exists) {
-              RuleStore.instance.add(
-                FilterRule(
-                  id: FilterRule.stableId(
-                    type: RuleType.user,
-                    scopes: const {RuleScope.danmaku},
-                    content: '',
-                    midHash: hash,
-                  ),
-                  type: RuleType.user,
-                  content: '',
-                  scopes: const {RuleScope.danmaku},
-                  midHash: hash,
-                ),
-              );
-            }
+            _blockDanmakuSender(extra.mid);
             DanmakuFilterHttp.danmakuFilterAdd(filter: extra.mid, type: 2);
           }
           return DanmakuHttp.danmakuReport(
