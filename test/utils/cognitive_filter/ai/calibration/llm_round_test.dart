@@ -212,6 +212,69 @@ void main() {
     expect(result.abortedBy, isNull);
   });
 
+  test('网络类问题最多试三次，第三次成功就不丢批', () async {
+    final fake = _FakeChat((call, _) async {
+      if (call <= 2) {
+        throw const LlmException(LlmErrorKind.network, '断了');
+      }
+      return _reply(<Object?>[
+        _cluster(<int>[1, 2, 3]),
+      ]);
+    });
+
+    final result = await runRound(
+      pool: _pool(3),
+      chat: fake.call,
+      isBlockedForUpload: (_) => false,
+      random: Random(10),
+      chunkSize: 3,
+      retryDelay: Duration.zero,
+    );
+
+    expect(fake.calls, hasLength(3));
+    expect(result.questions, hasLength(1));
+    expect(result.droppedIds, isEmpty);
+    expect(result.abortedBy, isNull);
+  });
+
+  test('网络类问题连续三次失败则中止整轮且条目不动', () async {
+    final fake = _FakeChat(
+      (_, __) async => throw const LlmException(LlmErrorKind.server, '挂了'),
+    );
+
+    final result = await runRound(
+      pool: _pool(3),
+      chat: fake.call,
+      isBlockedForUpload: (_) => false,
+      random: Random(11),
+      chunkSize: 3,
+      retryDelay: Duration.zero,
+    );
+
+    expect(fake.calls, hasLength(3));
+    expect(result.abortedBy, LlmErrorKind.server);
+    expect(result.droppedIds, isEmpty);
+    expect(result.usedIds, isEmpty);
+  });
+
+  test('密钥无效不重试，直接中止', () async {
+    final fake = _FakeChat(
+      (_, __) async => throw const LlmException(LlmErrorKind.auth, '无效'),
+    );
+
+    final result = await runRound(
+      pool: _pool(3),
+      chat: fake.call,
+      isBlockedForUpload: (_) => false,
+      random: Random(12),
+      chunkSize: 3,
+      retryDelay: Duration.zero,
+    );
+
+    expect(fake.calls, hasLength(1));
+    expect(result.abortedBy, LlmErrorKind.auth);
+  });
+
   test('refused 两次失败则整批进 droppedIds', () async {
     final fake = _FakeChat(
       (_, __) async =>
@@ -272,10 +335,11 @@ void main() {
       isBlockedForUpload: (_) => false,
       random: Random(9),
       chunkSize: 3,
+      retryDelay: Duration.zero,
       onProgress: (done, total) => progress.add(<int>[done, total]),
     );
 
-    expect(fake.calls, hasLength(2));
+    expect(fake.calls, hasLength(4));
     expect(result.questions, hasLength(1));
     expect(result.usedIds, hasLength(3));
     expect(result.droppedIds, isEmpty);
@@ -296,6 +360,7 @@ void main() {
       isBlockedForUpload: (_) => false,
       random: Random(10),
       chunkSize: 3,
+      retryDelay: Duration.zero,
     );
 
     expect(result.abortedBy, LlmErrorKind.network);

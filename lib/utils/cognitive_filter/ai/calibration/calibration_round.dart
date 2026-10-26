@@ -58,6 +58,7 @@ Future<RoundResult> runRound({
   int maxQuestions = 20,
   void Function(int done, int total)? onProgress,
   bool Function()? shouldStop,
+  Duration retryDelay = const Duration(seconds: 2),
 }) async {
   final droppedIds = <String>{};
   final candidates = <PoolItem>[];
@@ -107,7 +108,12 @@ Future<RoundResult> runRound({
 
     var abort = false;
     var batchFailed = false;
-    for (var attempt = 0; attempt < 2; attempt++) {
+    // 失败按原因分开数：模型输出的问题（解析不了、被拒绝）重试也多半一样，
+    // 再试一次就够，免得白花钱；网络、超时、服务端、限流这类与输出无关的问题
+    // 整理在后台跑，用户愿意等，最多试三次
+    var outputFailures = 0;
+    var otherFailures = 0;
+    while (true) {
       try {
         final parsed = _parseReply(
           await chat(messages),
@@ -117,21 +123,31 @@ Future<RoundResult> runRound({
         );
         questions.addAll(parsed);
         break;
-      } on LlmException catch (error) {
-        if (_abortsRound(error.kind)) {
-          abortedBy = error.kind;
+      } catch (error) {
+        final kind = error is LlmException ? error.kind : LlmErrorKind.network;
+        if (kind == LlmErrorKind.auth || kind == LlmErrorKind.budget) {
+          abortedBy = kind;
           abort = true;
           break;
         }
-        if (attempt == 0) {
-          continue;
+        if (_isOutputProblem(kind)) {
+          outputFailures++;
+          if (outputFailures >= _maxOutputAttempts) {
+            batchFailed = true;
+            break;
+          }
+        } else {
+          otherFailures++;
+          if (otherFailures >= _maxOtherAttempts) {
+            // 与模型输出无关，说明网络或服务有问题：停掉整轮，池里条目不动
+            abortedBy = kind;
+            abort = true;
+            break;
+          }
+          if (retryDelay > Duration.zero) {
+            await Future<void>.delayed(retryDelay * otherFailures);
+          }
         }
-        batchFailed = true;
-      } catch (_) {
-        // 非 LLM 异常按网络问题中止，池里条目不动
-        abortedBy = LlmErrorKind.network;
-        abort = true;
-        break;
       }
     }
 
@@ -159,21 +175,15 @@ Future<RoundResult> runRound({
   );
 }
 
-/// 中止整轮的错误类别；refused 与 parse 只丢当前批
-bool _abortsRound(LlmErrorKind kind) {
-  switch (kind) {
-    case LlmErrorKind.auth:
-    case LlmErrorKind.rateLimit:
-    case LlmErrorKind.timeout:
-    case LlmErrorKind.network:
-    case LlmErrorKind.server:
-    case LlmErrorKind.budget:
-      return true;
-    case LlmErrorKind.refused:
-    case LlmErrorKind.parse:
-      return false;
-  }
-}
+/// 模型输出问题：同一批最多发送的次数
+const int _maxOutputAttempts = 2;
+
+/// 与模型输出无关的问题：同一批最多发送的次数
+const int _maxOtherAttempts = 3;
+
+/// 是不是模型输出本身的问题（解析不了或被拒绝）
+bool _isOutputProblem(LlmErrorKind kind) =>
+    kind == LlmErrorKind.parse || kind == LlmErrorKind.refused;
 
 /// 拼出 user 提示：开头说明 + 逐行“编号. 文本”
 String _buildUserPrompt(List<PoolItem> chunk) {
