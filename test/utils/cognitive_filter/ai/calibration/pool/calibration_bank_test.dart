@@ -22,7 +22,7 @@ CalibrationQuestion _question(String name, List<String> ids) =>
 
 /// 记录写盘次数，便于断言没有改动时不落盘
 class _CountingStore implements JudgeCacheStore {
-  _CountingStore([this.value]);
+  _CountingStore();
 
   String? value;
   int writes = 0;
