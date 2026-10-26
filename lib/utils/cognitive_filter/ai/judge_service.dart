@@ -403,6 +403,9 @@ class JudgeService {
     }
   }
 
+  /// 同一批最多发送的次数：首次加一次静默重试
+  static const int _maxAttempts = 2;
+
   Future<_BatchResult<T>> _attempt<T>({
     required JudgeStats stats,
     required Map<String, dynamic> Function() buildBody,
@@ -413,24 +416,48 @@ class JudgeService {
       if (skip != null) {
         return _BatchResult<T>.skip(skip);
       }
-      stats.requests++;
-      try {
-        final response = await transport(buildBody());
-        final value = parse(response);
-        _consecutiveFailures = 0;
+      // 返回内容解析不了时静默重发一次，两次都不行才算失败；
+      // 网络、密钥这类传输错误重发也没用，直接算失败
+      for (var attempt = 0; attempt < _maxAttempts; attempt++) {
+        final last = attempt == _maxAttempts - 1;
+        stats.requests++;
+        final Map<String, dynamic> response;
+        try {
+          response = await transport(buildBody());
+        } on JevException catch (error) {
+          if (error.kind == JevErrorKind.parse && !last) {
+            continue;
+          }
+          _onFailure(error, stats);
+          return _BatchResult<T>.failed();
+        } catch (_) {
+          _onFailure(null, stats);
+          return _BatchResult<T>.failed();
+        }
         try {
           _recordUsage(response, stats);
         } catch (_) {
           // 预算实现异常不影响判定结果
         }
-        return _BatchResult<T>.value(value);
-      } on JevException catch (error) {
-        _onFailure(error, stats);
-        return _BatchResult<T>.failed();
-      } catch (_) {
-        _onFailure(null, stats);
-        return _BatchResult<T>.failed();
+        try {
+          final value = parse(response);
+          _consecutiveFailures = 0;
+          return _BatchResult<T>.value(value);
+        } catch (error) {
+          if (!last) {
+            continue;
+          }
+          _onFailure(
+            error is JevException
+                ? error
+                : const JevException(JevErrorKind.parse, '返回内容无法解析'),
+            stats,
+          );
+          return _BatchResult<T>.failed();
+        }
       }
+      _onFailure(null, stats);
+      return _BatchResult<T>.failed();
     });
   }
 
