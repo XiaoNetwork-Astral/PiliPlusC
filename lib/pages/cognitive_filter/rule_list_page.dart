@@ -145,6 +145,19 @@ class _RuleListPageState extends State<RuleListPage> {
     _exitSelecting();
   }
 
+  /// 一键重置：只动规则本身，回到出厂规则（没有任何用户规则）
+  Future<void> _resetRules() async {
+    final confirmed = await showConfirmDialog(
+      context: context,
+      title: const Text('确定重置规则？'),
+      content: const Text('将删除列表里的全部规则，回到出厂规则'),
+    );
+    if (!confirmed || !mounted) return;
+    for (final rule in _source.rules.toList()) {
+      _source.remove(rule.id);
+    }
+  }
+
   Future<void> _confirmDelete(FilterRule rule) async {
     final confirmed = await showConfirmDialog(
       context: context,
@@ -197,12 +210,20 @@ class _RuleListPageState extends State<RuleListPage> {
               ),
               onPressed: selectedCount == 0 ? null : _deleteSelected,
             ),
-          ] else if (shown.isNotEmpty)
-            IconButton(
-              tooltip: '批量选择',
-              icon: const Icon(Icons.checklist),
-              onPressed: _enterSelecting,
+          ] else ...[
+            if (shown.isNotEmpty)
+              IconButton(
+                tooltip: '批量选择',
+                icon: const Icon(Icons.checklist),
+                onPressed: _enterSelecting,
+              ),
+            PopupMenuButton<String>(
+              onSelected: (_) => _resetRules(),
+              itemBuilder: (context) => const [
+                PopupMenuItem(value: 'reset', child: Text('一键重置')),
+              ],
             ),
+          ],
         ],
       ),
       body: ViewSafeArea(

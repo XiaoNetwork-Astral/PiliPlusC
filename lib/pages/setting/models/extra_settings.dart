@@ -1,6 +1,7 @@
 import 'dart:io' show Directory, File, Platform;
 
 import 'package:PiliPlus/common/widgets/custom_icon.dart';
+import 'package:PiliPlus/common/widgets/dialog/dialog.dart';
 import 'package:PiliPlus/common/widgets/dialog/simple_dialog_option.dart';
 import 'package:PiliPlus/common/widgets/flutter/refresh_indicator.dart'
     show RefreshIndicator, displacement, refreshDragExtent;
@@ -21,6 +22,7 @@ import 'package:PiliPlus/utils/accounts.dart';
 import 'package:PiliPlus/utils/android/android_helper.dart';
 import 'package:PiliPlus/utils/android/bindings.g.dart';
 import 'package:PiliPlus/utils/desktop/window_controller.dart';
+import 'package:PiliPlus/utils/device_utils.dart';
 import 'package:PiliPlus/utils/extension/num_ext.dart';
 import 'package:PiliPlus/utils/feed_back.dart';
 import 'package:PiliPlus/utils/filtering_text.dart';
@@ -435,6 +437,20 @@ List<SettingsModel> get extraSettings => [
           );
         },
       );
+    },
+  ),
+  NormalModel(
+    title: '恢复默认',
+    leading: const Icon(Icons.restore),
+    onTap: (context, setState) async {
+      final confirmed = await showConfirmDialog(
+        context: context,
+        title: const Text('确定恢复默认设置？'),
+        content: const Text('账号登录、密钥与规则列表会保留，恢复后将自动退出，请重新打开'),
+      );
+      if (!confirmed) return;
+      await GStorage.resetSettings();
+      DeviceUtils.exitApp();
     },
   ),
 ];

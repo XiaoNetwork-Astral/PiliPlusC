@@ -129,6 +129,31 @@ abstract final class GStorage {
     ]);
   }
 
+  /// 恢复默认时保留的规则类数据，它们是用户积累的内容而不是设置
+  static const Set<String> _ruleDataSettingKeys = {
+    SettingBoxKey.cfRuleList,
+    SettingBoxKey.cfRuleUserExtras,
+    SettingBoxKey.cfAiWhitelistRules,
+    SettingBoxKey.cfGuardRules,
+  };
+
+  /// 把所有设置恢复默认；账号登录在别的存储里不受影响，
+  /// 密码与密钥、本机用量计数、规则列表保留
+  static Future<void> resetSettings() async {
+    final kept = <String, dynamic>{};
+    for (final key in [
+      ..._secretSettingKeys,
+      ..._deviceLocalSettingKeys,
+      ..._ruleDataSettingKeys,
+    ]) {
+      final value = setting.get(key);
+      if (value != null) kept[key] = value;
+    }
+    await setting.clear();
+    await video.clear();
+    if (kept.isNotEmpty) await setting.putAll(kept);
+  }
+
   /// 导入设置时保留本机已有的密码与用量，避免被旧备份里的值覆盖
   static Future<void> _importSettingBox(Object? value) async {
     if (value is! Map) {
