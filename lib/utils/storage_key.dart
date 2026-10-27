@@ -296,7 +296,6 @@ abstract final class SettingBoxKey {
       cfApiProxyType = 'cfApiProxyType',
       cfApiProxyAddress = 'cfApiProxyAddress',
       cfCategoryOverrides = 'cfCategoryOverrides',
-      cfBlockThreshold = 'cfBlockThreshold',
       cfCustomCategories = 'cfCustomCategories',
       cfAiDailyCapUsd = 'cfAiDailyCapUsd',
       cfAiSurfaces = 'cfAiSurfaces',

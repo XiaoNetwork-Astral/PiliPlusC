@@ -1,17 +1,15 @@
 ## 更新内容
 
-- 认知滤网：规则屏蔽与 AI 屏蔽合并为一个入口，支持关键词、正则、用户三类规则，可按弹幕、评论、动态、视频、直播分别生效
-- AI 屏蔽：自带密钥接入判定服务，只拦有十足把握的内容，拿不准一律放行；可按类别调整敏感度，也可添加自定义类别
-- 校准向导：根据你自己的判断微调屏蔽门槛，每个类别单独调整，样本来源更分散，单次调整幅度有上限
-- 屏蔽历史：可查看每条被屏蔽的内容，还原评论、视频、动态和弹幕的原貌，并支持一键加入白名单
-- 首页统计累计屏蔽条数；备份页支持屏蔽规则的云端同步
-- 规则列表支持一键重置，设置里新增恢复默认
+- AI 屏蔽：去掉总敏感度，每个内置类别各有自己的屏蔽阈值，可在类别编辑页单独调整
+- 校准向导：答完题后只调整被回答的那个类别，单次最多调 0.03，不再一次把所有类别推到上限
+- 校准向导：收集池限制同一来源的占比，抽样按来源分散，整理提示词要求覆盖不同话题
+- 校准向导：题库里题目够多时直接开始答题，不再先进整理页；整理页进度条改为平滑前进，思考文字统一从下往上滚动
+- 类别规则页新增「重置类别规则」，规则列表右上角新增「一键重置」，设置里新增「恢复默认」（保留账号登录、密钥和规则列表）
 
 ## Updates
 
-- Cognitive filter: rule blocking and AI blocking now live in one place. Keyword, regex and user rules can apply to danmaku, comments, dynamics, videos and live rooms separately
-- AI blocking: bring your own key. It only blocks what it is sure about and lets everything uncertain through. Tune the sensitivity per category or add your own categories
-- Calibration wizard: fine-tune the blocking threshold with your own judgments, per category, with more varied samples and a capped step per round
-- Block history: review every blocked item with its original look restored for comments, videos, dynamics and danmaku, and add it to the whitelist in one tap
-- The home page counts blocked items, and the backup page can sync block rules to the cloud
-- Rule lists can be reset in one tap, and settings gain a restore defaults option
+- AI blocking: the overall sensitivity is gone. Every built-in category now has its own threshold, adjustable on the category page
+- Calibration wizard: answers only adjust the category they belong to, by at most 0.03 per round, instead of pushing every category to the cap
+- Calibration wizard: the pool caps how much one source can take, sampling spreads across sources, and the prompt asks for varied topics
+- Calibration wizard: a ready question bank starts the quiz directly, the organizing page has a smooth progress bar, and the thinking text scrolls evenly
+- Added "Reset category rules" on the category page, "Reset" in the rule list menu, and "Restore defaults" in settings (login, keys and rule lists are kept)

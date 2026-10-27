@@ -6,7 +6,6 @@ import 'package:PiliPlus/utils/storage_pref.dart';
 abstract final class CognitiveFilterConfig {
   /// 当前实际生效的类别列表
   static List<FilterCategory> get effectiveCategories => resolveCategories(
-    threshold: Pref.cfBlockThreshold,
     overrides: Pref.cfCategoryOverrides,
     custom: Pref.cfCustomCategories,
   );

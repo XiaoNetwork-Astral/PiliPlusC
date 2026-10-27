@@ -5,10 +5,10 @@ import 'package:PiliPlus/models/cognitive_filter/filter_surface.dart';
 /// 解析出实际生效的类别列表
 ///
 /// 以出厂值为底，叠加 [overrides] 里用户改过的字段。内置类别的阈值先取自己
-/// 的覆盖值（校准向导和类别编辑页写入），没有就跟随总敏感度 [threshold]；
+/// 的覆盖值（校准向导和类别编辑页写入），没有就用出厂值 [threshold]；
 /// 再追加自定义类别（各自保留自己的阈值）。
 List<FilterCategory> resolveCategories({
-  required double threshold,
+  double threshold = kDefaultBlockThreshold,
   required Map<String, dynamic> overrides,
   required List<FilterCategory> custom,
 }) {

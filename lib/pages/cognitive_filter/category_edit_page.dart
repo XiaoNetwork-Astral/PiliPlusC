@@ -131,8 +131,8 @@ class _CategoryEditPageState extends State<CategoryEditPage> {
           if (_surfaces.contains(surface)) surface.name,
       ];
     }
-    // 阈值与总敏感度相同就不单独存，继续跟随总敏感度
-    if ((_threshold - Pref.cfBlockThreshold).abs() < 0.0005) {
+    // 阈值与出厂值相同就不单独存
+    if ((_threshold - kDefaultBlockThreshold).abs() < 0.0005) {
       current.remove('threshold');
     } else {
       current['threshold'] = _threshold;
@@ -282,7 +282,7 @@ class _CategoryEditPageState extends State<CategoryEditPage> {
       _question = factory.question;
       _trueCriteria = factory.trueCriteria;
       _falseCriteria = factory.falseCriteria;
-      _threshold = Pref.cfBlockThreshold;
+      _threshold = kDefaultBlockThreshold;
       _surfaces = Set<FilterSurface>.of(factory.surfaces);
     });
   }

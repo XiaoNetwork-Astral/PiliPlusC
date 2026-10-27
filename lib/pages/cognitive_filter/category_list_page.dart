@@ -23,24 +23,11 @@ class CategoryRulesPage extends StatefulWidget {
 
 class _CategoryRulesPageState extends State<CategoryRulesPage> {
   late List<FilterCategory> _categories;
-  late double _threshold;
 
   @override
   void initState() {
     super.initState();
     _categories = CognitiveFilterConfig.effectiveCategories;
-    _threshold = Pref.cfBlockThreshold;
-  }
-
-  /// 敏感度 0 到 100，阈值越低越敏感
-  int get _sensitivityPercent => ((0.95 - _threshold) / 0.65 * 100).round();
-
-  void _onSensitivityChanged(double value) {
-    setState(() => _threshold = 1.25 - value);
-  }
-
-  void _onSensitivityChangeEnd(double value) {
-    Pref.cfBlockThreshold = 1.25 - value;
   }
 
   /// 内置类别按「默认开启的在前、拿不准的在后」显示，自定义类别排最后
@@ -97,6 +84,19 @@ class _CategoryRulesPageState extends State<CategoryRulesPage> {
     _reload();
   }
 
+  /// 类别规则回到出厂：清掉所有改动与自定义类别，不碰密钥、收集池、题库、统计和历史
+  Future<void> _resetRules() async {
+    final confirmed = await showConfirmDialog(
+      context: context,
+      title: const Text('确定重置类别规则？'),
+      content: const Text('各类别的开关、阈值、内容和自定义类别都会回到出厂状态'),
+    );
+    if (!confirmed) return;
+    Pref.cfCategoryOverrides = <String, dynamic>{};
+    Pref.cfCustomCategories = <FilterCategory>[];
+    _reload();
+  }
+
   Future<void> _delete(FilterCategory category) async {
     final confirmed = await showConfirmDialog(
       context: context,
@@ -118,25 +118,6 @@ class _CategoryRulesPageState extends State<CategoryRulesPage> {
         child: ListView(
           padding: EdgeInsets.only(bottom: bottomPadding),
           children: [
-            CfTile(
-              icon: Icons.tune,
-              title: '敏感度',
-              trailing: Text(
-                '$_sensitivityPercent%',
-                style: Theme.of(context).textTheme.titleSmall,
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Slider(
-                min: 0.30,
-                max: 0.95,
-                value: (1.25 - _threshold).clamp(0.30, 0.95).toDouble(),
-                label: '$_sensitivityPercent%',
-                onChanged: _onSensitivityChanged,
-                onChangeEnd: _onSensitivityChangeEnd,
-              ),
-            ),
             for (final category in _sorted(_categories))
               CfTile(
                 contentPadding: const EdgeInsetsDirectional.only(
@@ -186,6 +167,11 @@ class _CategoryRulesPageState extends State<CategoryRulesPage> {
               title: '校准向导',
               subtitle: '根据你的判断微调屏蔽门槛',
               onTap: () => Get.to(() => const CalibrationPage()),
+            ),
+            CfTile(
+              icon: Icons.restore,
+              title: '重置类别规则',
+              onTap: _resetRules,
             ),
           ],
         ),

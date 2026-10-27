@@ -8,8 +8,6 @@ import 'package:PiliPlus/http/constants.dart';
 import 'package:PiliPlus/models/cognitive_filter/filter_category.dart';
 import 'package:PiliPlus/models/cognitive_filter/filter_rule.dart';
 import 'package:PiliPlus/models/cognitive_filter/filter_surface.dart';
-import 'package:PiliPlus/models/cognitive_filter/builtin_categories.dart'
-    show kDefaultBlockThreshold;
 import 'package:PiliPlus/models/cognitive_filter/user_rule_extra.dart';
 import 'package:PiliPlus/models/common/bar_hide_type.dart';
 import 'package:PiliPlus/models/common/danmaku/danmaku_font_sync_mode.dart';
@@ -1382,21 +1380,6 @@ abstract final class Pref {
 
   static set cfAiUsageInputTokens(int value) =>
       _setting.put(SettingBoxKey.cfAiUsageInputTokens, _nonNegative(value));
-
-  /// 内置类别的总阈值，数值越小越敏感；没设过时取出厂门槛
-  static double get cfBlockThreshold {
-    final value = _setting.get(SettingBoxKey.cfBlockThreshold);
-    if (value is num) {
-      final threshold = value.toDouble();
-      if (threshold.isFinite) return threshold.clamp(0.30, 0.95).toDouble();
-    }
-    return kDefaultBlockThreshold;
-  }
-
-  static set cfBlockThreshold(double value) => _setting.put(
-    SettingBoxKey.cfBlockThreshold,
-    value.clamp(0.30, 0.95).toDouble(),
-  );
 
   static Map<String, dynamic> get cfCategoryOverrides {
     final raw = _setting.get(SettingBoxKey.cfCategoryOverrides);
