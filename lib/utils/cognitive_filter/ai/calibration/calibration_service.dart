@@ -1,7 +1,7 @@
 import 'dart:async';
 
-import 'package:PiliPlus/models/cognitive_filter/builtin_categories.dart';
 import 'package:PiliPlus/models/cognitive_filter/config.dart';
+import 'package:PiliPlus/models/cognitive_filter/filter_category.dart';
 import 'package:PiliPlus/models/cognitive_filter/filter_surface.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/ai_runtime.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/calibration/calibration_auto.dart';
@@ -291,6 +291,24 @@ class CalibrationService {
     unawaited(_maybeAutoOrganize());
   }
 
+  /// 认知滤网设置页打开的数量，大于 0 时不在后台整理
+  int _settingsOpen = 0;
+
+  /// 用户进入认知滤网设置页：后台整理暂停，已在跑的一轮在当前批结束后停下，
+  /// 免得用户点"开始校准"时接上一轮跑到一半的整理
+  void enterSettings() {
+    _settingsOpen++;
+    stop();
+  }
+
+  /// 用户离开认知滤网设置页，全部离开后恢复后台整理
+  void leaveSettings() {
+    if (_settingsOpen > 0) _settingsOpen--;
+    if (_settingsOpen == 0) {
+      unawaited(_maybeAutoOrganize());
+    }
+  }
+
   /// 设置变化后由页面调用，重新判断要不要在后台整理
   void onSettingsChanged() {
     unawaited(_maybeAutoOrganize());
@@ -470,7 +488,7 @@ class CalibrationService {
 
   /// 条件满足就在后台整理；不阻塞调用方，也不抛异常
   Future<void> _maybeAutoOrganize() async {
-    if (_autoLoopRunning) {
+    if (_autoLoopRunning || _settingsOpen > 0) {
       return;
     }
     _autoLoopRunning = true;
@@ -480,6 +498,9 @@ class CalibrationService {
         final pool = _pool;
         final bank = _bank;
         if (pool == null || bank == null) {
+          return;
+        }
+        if (_settingsOpen > 0) {
           return;
         }
         final shouldRun = shouldAutoOrganize(
@@ -587,25 +608,37 @@ class CalibrationService {
   List<CategoryFit> apply(
     List<({CalibrationAnswer answer, CalibrationQuestion question})> answers,
   ) {
+    final categories = <FilterCategory>[
+      for (final category in CognitiveFilterConfig.effectiveCategories)
+        if (category.builtin && category.enabled) category,
+    ];
     final groups =
         <String, List<({CalibrationAnswer answer, List<double> scores})>>{};
+    // 没有类别记录的旧题（更新前收集的）无法归类，计入所有已启用的类别
+    final unattributed =
+        <({CalibrationAnswer answer, List<double> scores})>[];
     for (final entry in answers) {
-      final id = _questionCategory(entry.question);
-      if (id == null) continue;
-      groups
-          .putIfAbsent(id, () => [])
-          .add((
-            answer: entry.answer,
-            scores: <double>[
-              for (final member in entry.question.members) member.score,
-            ],
-          ));
+      final item = (
+        answer: entry.answer,
+        scores: <double>[
+          for (final member in entry.question.members) member.score,
+        ],
+      );
+      final id = _questionCategory(entry.question, categories);
+      if (id == null) {
+        unattributed.add(item);
+      } else {
+        groups.putIfAbsent(id, () => []).add(item);
+      }
     }
 
     final fits = <CategoryFit>[];
-    for (final category in CognitiveFilterConfig.effectiveCategories) {
-      final group = groups[category.id];
-      if (!category.builtin || !category.enabled || group == null) continue;
+    for (final category in categories) {
+      final group = <({CalibrationAnswer answer, List<double> scores})>[
+        ...?groups[category.id],
+        ...unattributed,
+      ];
+      if (group.isEmpty) continue;
       final after = fitThreshold(current: category.threshold, answers: group);
       if (after == null) continue;
       CognitiveFilterConfig.setCategoryThreshold(category.id, after);
@@ -621,14 +654,25 @@ class CalibrationService {
     return fits;
   }
 
-  /// 一道题所属的内置类别：成员里 [PoolItem.categoryId] 出现最多的那个
-  static String? _questionCategory(CalibrationQuestion question) {
-    final builtinIds = <String>{for (final c in builtinCategories) c.id};
+  /// 一道题所属的内置类别：成员里出现最多的那个，按类别 id 认，
+  /// 旧数据没有 id 时按类别名认；都认不出来返回 null
+  static String? _questionCategory(
+    CalibrationQuestion question,
+    List<FilterCategory> categories,
+  ) {
     final counts = <String, int>{};
     for (final member in question.members) {
-      if (builtinIds.contains(member.categoryId)) {
-        counts[member.categoryId] = (counts[member.categoryId] ?? 0) + 1;
+      String? id;
+      for (final category in categories) {
+        if (category.id == member.categoryId ||
+            (member.categoryId.isEmpty &&
+                member.category.isNotEmpty &&
+                category.name == member.category)) {
+          id = category.id;
+          break;
+        }
       }
+      if (id != null) counts[id] = (counts[id] ?? 0) + 1;
     }
     String? best;
     var bestCount = 0;

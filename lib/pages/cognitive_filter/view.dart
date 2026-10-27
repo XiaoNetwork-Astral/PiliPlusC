@@ -5,6 +5,7 @@ import 'package:PiliPlus/pages/cognitive_filter/ai_tab.dart';
 import 'package:PiliPlus/pages/cognitive_filter/judge_history_page.dart';
 import 'package:PiliPlus/pages/cognitive_filter/rule_tab.dart';
 import 'package:PiliPlus/pages/cognitive_filter/widgets.dart';
+import 'package:PiliPlus/utils/cognitive_filter/ai/calibration/calibration_service.dart';
 import 'package:PiliPlus/utils/cognitive_filter/block_stats.dart';
 import 'package:get/get.dart';
 import 'package:material_ui/material_ui.dart';
@@ -29,10 +30,12 @@ class _CognitiveFilterPageState extends State<CognitiveFilterPage>
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    CalibrationService.instance.enterSettings();
   }
 
   @override
   void dispose() {
+    CalibrationService.instance.leaveSettings();
     _tabController.dispose();
     super.dispose();
   }
