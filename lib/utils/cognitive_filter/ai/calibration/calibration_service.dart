@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:PiliPlus/models/cognitive_filter/builtin_categories.dart';
+import 'package:PiliPlus/models/cognitive_filter/config.dart';
 import 'package:PiliPlus/models/cognitive_filter/filter_surface.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/ai_runtime.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/calibration/calibration_auto.dart';
@@ -35,6 +37,21 @@ class RoundOutcome {
 
   /// 中止时给用户看的说明，可能是异常原文，也可能是“未填写 API Key”这类合成文案
   final String? abortMessage;
+}
+
+/// 一个内置类别这次校准的调整结果
+class CategoryFit {
+  const CategoryFit({
+    required this.id,
+    required this.name,
+    required this.before,
+    required this.after,
+  });
+
+  final String id;
+  final String name;
+  final double before;
+  final double after;
 }
 
 /// 一轮整理的进度，界面据此显示进度条
@@ -75,8 +92,11 @@ class CalibrationService {
   static const String _bankFileName = 'calibration_bank.json';
   static const Duration _flushDelay = Duration(seconds: 5);
 
-  /// 思考文字只保留末尾这么多字
-  static const int _thinkingKeep = 400;
+  /// 思考文字超过 [_thinkingLimit] 字才裁，裁到只剩末尾 [_thinkingKeep] 字
+  ///
+  /// 每来一段就裁头部会让界面里所有行不断重排，所以留足余量、很少裁
+  static const int _thinkingKeep = 2000;
+  static const int _thinkingLimit = 3000;
 
   CalibrationPool? _pool;
   CalibrationBank? _bank;
@@ -107,7 +127,7 @@ class CalibrationService {
     const OrganizeStatus(),
   );
 
-  /// 整理时累计的思考文字，只保留末尾 [_thinkingKeep] 字
+  /// 整理时累计的思考文字，超长时才裁掉开头
   final ValueNotifier<String> thinking = ValueNotifier<String>('');
 
   /// 初始化收集池与题库；可重复调用，失败时保持未激活
@@ -158,6 +178,8 @@ class CalibrationService {
     required String text,
     required double score,
     String category = '',
+    String categoryId = '',
+    String source = '',
   }) {
     try {
       if (Pref.cfLlmApiKey.trim().isEmpty) {
@@ -174,6 +196,8 @@ class CalibrationService {
         surface: surface.label,
         score: score,
         category: category,
+        categoryId: categoryId,
+        source: source,
       );
       if (added) {
         _bumpRevision();
@@ -193,6 +217,14 @@ class CalibrationService {
   /// 不够就返回空题目；出错或取消时按 [RoundOutcome] 的语义返回 abortedBy
   Future<RoundOutcome> prepareSession() async {
     await init();
+    // 题库够答时不等后台那一轮，直接用现成的题
+    final ready = _bank;
+    if (ready != null && ready.length >= calibrationMinQuestions) {
+      return RoundOutcome(
+        questions: ready.take(calibrationMaxQuestions),
+        abortedBy: null,
+      );
+    }
     final active = _activeRound;
     if (active != null) {
       try {
@@ -482,7 +514,7 @@ class CalibrationService {
       return;
     }
     final text = _thinkingText + delta;
-    _thinkingText = text.length > _thinkingKeep
+    _thinkingText = text.length > _thinkingLimit
         ? text.substring(text.length - _thinkingKeep)
         : text;
     thinking.value = _thinkingText;
@@ -548,34 +580,68 @@ class CalibrationService {
   /// 收集池里现在有多少条可整理的内容，还没初始化时为 0
   int get poolSize => _pool?.length ?? 0;
 
-  /// 把回答折算成门槛调整量并写入设置
+  /// 把回答折算成各内置类别自己的门槛并写入设置
   ///
-  /// 回答太少时不做改动，[after] 为 null
-  ({double before, double? after}) apply(
+  /// 每道题归到成员里出现最多的内置类别，每个类别单独拟合；某个类别回答太少
+  /// 就不动它。一个类别都没调整时返回空列表
+  List<CategoryFit> apply(
     List<({CalibrationAnswer answer, CalibrationQuestion question})> answers,
   ) {
-    final base = Pref.cfBlockThreshold;
-    final current = base + Pref.cfAiThresholdDelta;
-    final after = fitThreshold(
-      current: current,
-      answers: <({CalibrationAnswer answer, List<double> scores})>[
-        for (final entry in answers)
-          (
+    final groups =
+        <String, List<({CalibrationAnswer answer, List<double> scores})>>{};
+    for (final entry in answers) {
+      final id = _questionCategory(entry.question);
+      if (id == null) continue;
+      groups
+          .putIfAbsent(id, () => [])
+          .add((
             answer: entry.answer,
             scores: <double>[
               for (final member in entry.question.members) member.score,
             ],
-          ),
-      ],
-    );
-    if (after == null) {
-      return (before: current, after: null);
+          ));
     }
-    Pref.cfAiThresholdDelta = after - base;
-    return (before: current, after: after);
+
+    final fits = <CategoryFit>[];
+    for (final category in CognitiveFilterConfig.effectiveCategories) {
+      final group = groups[category.id];
+      if (!category.builtin || !category.enabled || group == null) continue;
+      final after = fitThreshold(current: category.threshold, answers: group);
+      if (after == null) continue;
+      CognitiveFilterConfig.setCategoryThreshold(category.id, after);
+      fits.add(
+        CategoryFit(
+          id: category.id,
+          name: category.name,
+          before: category.threshold,
+          after: after,
+        ),
+      );
+    }
+    return fits;
   }
 
-  /// 清空收集池与题库并复位门槛调整量
+  /// 一道题所属的内置类别：成员里 [PoolItem.categoryId] 出现最多的那个
+  static String? _questionCategory(CalibrationQuestion question) {
+    final builtinIds = <String>{for (final c in builtinCategories) c.id};
+    final counts = <String, int>{};
+    for (final member in question.members) {
+      if (builtinIds.contains(member.categoryId)) {
+        counts[member.categoryId] = (counts[member.categoryId] ?? 0) + 1;
+      }
+    }
+    String? best;
+    var bestCount = 0;
+    for (final entry in counts.entries) {
+      if (entry.value > bestCount) {
+        best = entry.key;
+        bestCount = entry.value;
+      }
+    }
+    return best;
+  }
+
+  /// 清空收集池与题库，并让各内置类别回到跟随总敏感度
   Future<void> reset() async {
     _flushTimer?.cancel();
     _flushTimer = null;
@@ -600,7 +666,7 @@ class CalibrationService {
     } catch (_) {
       // 落盘失败时内存已经清空，下次仍会覆盖
     }
-    Pref.cfAiThresholdDelta = 0.0;
+    CognitiveFilterConfig.clearCategoryThresholds();
     _bumpRevision();
   }
 

@@ -1649,20 +1649,6 @@ abstract final class Pref {
     value.clamp(10, 500).toInt(),
   );
 
-  /// 校准向导对屏蔽门槛的累计调整量，加在总门槛上
-  static double get cfAiThresholdDelta {
-    final value = _setting.get(SettingBoxKey.cfAiThresholdDelta);
-    if (value is num && value.isFinite) {
-      return value.toDouble().clamp(-0.5, 0.5).toDouble();
-    }
-    return 0.0;
-  }
-
-  static set cfAiThresholdDelta(double value) => _setting.put(
-    SettingBoxKey.cfAiThresholdDelta,
-    value.isFinite ? value.clamp(-0.5, 0.5).toDouble() : 0.0,
-  );
-
   /// 用户自己添加的「不外传规则」，与屏蔽规则共用 [FilterRule]
   static List<FilterRule> get cfGuardRules {
     final raw = _setting.get(SettingBoxKey.cfGuardRules);

@@ -393,6 +393,8 @@ class AiFilterRuntime {
             text: item.text,
             score: verdict.score,
             category: _categoryName(verdict.categoryId),
+            categoryId: verdict.categoryId ?? '',
+            source: title,
           );
         }
       }

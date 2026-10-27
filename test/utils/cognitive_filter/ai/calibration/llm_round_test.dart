@@ -44,6 +44,47 @@ class _FakeChat {
 }
 
 void main() {
+  test('取样时一个来源再大也只占均摊份额', () async {
+    final big = <PoolItem>[
+      for (var i = 0; i < 100; i++)
+        PoolItem(
+          id: 'big$i',
+          text: '大来源内容$i',
+          surface: '弹幕',
+          score: 0.6,
+          time: 0,
+          source: '同一个视频',
+        ),
+    ];
+    final small = <PoolItem>[
+      for (var s = 0; s < 10; s++)
+        PoolItem(
+          id: 'small$s',
+          text: '小来源内容$s',
+          surface: '评论',
+          score: 0.6,
+          time: 0,
+          source: '视频$s',
+        ),
+    ];
+    final fake = _FakeChat((_, __) async => _reply(<Object?>[]));
+
+    await runRound(
+      pool: <PoolItem>[...big, ...small],
+      chat: fake.call,
+      isBlockedForUpload: (_) => false,
+      random: Random(3),
+      maxItems: 20,
+      chunkSize: 20,
+    );
+
+    final prompt = fake.calls.single.last.content;
+    final bigCount = '大来源内容'.allMatches(prompt).length;
+    final smallCount = '小来源内容'.allMatches(prompt).length;
+    expect(smallCount, 10);
+    expect(bigCount, 10);
+  });
+
   test('正常归类并记录 usedIds 与进度', () async {
     final fake = _FakeChat(
       (_, __) async => _reply(<Object?>[

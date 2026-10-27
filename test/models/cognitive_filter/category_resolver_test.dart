@@ -44,12 +44,10 @@ List<FilterCategory> _resolve({
   double threshold = kDefaultBlockThreshold,
   Map<String, dynamic> overrides = const <String, dynamic>{},
   List<FilterCategory> custom = const <FilterCategory>[],
-  double calibrationDelta = 0,
 }) => resolveCategories(
   threshold: threshold,
   overrides: overrides,
   custom: custom,
-  calibrationDelta: calibrationDelta,
 );
 
 void main() {
@@ -124,8 +122,8 @@ void main() {
       expect(attack.question, '覆盖后的问句？');
       expect(attack.trueCriteria, '覆盖后的算作是');
       expect(attack.falseCriteria, '覆盖后的算作否');
-      // 覆盖里的 threshold 不生效，统一用传入的 threshold
-      expect(attack.threshold, closeTo(0.62, 1e-9));
+      // 覆盖里的 threshold 是这一类自己的阈值
+      expect(attack.threshold, closeTo(0.42, 1e-9));
     });
 
     test('未覆盖的字段沿用出厂值', () {
@@ -161,18 +159,6 @@ void main() {
           );
         }
       }
-    });
-
-    test('覆盖里的 threshold 被忽略', () {
-      final categories = _resolve(
-        threshold: 0.66,
-        overrides: {
-          'attack': {'threshold': 0.1},
-          'bait': {'threshold': 3},
-        },
-      );
-      expect(_byId(categories, 'attack').threshold, closeTo(0.66, 1e-9));
-      expect(_byId(categories, 'bait').threshold, closeTo(0.66, 1e-9));
     });
 
     test('自定义类别保留自己的阈值，不受 threshold 影响', () {
@@ -259,65 +245,37 @@ void main() {
     });
   });
 
-  group('calibrationDelta', () {
-    test('正负偏移都会加在内置类别阈值上', () {
-      final raised = _resolve(threshold: 0.62, calibrationDelta: 0.1);
-      for (final category in raised) {
-        expect(
-          category.threshold,
-          closeTo(0.72, 1e-9),
-          reason: '${category.id} 的正向偏移',
-        );
-      }
-
-      final lowered = _resolve(threshold: 0.62, calibrationDelta: -0.1);
-      for (final category in lowered) {
-        expect(
-          category.threshold,
-          closeTo(0.52, 1e-9),
-          reason: '${category.id} 的负向偏移',
-        );
-      }
-
-      // 不传时默认不偏移
-      final unchanged = _resolve(threshold: 0.62);
-      for (final category in unchanged) {
-        expect(category.threshold, closeTo(0.62, 1e-9));
-      }
+  group('类别自己的阈值', () {
+    test('覆盖里的 threshold 只改那一类，其余跟随总敏感度', () {
+      final categories = _resolve(
+        threshold: 0.9,
+        overrides: {
+          'attack': {'threshold': 0.8},
+        },
+      );
+      expect(_byId(categories, 'attack').threshold, closeTo(0.8, 1e-9));
+      expect(_byId(categories, 'discrim').threshold, closeTo(0.9, 1e-9));
     });
 
-    test('低于 0.30 时钳位到 0.30', () {
-      final negative = _resolve(threshold: 0.35, calibrationDelta: -0.2);
-      for (final category in negative) {
-        expect(category.threshold, closeTo(0.30, 1e-9));
-      }
-
-      final farBelow = _resolve(threshold: 0.90, calibrationDelta: -1.0);
-      for (final category in farBelow) {
-        expect(category.threshold, closeTo(0.30, 1e-9));
-      }
+    test('覆盖值限制在 0.30 到 0.99，非数字忽略', () {
+      final categories = _resolve(
+        threshold: 0.9,
+        overrides: {
+          'attack': {'threshold': 0.1},
+          'discrim': {'threshold': 5},
+          'promo': {'threshold': 'x'},
+        },
+      );
+      expect(_byId(categories, 'attack').threshold, closeTo(0.30, 1e-9));
+      expect(_byId(categories, 'discrim').threshold, closeTo(0.99, 1e-9));
+      expect(_byId(categories, 'promo').threshold, closeTo(0.9, 1e-9));
     });
 
-    test('高于 0.99 时钳位到 0.99', () {
-      final positive = _resolve(threshold: 0.95, calibrationDelta: 0.2);
-      for (final category in positive) {
-        expect(category.threshold, closeTo(0.99, 1e-9));
-      }
-
-      final farAbove = _resolve(threshold: 0.90, calibrationDelta: 1.0);
-      for (final category in farAbove) {
-        expect(category.threshold, closeTo(0.99, 1e-9));
-      }
-    });
-
-    test('自定义类别阈值不受校准调整量影响', () {
+    test('自定义类别阈值不受影响', () {
       final categories = _resolve(
         threshold: 0.62,
-        calibrationDelta: 0.1,
         custom: [_category(id: 'custom-1', threshold: 0.40)],
       );
-      expect(_byId(categories, 'attack').threshold, closeTo(0.72, 1e-9));
-      expect(categories.last.id, 'custom-1');
       expect(categories.last.threshold, closeTo(0.40, 1e-9));
     });
   });

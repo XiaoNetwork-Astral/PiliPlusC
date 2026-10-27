@@ -43,6 +43,17 @@ class CalibrationPool {
 
   bool get isFull => _items.length >= capacity;
 
+  /// 同一来源在池里最多留多少条，约为容量的十分之一
+  int get maxPerSource => capacity < 100 ? 10 : capacity ~/ 10;
+
+  int _sourceCount(String source) {
+    var count = 0;
+    for (final item in _items.values) {
+      if (item.source == source) count++;
+    }
+    return count;
+  }
+
   /// 池内条目的只读副本
   List<PoolItem> get items => List<PoolItem>.unmodifiable(_items.values);
 
@@ -120,6 +131,8 @@ class CalibrationPool {
     required String surface,
     required double score,
     String category = '',
+    String categoryId = '',
+    String source = '',
   }) {
     final normalized = flattenText(text);
     if (normalized.isEmpty) {
@@ -142,6 +155,8 @@ class CalibrationPool {
           score: score,
           time: existing.time,
           category: category.isEmpty ? existing.category : category,
+          categoryId: categoryId.isEmpty ? existing.categoryId : categoryId,
+          source: existing.source,
         );
         _dirty = true;
       }
@@ -149,6 +164,11 @@ class CalibrationPool {
     }
 
     if (isFull) {
+      return false;
+    }
+    // 同一来源最多占池容量的一小部分，免得一个视频把池填满
+    final key = flattenText(source);
+    if (key.isNotEmpty && _sourceCount(key) >= maxPerSource) {
       return false;
     }
 
@@ -161,6 +181,8 @@ class CalibrationPool {
       score: score,
       time: _now().millisecondsSinceEpoch,
       category: category,
+      categoryId: categoryId,
+      source: key,
     );
     _dirty = true;
     return true;

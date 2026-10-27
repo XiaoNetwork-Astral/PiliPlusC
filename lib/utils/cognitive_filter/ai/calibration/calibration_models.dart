@@ -9,6 +9,8 @@ class PoolItem {
     required this.score,
     required this.time,
     this.category = '',
+    this.categoryId = '',
+    this.source = '',
   });
 
   factory PoolItem.fromJson(Map<String, dynamic> json) => PoolItem(
@@ -18,6 +20,8 @@ class PoolItem {
     score: (json['score'] as num).toDouble(),
     time: json['time'] as int,
     category: json['category'] is String ? json['category'] as String : '',
+    categoryId: json['categoryId'] is String ? json['categoryId'] as String : '',
+    source: json['source'] is String ? json['source'] as String : '',
   );
 
   /// 池内唯一编号
@@ -38,6 +42,12 @@ class PoolItem {
   /// 收集时 AI 判定的类别名，没有则为空
   final String category;
 
+  /// 收集时得分最高的内置类别 id，校准时据此归到各类别，没有则为空
+  final String categoryId;
+
+  /// 内容来源（所在视频标题之类），用来限制同一来源占满收集池，没有则为空
+  final String source;
+
   Map<String, dynamic> toJson() => {
     'id': id,
     'text': text,
@@ -45,6 +55,8 @@ class PoolItem {
     'score': score,
     'time': time,
     if (category.isNotEmpty) 'category': category,
+    if (categoryId.isNotEmpty) 'categoryId': categoryId,
+    if (source.isNotEmpty) 'source': source,
   };
 }
 

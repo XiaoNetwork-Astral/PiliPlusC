@@ -10,6 +10,7 @@ import 'package:PiliPlus/utils/cognitive_filter/ai/calibration/calibration_model
 /// 全部限制在区间内。代价最小的候选胜出；并列时优先离 [current] 最近的，
 /// 仍并列取较大者。最终只走一半距离，并再次限制在区间内。
 ///
+/// 单次调整幅度不超过 [maxStep]，免得一轮回答就把门槛推到头。
 /// 参与调参的题数不足 [minAnswers] 时返回 null，表示不调整。
 double? fitThreshold({
   required double current,
@@ -17,7 +18,8 @@ double? fitThreshold({
   double falseBlockCost = 2.0,
   double lower = 0.6,
   double upper = 0.97,
-  int minAnswers = 8,
+  int minAnswers = 3,
+  double maxStep = 0.03,
 }) {
   final lo = lower <= upper ? lower : upper;
   final hi = lower <= upper ? upper : lower;
@@ -73,8 +75,9 @@ double? fitThreshold({
   }
 
   // candidates 至少包含 lo 与 hi，best 一定是其中一个候选
-  final fitted = current + (best - current) / 2;
-  return fitted.clamp(lo, hi).toDouble();
+  final half = (best - current) / 2;
+  final step = half.clamp(-maxStep, maxStep).toDouble();
+  return (current + step).clamp(lo, hi).toDouble();
 }
 
 /// 代价并列时：离 [current] 更近者优先，仍并列取较大者

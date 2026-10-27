@@ -1,9 +1,9 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:PiliPlus/common/widgets/dialog/dialog.dart';
 import 'package:PiliPlus/common/widgets/scaffold/simple_scaffold.dart';
 import 'package:PiliPlus/common/widgets/view_safe_area.dart';
-import 'package:PiliPlus/models/cognitive_filter/config.dart';
 import 'package:PiliPlus/pages/cognitive_filter/calibration_settings_page.dart';
 import 'package:PiliPlus/pages/cognitive_filter/rule_list_page.dart';
 import 'package:PiliPlus/pages/cognitive_filter/widgets.dart';
@@ -12,6 +12,7 @@ import 'package:PiliPlus/utils/cognitive_filter/ai/calibration/calibration_model
 import 'package:PiliPlus/utils/cognitive_filter/ai/calibration/calibration_service.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/calibration/guard_rules_source.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
+import 'package:flutter/scheduler.dart' show Ticker;
 import 'package:get/get.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -40,7 +41,7 @@ class _CalibrationPageState extends State<CalibrationPage> {
   int _index = 0;
   bool _stopping = false;
   String? _errorMessage;
-  ({double before, double? after})? _result;
+  List<CategoryFit>? _result;
 
   @override
   void initState() {
@@ -60,6 +61,21 @@ class _CalibrationPageState extends State<CalibrationPage> {
 
   Future<void> _start() async {
     if (_phase == _Phase.running) return;
+    // 题库够答就直接开始答题，不经过整理页
+    final ready = CalibrationService.instance.bankQuestions();
+    if (ready.length >= calibrationMinQuestions) {
+      setState(() {
+        _phase = _Phase.quiz;
+        _stopping = false;
+        _errorMessage = null;
+        _questions = ready;
+        _answers =
+            const <({CalibrationAnswer answer, CalibrationQuestion question})>[];
+        _index = 0;
+        _result = null;
+      });
+      return;
+    }
     setState(() {
       _phase = _Phase.running;
       _stopping = false;
@@ -322,26 +338,6 @@ class _CalibrationPageState extends State<CalibrationPage> {
           const SizedBox(height: 16),
           SizedBox(
             width: 260,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(2),
-              child: LinearProgressIndicator(
-                minHeight: 4,
-                value: total == 0 ? null : status.done / total,
-              ),
-            ),
-          ),
-          if (total > 0) ...[
-            const SizedBox(height: 8),
-            Text(
-              '第 $current 批，共 $total 批',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: colorScheme.outline,
-              ),
-            ),
-          ],
-          const SizedBox(height: 16),
-          SizedBox(
-            width: 260,
             height: 132,
             child: DecoratedBox(
               decoration: BoxDecoration(
@@ -362,12 +358,13 @@ class _CalibrationPageState extends State<CalibrationPage> {
                     valueListenable: CalibrationService.instance.thinking,
                     builder: (context, text, _) => Padding(
                       padding: const EdgeInsets.all(12),
-                      child: Align(
+                      // 文字贴底排版、顶部溢出，每一行都是同样地从下往上移出
+                      child: OverflowBox(
                         alignment: Alignment.bottomLeft,
+                        minHeight: 0,
+                        maxHeight: double.infinity,
                         child: Text(
                           text,
-                          maxLines: 6,
-                          overflow: TextOverflow.clip,
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: colorScheme.outline,
                             height: 1.6,
@@ -380,6 +377,23 @@ class _CalibrationPageState extends State<CalibrationPage> {
               ),
             ),
           ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: 260,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(2),
+              child: _SmoothProgress(done: status.done, total: total),
+            ),
+          ),
+          if (total > 0) ...[
+            const SizedBox(height: 8),
+            Text(
+              '第 $current 批，共 $total 批',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colorScheme.outline,
+              ),
+            ),
+          ],
           const SizedBox(height: 24),
           OutlinedButton(
             onPressed: _stopping ? null : _stop,
@@ -569,9 +583,8 @@ class _CalibrationPageState extends State<CalibrationPage> {
   }
 
   Widget _buildDone(BuildContext context) {
-    final result = _result;
-    final after = result?.after;
-    if (result == null || after == null) {
+    final fits = _result;
+    if (fits == null || fits.isEmpty) {
       return ListView(
         padding: _listPadding(context),
         children: [
@@ -579,9 +592,6 @@ class _CalibrationPageState extends State<CalibrationPage> {
         ],
       );
     }
-    final categories = CognitiveFilterConfig.effectiveCategories
-        .where((category) => category.builtin && category.enabled)
-        .toList();
     return ListView(
       padding: _listPadding(context),
       children: [
@@ -591,13 +601,81 @@ class _CalibrationPageState extends State<CalibrationPage> {
           title: '已完成校准',
           subtitle: '现已使用新的数值进行拦截',
         ),
-        for (final category in categories)
+        for (final fit in fits)
           CfTile(
             icon: Icons.tune,
-            title: category.name,
-            subtitle: after.toStringAsFixed(2),
+            title: fit.name,
+            subtitle: fit.after.toStringAsFixed(2),
           ),
       ],
+    );
+  }
+}
+
+/// 平滑前进的进度条
+///
+/// 每批真正完成才知道进度，直接按批跳会让人焦急，所以在两次完成之间
+/// 往"这一批做完时的位置"慢慢靠近，只前进不回退，没全部完成前不到头
+class _SmoothProgress extends StatefulWidget {
+  const _SmoothProgress({required this.done, required this.total});
+
+  final int done;
+  final int total;
+
+  @override
+  State<_SmoothProgress> createState() => _SmoothProgressState();
+}
+
+class _SmoothProgressState extends State<_SmoothProgress>
+    with SingleTickerProviderStateMixin {
+  /// 向目标靠近的时间常数，秒，越大越慢
+  static const double _tau = 8;
+
+  late final Ticker _ticker;
+  Duration _last = Duration.zero;
+  double _value = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _ticker = createTicker(_onTick)..start();
+  }
+
+  /// 这一批做完时的位置，留一点余量，最后一批也到不了 100%
+  double get _cap {
+    final total = widget.total;
+    if (total <= 0) return 0;
+    final cap = (widget.done + 0.92) / total;
+    return cap.clamp(0.0, 0.98).toDouble();
+  }
+
+  void _onTick(Duration elapsed) {
+    final dt = (elapsed - _last).inMicroseconds / 1e6;
+    _last = elapsed;
+    if (dt <= 0) return;
+    // 已完成的批数是下限，只前进不回退
+    final floor = widget.total <= 0
+        ? 0.0
+        : (widget.done / widget.total).clamp(0.0, 0.98).toDouble();
+    var next = _value < floor ? floor : _value;
+    final cap = _cap;
+    if (next < cap) {
+      next += (cap - next) * (1 - math.exp(-dt / _tau));
+    }
+    if (next != _value) setState(() => _value = next);
+  }
+
+  @override
+  void dispose() {
+    _ticker.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LinearProgressIndicator(
+      minHeight: 4,
+      value: widget.total <= 0 ? null : _value,
     );
   }
 }

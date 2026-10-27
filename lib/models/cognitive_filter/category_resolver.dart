@@ -4,28 +4,20 @@ import 'package:PiliPlus/models/cognitive_filter/filter_surface.dart';
 
 /// 解析出实际生效的类别列表
 ///
-/// 以出厂值为底，叠加 [overrides] 里用户改过的字段，内置类别统一用
-/// [threshold]（总敏感度），再追加自定义类别（各自保留自己的阈值）。
-/// 校准向导的累计调整量 [calibrationDelta] 只加在内置类别的阈值上。
+/// 以出厂值为底，叠加 [overrides] 里用户改过的字段。内置类别的阈值先取自己
+/// 的覆盖值（校准向导和类别编辑页写入），没有就跟随总敏感度 [threshold]；
+/// 再追加自定义类别（各自保留自己的阈值）。
 List<FilterCategory> resolveCategories({
   required double threshold,
   required Map<String, dynamic> overrides,
   required List<FilterCategory> custom,
-  double calibrationDelta = 0,
 }) {
   return [
     for (final category in builtinCategories)
-      _applyOverride(
-        category,
-        overrides[category.id],
-      ).copyWith(threshold: _shifted(threshold, calibrationDelta)),
+      _applyOverride(category.copyWith(threshold: threshold), overrides[category.id]),
     ...custom,
   ];
 }
-
-/// 门槛加上校准调整量，限制在 0.30 到 0.99
-double _shifted(double threshold, double delta) =>
-    (threshold + delta).clamp(0.30, 0.99).toDouble();
 
 FilterCategory _applyOverride(FilterCategory category, Object? raw) {
   if (raw is! Map) return category;
@@ -46,6 +38,13 @@ FilterCategory _applyOverride(FilterCategory category, Object? raw) {
       }
     }
     result = result.copyWith(surfaces: parsed);
+  }
+
+  final threshold = raw['threshold'];
+  if (threshold is num && threshold.isFinite) {
+    result = result.copyWith(
+      threshold: threshold.toDouble().clamp(0.30, 0.99).toDouble(),
+    );
   }
 
   final name = raw['name'];

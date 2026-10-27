@@ -322,7 +322,6 @@ abstract final class SettingBoxKey {
       cfLlmUsageOutputTokens = 'cfLlmUsageOutputTokens',
       cfCalibAuto = 'cfCalibAuto',
       cfCalibBankCap = 'cfCalibBankCap',
-      cfAiThresholdDelta = 'cfAiThresholdDelta',
       cfGuardRules = 'cfGuardRules';
 }
 

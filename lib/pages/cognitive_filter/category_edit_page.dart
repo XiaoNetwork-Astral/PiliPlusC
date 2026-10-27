@@ -47,11 +47,9 @@ class _CategoryEditPageState extends State<CategoryEditPage> {
     _question = category?.question ?? '';
     _trueCriteria = category?.trueCriteria ?? '';
     _falseCriteria = category?.falseCriteria ?? '';
-    _threshold = _builtin
-        ? FilterCategory.defaultThreshold
-        : (category?.threshold ?? FilterCategory.defaultThreshold)
-            .clamp(0.30, 0.95)
-            .toDouble();
+    _threshold = (category?.threshold ?? FilterCategory.defaultThreshold)
+        .clamp(0.30, 0.97)
+        .toDouble();
     _surfaces = Set<FilterSurface>.of(
       category?.surfaces ?? FilterSurface.values,
     );
@@ -132,6 +130,12 @@ class _CategoryEditPageState extends State<CategoryEditPage> {
         for (final surface in FilterSurface.values)
           if (_surfaces.contains(surface)) surface.name,
       ];
+    }
+    // 阈值与总敏感度相同就不单独存，继续跟随总敏感度
+    if ((_threshold - Pref.cfBlockThreshold).abs() < 0.0005) {
+      current.remove('threshold');
+    } else {
+      current['threshold'] = _threshold;
     }
     final enabled = current['enabled'];
     if (enabled is bool && enabled == factory.enabled) {
@@ -220,8 +224,8 @@ class _CategoryEditPageState extends State<CategoryEditPage> {
               Text(value.toStringAsFixed(2)),
               Slider(
                 min: 0.30,
-                max: 0.95,
-                divisions: 13,
+                max: 0.97,
+                divisions: 67,
                 value: value,
                 label: value.toStringAsFixed(2),
                 onChanged: (v) => setDialogState(() => value = v),
@@ -278,6 +282,7 @@ class _CategoryEditPageState extends State<CategoryEditPage> {
       _question = factory.question;
       _trueCriteria = factory.trueCriteria;
       _falseCriteria = factory.falseCriteria;
+      _threshold = Pref.cfBlockThreshold;
       _surfaces = Set<FilterSurface>.of(factory.surfaces);
     });
   }
@@ -328,13 +333,12 @@ class _CategoryEditPageState extends State<CategoryEditPage> {
               subtitleMaxLines: 2,
               onTap: _editFalseCriteria,
             ),
-            if (!_builtin)
-              CfTile(
-                icon: Icons.tune,
-                title: '屏蔽阈值',
-                subtitle: _threshold.toStringAsFixed(2),
-                onTap: _editThreshold,
-              ),
+            CfTile(
+              icon: Icons.tune,
+              title: '屏蔽阈值',
+              subtitle: _threshold.toStringAsFixed(2),
+              onTap: _editThreshold,
+            ),
             CfTile(
               icon: Icons.apps,
               title: '应用于',

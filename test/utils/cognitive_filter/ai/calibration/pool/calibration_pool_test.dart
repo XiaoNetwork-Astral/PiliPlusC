@@ -37,6 +37,29 @@ class _CountingStore implements JudgeCacheStore {
 }
 
 void main() {
+  test('同一来源最多占容量的十分之一', () {
+    final pool = _build(MemoryJudgeCacheStore());
+    var added = 0;
+    for (var i = 0; i < 100; i++) {
+      if (pool.add(
+        text: '内容$i',
+        surface: '弹幕',
+        score: 0.8,
+        source: '同一个视频',
+      )) {
+        added++;
+      }
+    }
+    expect(added, pool.maxPerSource);
+    expect(pool.maxPerSource, 40);
+    // 别的来源与没有来源的内容不受影响
+    expect(
+      pool.add(text: '别的', surface: '弹幕', score: 0.8, source: '另一个视频'),
+      isTrue,
+    );
+    expect(pool.add(text: '无来源', surface: '动态', score: 0.8), isTrue);
+  });
+
   group('收集与去重', () {
     test('规范化空白、按规范化文字去重并只升不降', () {
       final pool = _build(MemoryJudgeCacheStore());

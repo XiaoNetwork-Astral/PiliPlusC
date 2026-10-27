@@ -14,7 +14,8 @@ const String calibrationSystemPrompt =
 const String calibrationUserPromptHead =
     '下面是编号文本，请把属于同一类型的归在一起（例如同一种辱骂方式、同一种玩梗、'
     '同一种广告引流）。只有明显同类的才归在一起，没有同类的编号不要输出。'
-    '尽量分得细一些：每类 3 到 10 条，宁可多分几类，也不要把不同类型混在一起。'
+    '尽量分得细一些：每类 3 到 10 条，宁可多分几类，也不要把不同类型混在一起；'
+    '也不要让同一个话题或同一件事占满所有类别，尽量让各类覆盖不同的话题。'
     '每类给 名称（不超过 8 个字）、描述（一句话，说明这类内容的共同特点，语气中性）、'
     '成员编号。输出格式：[{"名称":"","描述":"","成员编号":[1,2,3]}]';
 
@@ -44,6 +45,40 @@ class RoundResult {
 
   /// 中止时给用户看的说明，可能是异常原文，也可能是“未填写 API Key”这类合成文案
   final String? abortMessage;
+}
+
+/// 从候选里取至多 [limit] 条，尽量来自不同来源
+///
+/// 先把每个来源内部打乱，再轮流从各来源各取一条（来源顺序也随机），
+/// 这样一个来源再大也只会占到均摊的份额；没有来源的条目各算一个来源。
+/// 最后整体打乱，免得分批时同一来源挤在同一批
+List<PoolItem> _pickSpread(List<PoolItem> candidates, int limit, Random rng) {
+  if (limit <= 0 || candidates.isEmpty) {
+    return const <PoolItem>[];
+  }
+  final groups = <String, List<PoolItem>>{};
+  for (final item in candidates) {
+    final key = item.source.isEmpty ? '#${item.id}' : item.source;
+    groups.putIfAbsent(key, () => <PoolItem>[]).add(item);
+  }
+  final lists = groups.values.toList()..shuffle(rng);
+  for (final list in lists) {
+    list.shuffle(rng);
+  }
+  final picked = <PoolItem>[];
+  for (var round = 0; picked.length < limit; round++) {
+    var any = false;
+    for (final list in lists) {
+      if (round < list.length) {
+        picked.add(list[round]);
+        any = true;
+        if (picked.length >= limit) break;
+      }
+    }
+    if (!any) break;
+  }
+  picked.shuffle(rng);
+  return picked;
 }
 
 /// 跑一轮整理：过滤不该上传的内容，分批交给模型归类，攒出题目
@@ -77,9 +112,8 @@ Future<RoundResult> runRound({
   }
 
   final rng = random ?? Random();
-  candidates.shuffle(rng);
   final itemLimit = maxItems <= 0 ? 0 : maxItems;
-  final selected = candidates.take(itemLimit).toList(growable: false);
+  final selected = _pickSpread(candidates, itemLimit, rng);
   final size = chunkSize <= 0 ? 1 : chunkSize;
   final minSize = minClusterSize <= 0 ? 1 : minClusterSize;
   final questionLimit = maxQuestions <= 0 ? 0 : maxQuestions;

@@ -487,19 +487,23 @@ class JudgeService {
     JudgeSource source,
   ) {
     var sum = 0.0;
+    // 各类概率按自己阈值折算后求和：阈值越低的类别权重越大，
+    // 所有类阈值相同时与直接求和完全一致
+    var weighted = 0.0;
     FilterCategory? topBuiltin;
     var topBuiltinProb = -1.0;
     for (final category in builtins) {
       final probability =
           options[JevRequest.builtinOptionNames[category.id]] ?? 0.0;
       sum += probability;
+      weighted += probability * (kDefaultBlockThreshold / category.threshold);
       if (probability > topBuiltinProb) {
         topBuiltinProb = probability;
         topBuiltin = category;
       }
     }
     final builtinBlocked =
-        builtins.isNotEmpty && sum >= builtins.first.threshold;
+        builtins.isNotEmpty && weighted >= kDefaultBlockThreshold;
 
     FilterCategory? topCustom;
     var topCustomProb = -1.0;
