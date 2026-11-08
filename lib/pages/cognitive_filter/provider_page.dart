@@ -6,6 +6,7 @@ import 'package:PiliPlus/pages/setting/widgets/select_dialog.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/ai_runtime.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/calibration/calibration_service.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/calibration/llm_client.dart';
+import 'package:PiliPlus/utils/cognitive_filter/ai/llm_provider.dart';
 import 'package:PiliPlus/utils/cognitive_filter/jev_client.dart';
 import 'package:PiliPlus/utils/cognitive_filter/jev_proxy.dart';
 import 'package:PiliPlus/utils/cognitive_filter/raw_error.dart';
@@ -17,17 +18,25 @@ import 'package:material_ui/material_ui.dart';
 /// 一个接口（判定或整理）的可编辑设置，读写都直接落到存储
 class _EndpointStore {
   const _EndpointStore({
+    required this.judge,
     required this.getBaseUrl,
     required this.setBaseUrl,
     required this.getApiKey,
     required this.setApiKey,
     required this.getModel,
     required this.setModel,
+    required this.getProvider,
+    required this.setProvider,
+    this.getApiFormat,
+    this.setApiFormat,
     required this.getProxyType,
     required this.setProxyType,
     required this.getProxyAddress,
     required this.setProxyAddress,
   });
+
+  /// 判定接口还是整理接口，两者可选的提供商不同
+  final bool judge;
 
   final String Function() getBaseUrl;
   final void Function(String) setBaseUrl;
@@ -35,6 +44,14 @@ class _EndpointStore {
   final void Function(String) setApiKey;
   final String Function() getModel;
   final void Function(String) setModel;
+
+  /// 提供商的枚举名，见 [JudgeProvider] 与 [OrganizeProvider]
+  final String Function() getProvider;
+  final void Function(String) setProvider;
+
+  /// 整理接口的 API 格式；判定接口没有格式选项，为 null
+  final LlmApiFormat Function()? getApiFormat;
+  final void Function(LlmApiFormat)? setApiFormat;
   final int Function() getProxyType;
   final void Function(int) setProxyType;
   final String Function() getProxyAddress;
@@ -47,12 +64,16 @@ class _EndpointStore {
 }
 
 final _EndpointStore _judgeStore = _EndpointStore(
+  judge: true,
   getBaseUrl: () => Pref.cfApiBaseUrl,
   setBaseUrl: (value) => Pref.cfApiBaseUrl = value,
   getApiKey: () => Pref.cfApiKey,
   setApiKey: (value) => Pref.cfApiKey = value,
   getModel: () => Pref.cfApiModel,
   setModel: (value) => Pref.cfApiModel = value,
+  getProvider: () => Pref.cfApiProvider.name,
+  setProvider: (value) =>
+      Pref.cfApiProvider = JudgeProvider.values.byName(value),
   getProxyType: () => Pref.cfApiProxyType,
   setProxyType: (value) => Pref.cfApiProxyType = value,
   getProxyAddress: () => Pref.cfApiProxyAddress,
@@ -60,12 +81,18 @@ final _EndpointStore _judgeStore = _EndpointStore(
 );
 
 final _EndpointStore _llmStore = _EndpointStore(
+  judge: false,
   getBaseUrl: () => Pref.cfLlmBaseUrl,
   setBaseUrl: (value) => Pref.cfLlmBaseUrl = value,
   getApiKey: () => Pref.cfLlmApiKey,
   setApiKey: (value) => Pref.cfLlmApiKey = value,
   getModel: () => Pref.cfLlmModel,
   setModel: (value) => Pref.cfLlmModel = value,
+  getProvider: () => Pref.cfLlmProvider.name,
+  setProvider: (value) =>
+      Pref.cfLlmProvider = OrganizeProvider.values.byName(value),
+  getApiFormat: () => Pref.cfLlmApiFormat,
+  setApiFormat: (value) => Pref.cfLlmApiFormat = value,
   getProxyType: () => Pref.cfLlmProxyType,
   setProxyType: (value) => Pref.cfLlmProxyType = value,
   getProxyAddress: () => Pref.cfLlmProxyAddress,
@@ -327,6 +354,7 @@ class _FilterProviderPageState extends State<FilterProviderPage> {
         baseUrl: store.getBaseUrl(),
         apiKey: store.getApiKey(),
         model: store.getModel(),
+        format: store.getApiFormat?.call() ?? LlmApiFormat.openai,
         timeout: Duration(seconds: _llmTimeout),
         proxy: store.proxy,
       ).test();
@@ -380,7 +408,95 @@ class _EndpointSectionState extends State<_EndpointSection> {
     return null;
   }
 
-  Future<void> _editBaseUrl() async {
+  String get _providerSubtitle {
+    if (_store.judge) {
+      final provider = JudgeProvider.values.byName(_store.getProvider());
+      return provider == JudgeProvider.custom
+          ? _store.getBaseUrl()
+          : provider.label;
+    }
+    final provider = OrganizeProvider.values.byName(_store.getProvider());
+    return provider == OrganizeProvider.custom
+        ? _store.getBaseUrl()
+        : provider.label;
+  }
+
+  Future<void> _editProvider() async {
+    if (_store.judge) {
+      final result = await showDialog<JudgeProvider>(
+        context: context,
+        builder: (context) => SelectDialog<JudgeProvider>(
+          title: '提供商',
+          value: JudgeProvider.values.byName(_store.getProvider()),
+          values: <(JudgeProvider, String)>[
+            for (final provider in JudgeProvider.values)
+              (provider, provider.label),
+          ],
+        ),
+      );
+      if (result == null) return;
+      if (!mounted) return;
+      switch (result) {
+        case JudgeProvider.typesafe:
+          _store.setProvider(result.name);
+          _store.setBaseUrl(result.baseUrl!);
+          _store.setModel(result.model!);
+          setState(() {});
+        case JudgeProvider.bailian:
+          await _editBailian();
+        case JudgeProvider.custom:
+          await _editCustomJudge();
+      }
+      return;
+    }
+
+    final organizeResult = await showDialog<OrganizeProvider>(
+      context: context,
+      builder: (context) => SelectDialog<OrganizeProvider>(
+        title: '提供商',
+        value: OrganizeProvider.values.byName(_store.getProvider()),
+        values: <(OrganizeProvider, String)>[
+          for (final provider in OrganizeProvider.values)
+            (provider, provider.label),
+        ],
+      ),
+    );
+    if (organizeResult == null) return;
+    if (!mounted) return;
+    switch (organizeResult) {
+      case OrganizeProvider.custom:
+        await _editCustomOrganize();
+      case OrganizeProvider.deepseek:
+      case OrganizeProvider.openai:
+      case OrganizeProvider.anthropic:
+        _applyOrganizePreset(organizeResult);
+    }
+  }
+
+  void _applyOrganizePreset(OrganizeProvider provider) {
+    _store.setProvider(provider.name);
+    _store.setBaseUrl(provider.baseUrl!);
+    _store.setModel(provider.model!);
+    _store.setApiFormat?.call(provider.format!);
+    setState(() {});
+  }
+
+  Future<void> _editBailian() async {
+    final result = await showTextInputDialog(
+      context: context,
+      title: '业务空间 ID',
+      initialValue:
+          JudgeProvider.bailianWorkspaceId(_store.getBaseUrl()) ?? '',
+      validator: (value) => value.isEmpty ? '业务空间 ID 不能为空' : null,
+    );
+    if (!mounted || result == null) return;
+    _store.setProvider(JudgeProvider.bailian.name);
+    _store.setBaseUrl(JudgeProvider.bailianBaseUrl(result));
+    _store.setModel(JudgeProvider.bailian.model!);
+    setState(() {});
+  }
+
+  Future<void> _editCustomJudge() async {
     final result = await showTextInputDialog(
       context: context,
       title: '接口地址',
@@ -388,8 +504,25 @@ class _EndpointSectionState extends State<_EndpointSection> {
       keyboardType: TextInputType.url,
       validator: _validateUrl,
     );
-    if (result == null) return;
+    if (!mounted || result == null) return;
+    _store.setProvider(JudgeProvider.custom.name);
     _store.setBaseUrl(result);
+    setState(() {});
+  }
+
+  Future<void> _editCustomOrganize() async {
+    final result = await showDialog<_CustomEndpointResult>(
+      context: context,
+      builder: (context) => _CustomEndpointDialog(
+        initialUrl: _store.getBaseUrl(),
+        initialFormat: _store.getApiFormat?.call() ?? LlmApiFormat.openai,
+        validateUrl: _validateUrl,
+      ),
+    );
+    if (!mounted || result == null) return;
+    _store.setProvider(OrganizeProvider.custom.name);
+    _store.setBaseUrl(result.url);
+    _store.setApiFormat?.call(result.format);
     setState(() {});
   }
 
@@ -477,10 +610,10 @@ class _EndpointSectionState extends State<_EndpointSection> {
     return Column(
       children: [
         CfTile(
-          icon: Icons.link,
-          title: '接口地址',
-          subtitle: _store.getBaseUrl(),
-          onTap: _editBaseUrl,
+          icon: Icons.cloud_outlined,
+          title: '提供商',
+          subtitle: _providerSubtitle,
+          onTap: _editProvider,
         ),
         CfTile(
           icon: Icons.key,
@@ -509,6 +642,119 @@ class _EndpointSectionState extends State<_EndpointSection> {
           ),
         ...widget.extra,
         CfTestButton(testing: _testing, onPressed: _testConnection),
+      ],
+    );
+  }
+}
+
+/// 自定义整理接口弹窗的返回值
+class _CustomEndpointResult {
+  const _CustomEndpointResult(this.url, this.format);
+
+  final String url;
+  final LlmApiFormat format;
+}
+
+/// 填写自定义地址并选择 API 格式的弹窗
+class _CustomEndpointDialog extends StatefulWidget {
+  const _CustomEndpointDialog({
+    required this.initialUrl,
+    required this.initialFormat,
+    required this.validateUrl,
+  });
+
+  final String initialUrl;
+  final LlmApiFormat initialFormat;
+  final String? Function(String value) validateUrl;
+
+  @override
+  State<_CustomEndpointDialog> createState() => _CustomEndpointDialogState();
+}
+
+class _CustomEndpointDialogState extends State<_CustomEndpointDialog> {
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.initialUrl,
+  );
+  late LlmApiFormat _format = widget.initialFormat;
+  String? _error;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final value = _controller.text.trim();
+    final error = widget.validateUrl(value);
+    if (error != null) {
+      setState(() => _error = error);
+      return;
+    }
+    Navigator.of(context).pop(_CustomEndpointResult(value, _format));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('自定义接口'),
+      constraints: const BoxConstraints.tightFor(width: 320),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: _controller,
+              autofocus: true,
+              keyboardType: TextInputType.url,
+              textInputAction: TextInputAction.done,
+              onChanged: (_) {
+                if (_error != null) setState(() => _error = null);
+              },
+              onSubmitted: (_) => _submit(),
+              decoration: InputDecoration(
+                labelText: '接口地址',
+                hintText: 'https://api.example.com/v1',
+                errorText: _error,
+                border: const OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'API 格式',
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            RadioGroup<LlmApiFormat>(
+              groupValue: _format,
+              onChanged: (value) {
+                if (value != null) setState(() => _format = value);
+              },
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (final format in LlmApiFormat.values)
+                    RadioListTile<LlmApiFormat>(
+                      value: format,
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(format.label),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text(
+            '取消',
+            style: TextStyle(color: ColorScheme.of(context).outline),
+          ),
+        ),
+        TextButton(onPressed: _submit, child: const Text('确定')),
       ],
     );
   }

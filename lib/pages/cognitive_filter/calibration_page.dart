@@ -39,9 +39,14 @@ class _CalibrationPageState extends State<CalibrationPage> {
       const <({CalibrationAnswer answer, CalibrationQuestion question})>[];
 
   int _index = 0;
-  bool _stopping = false;
   String? _errorMessage;
   List<CategoryFit>? _result;
+
+  /// 本页发起整理的代号，停止或重新开始后旧的结果不再处理
+  int _startToken = 0;
+
+  /// 本页发起的手动整理是否还没结束，离开页面时据此停掉
+  bool _manualRoundRunning = false;
 
   @override
   void initState() {
@@ -51,6 +56,16 @@ class _CalibrationPageState extends State<CalibrationPage> {
         if (mounted) setState(() {});
       }),
     );
+  }
+
+  @override
+  void dispose() {
+    // 本页发起的手动整理还没结束就离开，按停止处理，这一轮作废
+    if (_manualRoundRunning) {
+      _manualRoundRunning = false;
+      CalibrationService.instance.stop();
+    }
+    super.dispose();
   }
 
   bool get _hasKey => Pref.cfLlmApiKey.trim().isNotEmpty;
@@ -66,7 +81,6 @@ class _CalibrationPageState extends State<CalibrationPage> {
     if (ready.length >= calibrationMinQuestions) {
       setState(() {
         _phase = _Phase.quiz;
-        _stopping = false;
         _errorMessage = null;
         _questions = ready;
         _answers =
@@ -76,9 +90,10 @@ class _CalibrationPageState extends State<CalibrationPage> {
       });
       return;
     }
+    final token = ++_startToken;
+    _manualRoundRunning = true;
     setState(() {
       _phase = _Phase.running;
-      _stopping = false;
       _errorMessage = null;
       _questions = const <CalibrationQuestion>[];
       _answers =
@@ -88,14 +103,20 @@ class _CalibrationPageState extends State<CalibrationPage> {
     });
 
     final outcome = await CalibrationService.instance.prepareSession();
-    if (!mounted) return;
+    if (token == _startToken) {
+      _manualRoundRunning = false;
+    }
+    // 停止或离开后再回来的结果一律不处理
+    if (!mounted || token != _startToken) return;
+    if (outcome.cancelled) {
+      // 这一轮已经作废，不是错误，安静回到起始状态
+      _backToStart();
+      return;
+    }
     setState(() {
       if (outcome.questions.isNotEmpty) {
-        // 用户停止时，已经整理出的题照常拿来答
         _questions = outcome.questions;
         _phase = _Phase.quiz;
-      } else if (_stopping) {
-        _phase = _Phase.idle;
       } else if (outcome.abortedBy != null) {
         _errorMessage = outcome.abortMessage;
         _phase = _Phase.error;
@@ -106,8 +127,12 @@ class _CalibrationPageState extends State<CalibrationPage> {
   }
 
   void _stop() {
+    // 先让还在等结果的那次调用失效，再取消请求
+    _startToken++;
+    _manualRoundRunning = false;
     CalibrationService.instance.stop();
-    setState(() => _stopping = true);
+    // 不等这一轮收尾，立即回到起始状态，这一轮整理出的题也不要
+    _backToStart();
   }
 
   Future<void> _reset() async {
@@ -166,7 +191,6 @@ class _CalibrationPageState extends State<CalibrationPage> {
   void _backToStart() {
     setState(() {
       _phase = _Phase.idle;
-      _stopping = false;
       _questions = const <CalibrationQuestion>[];
       _answers =
           const <({CalibrationAnswer answer, CalibrationQuestion question})>[];
@@ -300,9 +324,10 @@ class _CalibrationPageState extends State<CalibrationPage> {
           const SizedBox(height: 24),
           FilledButton.tonal(
             onPressed: blocker == null ? _start : null,
-            child: const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 20),
-              child: Text('开始校准'),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              // 题库还不够答题时这一轮只是整理，不叫校准
+              child: Text(ready ? '开始校准' : '开始整理'),
             ),
           ),
           if (blocker != null) ...[
@@ -326,15 +351,14 @@ class _CalibrationPageState extends State<CalibrationPage> {
     return ValueListenableBuilder<OrganizeStatus>(
       valueListenable: CalibrationService.instance.status,
       builder: (context, status, _) {
-        final total = status.total;
+        final running = status.running;
+        // 轮次结束后不再显示批次文字
+        final total = running ? status.total : 0;
         final current = total == 0
             ? 0
             : (status.done + 1).clamp(1, total).toInt();
         return _centered([
-          Text(
-            _stopping ? '正在停止' : '正在整理',
-            style: theme.textTheme.titleMedium,
-          ),
+          Text('正在整理', style: theme.textTheme.titleMedium),
           const SizedBox(height: 16),
           SizedBox(
             width: 260,
@@ -358,18 +382,15 @@ class _CalibrationPageState extends State<CalibrationPage> {
                     valueListenable: CalibrationService.instance.thinking,
                     builder: (context, text, _) => Padding(
                       padding: const EdgeInsets.all(12),
-                      // 文字贴底排版、顶部溢出，每一行都是同样地从下往上移出
-                      child: OverflowBox(
-                        alignment: Alignment.bottomLeft,
-                        minHeight: 0,
-                        maxHeight: double.infinity,
-                        child: Text(
-                          text,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: colorScheme.outline,
-                            height: 1.6,
-                          ),
-                        ),
+                      // 只显示已经换行完成的文字，正在生成的那一行留在可见区外
+                      child: _ThinkingStream(
+                        text: text,
+                        style:
+                            theme.textTheme.bodySmall?.copyWith(
+                              color: colorScheme.outline,
+                              height: 1.6,
+                            ) ??
+                            const TextStyle(height: 1.6),
                       ),
                     ),
                   ),
@@ -382,7 +403,11 @@ class _CalibrationPageState extends State<CalibrationPage> {
             width: 260,
             child: ClipRRect(
               borderRadius: BorderRadius.circular(2),
-              child: _SmoothProgress(done: status.done, total: total),
+              child: _SmoothProgress(
+                running: running,
+                done: status.done,
+                total: status.total,
+              ),
             ),
           ),
           if (total > 0) ...[
@@ -395,10 +420,7 @@ class _CalibrationPageState extends State<CalibrationPage> {
             ),
           ],
           const SizedBox(height: 24),
-          OutlinedButton(
-            onPressed: _stopping ? null : _stop,
-            child: const Text('停止'),
-          ),
+          OutlinedButton(onPressed: _stop, child: const Text('停止')),
         ]);
       },
     );
@@ -628,12 +650,137 @@ class _CalibrationPageState extends State<CalibrationPage> {
   }
 }
 
+/// 只显示已经换行结束的思考文字
+///
+/// 正在生成的那一行不显示，每完成一行把整段文字上移这一行的高度，
+/// 用 300 毫秒的动画补上位移，用户看不到词一个个蹦出来
+class _ThinkingStream extends StatefulWidget {
+  const _ThinkingStream({required this.text, required this.style});
+
+  final String text;
+  final TextStyle style;
+
+  @override
+  State<_ThinkingStream> createState() => _ThinkingStreamState();
+}
+
+class _ThinkingStreamState extends State<_ThinkingStream>
+    with SingleTickerProviderStateMixin {
+  static const Duration _scrollDuration = Duration(milliseconds: 300);
+
+  late final AnimationController _controller;
+
+  /// 当前文字整体向下偏移的量，动画到 0 时正好停在底部
+  Animation<double> _offset = const AlwaysStoppedAnimation<double>(0);
+
+  /// 正在显示的内容：截至最后一个换行之前的文字
+  String _shown = '';
+
+  /// 上一次布局时的可用宽度，用来量文字高度
+  double _width = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(vsync: this, duration: _scrollDuration);
+    _shown = _completedOf(widget.text);
+  }
+
+  @override
+  void didUpdateWidget(covariant _ThinkingStream oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final next = _completedOf(widget.text);
+    if (next == _shown) {
+      return;
+    }
+    final delta = _heightOf(next) - _heightOf(_shown);
+    _shown = next;
+    if (delta <= 0) {
+      // 思考文字被裁掉开头时内容会变短，直接显示新的内容
+      _controller.stop();
+      _offset = const AlwaysStoppedAnimation<double>(0);
+      return;
+    }
+    // 上一次的位移还没走完时接着补，连续完成两行也不会跳
+    _offset = Tween<double>(
+      begin: _offset.value + delta,
+      end: 0,
+    ).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
+    );
+    _controller.forward(from: 0);
+  }
+
+  /// 最后一个换行之前的文字，正在生成的那一行不在里面
+  String _completedOf(String text) {
+    final index = text.lastIndexOf('\n');
+    if (index <= 0) {
+      return '';
+    }
+    return text.substring(0, index);
+  }
+
+  /// 按当前宽度量出这段文字的高度，换行后的行数不同高度也不同
+  double _heightOf(String text) {
+    if (text.isEmpty || _width <= 0) {
+      return 0;
+    }
+    final style = DefaultTextStyle.of(context).style.merge(widget.style);
+    final painter = TextPainter(
+      text: TextSpan(text: text, style: style),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+    )..layout(maxWidth: _width);
+    final height = painter.height;
+    painter.dispose();
+    return height;
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRect(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          _width = constraints.maxWidth;
+          return AnimatedBuilder(
+            animation: _controller,
+            builder: (context, child) => Transform.translate(
+              offset: Offset(0, _offset.value),
+              child: child,
+            ),
+            child: OverflowBox(
+              alignment: Alignment.bottomLeft,
+              minHeight: 0,
+              maxHeight: double.infinity,
+              child: Text(_shown, style: widget.style),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
 /// 平滑前进的进度条
 ///
-/// 每批真正完成才知道进度，直接按批跳会让人焦急，所以在两次完成之间
-/// 往"这一批做完时的位置"慢慢靠近，只前进不回退，没全部完成前不到头
+/// 每批真正完成才知道进度，直接按批跳会让人以为卡住，所以用这一轮
+/// 已完成各批的平均用时估计当前批还要多久：先把这一批走到八成，
+/// 超过预计用时后按很小的固定速度继续爬，全部完成前最多到 99%
 class _SmoothProgress extends StatefulWidget {
-  const _SmoothProgress({required this.done, required this.total});
+  const _SmoothProgress({
+    required this.running,
+    required this.done,
+    required this.total,
+  });
+
+  /// 当前是否真的有一轮整理在跑
+  final bool running;
 
   final int done;
   final int total;
@@ -644,40 +791,138 @@ class _SmoothProgress extends StatefulWidget {
 
 class _SmoothProgressState extends State<_SmoothProgress>
     with SingleTickerProviderStateMixin {
-  /// 向目标靠近的时间常数，秒，越大越慢
-  static const double _tau = 8;
+  /// 一批都没完成时的预计用时，秒
+  static const double _defaultBatchSeconds = 90;
+
+  /// 在预计用时内走到这一批的八成
+  static const double _batchReach = 0.8;
+
+  /// 超过预计用时后每秒继续前进的进度
+  static const double _creepPerSecond = 0.0015;
+
+  /// 批完成后补上跳变的时间常数，秒
+  static const double _catchUpTau = 0.25;
+
+  /// 全部完成之前的进度上限
+  static const double _cap = 0.99;
 
   late final Ticker _ticker;
   Duration _last = Duration.zero;
+
   double _value = 0;
+
+  /// 当前这一批开始的时刻，用 ticker 走过的时长表示
+  Duration _batchStarted = Duration.zero;
+
+  /// 这一轮已经完成的各批用时，秒
+  final List<double> _batchSeconds = <double>[];
+
+  /// 是否已经看到这一轮真正跑起来，没跑起来时不拿上一轮遗留的进度冒充
+  bool _synced = false;
 
   @override
   void initState() {
     super.initState();
+    _synced = widget.running;
+    if (_synced) {
+      _value = _startValue();
+    }
     _ticker = createTicker(_onTick)..start();
   }
 
-  /// 这一批做完时的位置，留一点余量，最后一批也到不了 100%
-  double get _cap {
+  double _startValue() {
     final total = widget.total;
     if (total <= 0) return 0;
-    final cap = (widget.done + 0.92) / total;
-    return cap.clamp(0.0, 0.98).toDouble();
+    return (widget.done / total).clamp(0.0, _cap).toDouble();
+  }
+
+  @override
+  void didUpdateWidget(covariant _SmoothProgress oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // 轮次已经结束，停在最后的位置等页面切走
+    if (!widget.running) {
+      return;
+    }
+    if (!oldWidget.running) {
+      // 新的一轮跑起来了，从头开始
+      _restart();
+      _synced = true;
+      _value = _startValue();
+      return;
+    }
+    _synced = true;
+    final total = widget.total;
+    if (total <= 0) {
+      // 总批数还没报出来
+      if (oldWidget.total > 0) {
+        _restart();
+      }
+      return;
+    }
+    // 总批数变了或完成数变少，说明换了一轮，从新的位置重新开始
+    if (total != oldWidget.total || widget.done < oldWidget.done) {
+      _restart();
+      _value = _startValue();
+      return;
+    }
+    if (widget.done == oldWidget.done) {
+      return;
+    }
+    // 这一批实际用了多久，留给下一批估计
+    final seconds = (_last - _batchStarted).inMicroseconds / 1e6;
+    final batches = widget.done - oldWidget.done;
+    if (seconds > 0 && batches > 0) {
+      _batchSeconds.add(seconds / batches);
+    }
+    _batchStarted = _last;
+  }
+
+  void _restart() {
+    _value = 0;
+    _batchSeconds.clear();
+    _batchStarted = _last;
+  }
+
+  /// 当前批的预计用时，取这一轮已完成各批的平均值
+  double get _expectedSeconds {
+    if (_batchSeconds.isEmpty) return _defaultBatchSeconds;
+    var sum = 0.0;
+    for (final seconds in _batchSeconds) {
+      sum += seconds;
+    }
+    return math.max(sum / _batchSeconds.length, 0.1);
+  }
+
+  /// 此刻应该到的位置：预计用时内走到这一批的八成，之后按小速度继续爬
+  double _targetAt(Duration elapsed) {
+    final total = widget.total;
+    if (widget.done >= total) return 1;
+    final slice = 1 / total;
+    final seconds = (elapsed - _batchStarted).inMicroseconds / 1e6;
+    final expected = _expectedSeconds;
+    final ramp = _batchReach * math.min(seconds / expected, 1.0);
+    final overtime = math.max(seconds - expected, 0.0);
+    final target =
+        widget.done / total + slice * ramp + _creepPerSecond * overtime;
+    return math.min(target, _cap);
   }
 
   void _onTick(Duration elapsed) {
     final dt = (elapsed - _last).inMicroseconds / 1e6;
     _last = elapsed;
-    if (dt <= 0) return;
-    // 已完成的批数是下限，只前进不回退
-    final floor = widget.total <= 0
-        ? 0.0
-        : (widget.done / widget.total).clamp(0.0, 0.98).toDouble();
-    var next = _value < floor ? floor : _value;
-    final cap = _cap;
-    if (next < cap) {
-      next += (cap - next) * (1 - math.exp(-dt / _tau));
+    final total = widget.total;
+    if (dt <= 0 || !_synced || !widget.running || total <= 0) return;
+    final cap = widget.done >= total ? 1.0 : _cap;
+    final target = math.min(_targetAt(elapsed), cap);
+    var next = _value;
+    if (next < target) {
+      // 批完成时目标会往前跳一段，用很短的追赶时间平滑补上
+      next += (target - next) * (1 - math.exp(-dt / _catchUpTau));
     }
+    // 不管目标落在哪，都保留一点固定速度，进度条不会停住
+    final floor = math.min(_value + _creepPerSecond * dt, cap);
+    if (next < floor) next = floor;
+    if (next > cap) next = cap;
     if (next != _value) setState(() => _value = next);
   }
 
@@ -689,9 +934,10 @@ class _SmoothProgressState extends State<_SmoothProgress>
 
   @override
   Widget build(BuildContext context) {
+    final known = _synced && widget.total > 0;
     return LinearProgressIndicator(
       minHeight: 4,
-      value: widget.total <= 0 ? null : _value,
+      value: known ? _value : null,
     );
   }
 }

@@ -541,6 +541,202 @@ void main() {
     expect(result.droppedIds, isEmpty);
     expect(result.abortedBy, LlmErrorKind.budget);
     expect(result.abortMessage, '已达今日费用上限');
+    expect(result.cancelled, isFalse);
+  });
+
+  test('费用在重试前到上限就不再发请求', () async {
+    final fake = _FakeChat(
+      (_, __) async => throw const LlmException(LlmErrorKind.network, '断了'),
+    );
+    var checked = 0;
+
+    final result = await runRound(
+      pool: _pool(3),
+      chat: fake.call,
+      isBlockedForUpload: (_) => false,
+      random: Random(3),
+      chunkSize: 3,
+      retryDelay: Duration.zero,
+      shouldStop: () => checked++ > 0,
+    );
+
+    // 第一次检查放行，失败后第二次检查已到上限，不再重试
+    expect(fake.calls, hasLength(1));
+    expect(result.questions, isEmpty);
+    expect(result.usedIds, isEmpty);
+    expect(result.droppedIds, isEmpty);
+    expect(result.abortedBy, LlmErrorKind.budget);
+    expect(result.abortMessage, '已达今日费用上限');
+  });
+
+  test('软暂停停在下一批之前，保留已得题目且不算失败', () async {
+    final fake = _FakeChat(
+      (_, __) async => _reply(<Object?>[
+        _cluster(<int>[1, 2, 3]),
+      ]),
+    );
+    var paused = false;
+
+    final result = await runRound(
+      pool: _pool(6),
+      chat: fake.call,
+      isBlockedForUpload: (_) => false,
+      random: Random(15),
+      chunkSize: 3,
+      onProgress: (_, __) {
+        // 第一批做完后再请求暂停
+        if (fake.calls.isNotEmpty) paused = true;
+      },
+      shouldPause: () => paused,
+    );
+
+    expect(fake.calls, hasLength(1));
+    expect(result.questions, hasLength(1));
+    expect(result.usedIds, hasLength(3));
+    expect(result.droppedIds, isEmpty);
+    expect(result.abortedBy, isNull);
+    expect(result.abortMessage, isNull);
+    expect(result.cancelled, isFalse);
+    expect(result.paused, isTrue);
+  });
+
+  test('题数上限让多余的类留在池里，不记进 usedIds', () async {
+    final fake = _FakeChat(
+      (_, __) async => _reply(<Object?>[
+        _cluster(<int>[1, 2, 3], name: '第一类'),
+        _cluster(<int>[4, 5, 6], name: '第二类'),
+      ]),
+    );
+
+    final result = await runRound(
+      pool: _pool(6),
+      chat: fake.call,
+      isBlockedForUpload: (_) => false,
+      random: Random(20),
+      chunkSize: 6,
+      maxQuestions: 1,
+    );
+
+    expect(result.questions, hasLength(1));
+    expect(result.usedIds, hasLength(3));
+    expect(
+      result.usedIds,
+      result.questions.single.members.map((item) => item.id).toSet(),
+    );
+    final allIds = _pool(6).map((item) => item.id).toSet();
+    expect(allIds.difference(result.usedIds), hasLength(3));
+  });
+
+  test('取消时丢弃已归出的题，失败批次的条目留在池里', () async {
+    var cancelled = false;
+    final fake = _FakeChat((call, _) async {
+      if (call == 1) {
+        return _reply(<Object?>[
+          _cluster(<int>[1, 2, 3], name: '先归出'),
+        ]);
+      }
+      if (call <= 3) {
+        throw const LlmException(LlmErrorKind.refused, '拒绝了');
+      }
+      // 最后一批的回复在停止请求之后才到，应当被丢掉
+      cancelled = true;
+      return _reply(<Object?>[
+        _cluster(<int>[1, 2, 3], name: '晚到'),
+      ]);
+    });
+    final pool = <PoolItem>[
+      _item('bad', '这里是绝密内容'),
+      for (var index = 1; index <= 9; index++) _item('p$index', '内容$index'),
+    ];
+
+    final result = await runRound(
+      pool: pool,
+      chat: fake.call,
+      isBlockedForUpload: (text) => text.contains('绝密'),
+      random: Random(16),
+      chunkSize: 3,
+      isCancelled: () => cancelled,
+    );
+
+    // 第一批出了题，第二批重试后整批失败，第三批等回复时被取消
+    expect(fake.calls, hasLength(4));
+    expect(result.cancelled, isTrue);
+    expect(result.questions, isEmpty);
+    expect(result.usedIds, isEmpty);
+    // 只保留不外传规则拦下的条目，失败批次的条目仍留在池里
+    expect(result.droppedIds, <String>{'bad'});
+    expect(result.abortedBy, isNull);
+    expect(result.abortMessage, isNull);
+  });
+
+  test('取消后晚到的回复直接丢弃', () async {
+    var cancelled = false;
+    final fake = _FakeChat((_, __) async {
+      cancelled = true;
+      return _reply(<Object?>[
+        _cluster(<int>[1, 2, 3]),
+      ]);
+    });
+
+    final result = await runRound(
+      pool: _pool(3),
+      chat: fake.call,
+      isBlockedForUpload: (_) => false,
+      random: Random(17),
+      chunkSize: 3,
+      isCancelled: () => cancelled,
+    );
+
+    expect(fake.calls, hasLength(1));
+    expect(result.cancelled, isTrue);
+    expect(result.questions, isEmpty);
+    expect(result.usedIds, isEmpty);
+    expect(result.droppedIds, isEmpty);
+    expect(result.abortedBy, isNull);
+  });
+
+  test('取消不重试，也不当成网络失败', () async {
+    final fake = _FakeChat(
+      (_, __) async =>
+          throw const LlmException(LlmErrorKind.cancelled, '请求已取消'),
+    );
+
+    final result = await runRound(
+      pool: _pool(3),
+      chat: fake.call,
+      isBlockedForUpload: (_) => false,
+      random: Random(18),
+      chunkSize: 3,
+      retryDelay: Duration.zero,
+    );
+
+    expect(fake.calls, hasLength(1));
+    expect(result.cancelled, isTrue);
+    expect(result.abortedBy, isNull);
+    expect(result.questions, isEmpty);
+  });
+
+  test('网络错误后用户停手，不再重试', () async {
+    var cancelled = false;
+    final fake = _FakeChat((_, __) async {
+      cancelled = true;
+      throw const LlmException(LlmErrorKind.network, '断了');
+    });
+
+    final result = await runRound(
+      pool: _pool(3),
+      chat: fake.call,
+      isBlockedForUpload: (_) => false,
+      random: Random(19),
+      chunkSize: 3,
+      retryDelay: Duration.zero,
+      isCancelled: () => cancelled,
+    );
+
+    expect(fake.calls, hasLength(1));
+    expect(result.cancelled, isTrue);
+    expect(result.abortedBy, isNull);
+    expect(result.droppedIds, isEmpty);
   });
 
   test('开始前先报总批数，每批结束再报进度', () async {

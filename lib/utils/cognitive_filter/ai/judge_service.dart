@@ -128,6 +128,7 @@ class JudgeService {
     required this.cache,
     required this.budget,
     this.categoryBatch = 80,
+    this.questionLimit,
     this.maxConcurrency = 3,
     this.breakerFailures = 3,
     this.breakerCooldown = const Duration(seconds: 60),
@@ -145,6 +146,10 @@ class JudgeService {
   final JudgeCache cache;
   final JudgeBudget budget;
   final int categoryBatch;
+
+  /// 单次请求的题数上限；为 null 或返回 null 时用 [JevRequest.maxQuestions]。
+  /// 每次分批都重新取值，阿里百炼地址返回 16
+  final int? Function()? questionLimit;
   final int maxConcurrency;
   final int breakerFailures;
   final Duration breakerCooldown;
@@ -561,7 +566,8 @@ class JudgeService {
 
   int _batchSize(int customCount) {
     final perText = 1 + customCount;
-    final maxByQuestions = JevRequest.maxQuestions ~/ perText;
+    final questionLimitValue = questionLimit?.call() ?? JevRequest.maxQuestions;
+    final maxByQuestions = questionLimitValue ~/ perText;
     var size = categoryBatch;
     if (size > maxByQuestions) {
       size = maxByQuestions;

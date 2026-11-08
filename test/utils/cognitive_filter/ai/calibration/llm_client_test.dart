@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:PiliPlus/utils/cognitive_filter/ai/calibration/llm_client.dart';
+import 'package:PiliPlus/utils/cognitive_filter/ai/llm_provider.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -86,21 +87,46 @@ String _sseUsage(Map<String, Object?> usage) => _sseData(<String, dynamic>{
   'usage': usage,
 });
 
+/// 一行带 event 名的 SSE
+String _sseEvent(String event, Object payload) =>
+    'event: $event\ndata: ${jsonEncode(payload)}\n\n';
+
+/// Anthropic 的非流式成功响应
+ResponseBody _anthropicOk(
+  String content, {
+  Map<String, Object?>? usage,
+  String? stopReason = 'end_turn',
+}) => _json(200, <String, dynamic>{
+  'id': 'msg_test',
+  'type': 'message',
+  'role': 'assistant',
+  'content': <dynamic>[
+    <String, dynamic>{'type': 'text', 'text': content},
+  ],
+  'stop_reason': stopReason,
+  if (usage != null) 'usage': usage,
+});
+
 LlmClient _client(
   _FakeAdapter adapter, {
   bool jsonMode = true,
+  LlmApiFormat format = LlmApiFormat.openai,
+  String baseUrl = 'https://api.example.com/v1/',
   void Function(int inputTokens, int outputTokens)? onUsage,
   void Function(String delta)? onReasoning,
+  CancelToken? cancelToken,
 }) {
   final dio = Dio();
   dio.httpClientAdapter = adapter;
   return LlmClient(
-    baseUrl: 'https://api.example.com/v1/',
+    baseUrl: baseUrl,
     apiKey: 'sk-test-secret',
     model: 'test-model',
+    format: format,
     timeout: const Duration(seconds: 2),
     jsonMode: jsonMode,
     dio: dio,
+    cancelToken: cancelToken,
     onUsage: onUsage,
     onReasoning: onReasoning,
   );
@@ -123,6 +149,15 @@ Future<LlmException> _capture(LlmClient client) async {
     await client.chat(
       const <LlmMessage>[LlmMessage(role: 'user', content: '你好')],
     );
+  } on LlmException catch (error) {
+    return error;
+  }
+  throw StateError('应当抛出 LlmException');
+}
+
+Future<LlmException> _captureFuture(Future<String> future) async {
+  try {
+    await future;
   } on LlmException catch (error) {
     return error;
   }
@@ -230,7 +265,7 @@ void main() {
       );
     });
 
-    test('DeepSeek 官方地址：整理开最高思考且不发 JSON 模式，测试关思考', () async {
+    test('DeepSeek 官方地址：整理开高强度思考且不发 JSON 模式，测试关思考', () async {
       final chatAdapter = _FakeAdapter((_) async => _okContent('ok'));
       LlmClient deepseek(_FakeAdapter adapter) => LlmClient(
         baseUrl: 'https://api.deepseek.com',
@@ -243,7 +278,7 @@ void main() {
       );
       final chatBody = _bodyOf(chatAdapter.requests.single);
       expect(chatBody['thinking'], {'type': 'enabled'});
-      expect(chatBody['reasoning_effort'], 'max');
+      expect(chatBody['reasoning_effort'], 'high');
       expect(chatBody.containsKey('response_format'), isFalse);
 
       final testAdapter = _FakeAdapter((_) async => _okContent('ok'));
@@ -332,19 +367,27 @@ void main() {
       ]);
     });
 
-    test('缺 usage 时不回调', () async {
+    test('缺 usage 时按提示与正文的字符数估算一次', () async {
       final adapter = _FakeAdapter((_) async => _okContent('你好'));
       final usages = <List<int>>[];
 
       await _client(
         adapter,
         onUsage: (input, output) => usages.add(<int>[input, output]),
-      ).chat(const <LlmMessage>[LlmMessage(role: 'user', content: '你好')]);
+      ).chat(
+        const <LlmMessage>[
+          LlmMessage(role: 'system', content: '你是助手'),
+          LlmMessage(role: 'user', content: '你好'),
+        ],
+      );
 
-      expect(usages, isEmpty);
+      // 提示 4 + 2 个字符，输出 2 个字符
+      expect(usages, <List<int>>[
+        <int>[6, 2],
+      ]);
     });
 
-    test('total_tokens 不是整数时不回调', () async {
+    test('total_tokens 不是整数时也按字符数估算', () async {
       final adapter = _FakeAdapter(
         (_) async => _okContent(
           '你好',
@@ -358,7 +401,9 @@ void main() {
         onUsage: (input, output) => usages.add(<int>[input, output]),
       ).chat(const <LlmMessage>[LlmMessage(role: 'user', content: '你好')]);
 
-      expect(usages, isEmpty);
+      expect(usages, <List<int>>[
+        <int>[2, 2],
+      ]);
     });
 
     test('两项 token 只有一项是整数时仍用 total 兜底', () async {
@@ -380,6 +425,135 @@ void main() {
 
       expect(usages, <List<int>>[
         <int>[0, 46],
+      ]);
+    });
+
+    test('流式缺 usage 时也按字符数估算一次', () async {
+      final adapter = _FakeAdapter(
+        (_) async => _sseResponse(<Uint8List>[
+          Uint8List.fromList(
+            utf8.encode(
+              <String>[
+                _sseContent('你好'),
+                _sseData('[DONE]'),
+              ].join(),
+            ),
+          ),
+        ]),
+      );
+      final usages = <List<int>>[];
+
+      final reply = await _client(
+        adapter,
+        onReasoning: (_) {},
+        onUsage: (input, output) => usages.add(<int>[input, output]),
+      ).chat(const <LlmMessage>[LlmMessage(role: 'user', content: '你好')]);
+
+      expect(reply, '你好');
+      expect(usages, <List<int>>[
+        <int>[2, 2],
+      ]);
+    });
+
+    test('流式中途断开时按已收到的字符估算', () async {
+      final controller = StreamController<Uint8List>();
+      controller.add(
+        Uint8List.fromList(
+          utf8.encode('${_sseReasoning('想')}${_sseContent('半截')}'),
+        ),
+      );
+      final adapter = _FakeAdapter(
+        (_) async => ResponseBody(
+          controller.stream,
+          200,
+          headers: <String, List<String>>{
+            Headers.contentTypeHeader: <String>['text/event-stream'],
+          },
+        ),
+      );
+      final usages = <List<int>>[];
+
+      final future = _client(
+        adapter,
+        onReasoning: (_) {},
+        onUsage: (input, output) => usages.add(<int>[input, output]),
+      ).chat(const <LlmMessage>[LlmMessage(role: 'user', content: '你好')]);
+      await Future<void>.delayed(Duration.zero);
+      controller.addError(StateError('连接被重置'));
+      unawaited(controller.close());
+
+      LlmException? error;
+      try {
+        await future;
+      } on LlmException catch (caught) {
+        error = caught;
+      }
+
+      expect(error?.kind, LlmErrorKind.parse);
+      // 提示 2 个字符，已收到思考 1 + 正文 2 个字符
+      expect(usages, <List<int>>[
+        <int>[2, 3],
+      ]);
+    });
+
+    test('还没收到任何响应字节时不估算', () async {
+      final controller = StreamController<Uint8List>();
+      final adapter = _FakeAdapter(
+        (_) async => ResponseBody(
+          controller.stream,
+          200,
+          headers: <String, List<String>>{
+            Headers.contentTypeHeader: <String>['text/event-stream'],
+          },
+        ),
+      );
+      final usages = <List<int>>[];
+
+      final future = _client(
+        adapter,
+        onReasoning: (_) {},
+        onUsage: (input, output) => usages.add(<int>[input, output]),
+      ).chat(const <LlmMessage>[LlmMessage(role: 'user', content: '你好')]);
+      controller.addError(StateError('连接被重置'));
+      unawaited(controller.close());
+
+      await expectLater(future, throwsA(isA<LlmException>()));
+      expect(usages, isEmpty);
+    });
+
+    test('已经拿到 usage 后断流不再估算，避免重复记账', () async {
+      final controller = StreamController<Uint8List>();
+      controller.add(
+        Uint8List.fromList(
+          utf8.encode(
+            '${_sseContent('ok')}'
+            '${_sseUsage(<String, Object?>{'prompt_tokens': 7, 'completion_tokens': 8})}',
+          ),
+        ),
+      );
+      final adapter = _FakeAdapter(
+        (_) async => ResponseBody(
+          controller.stream,
+          200,
+          headers: <String, List<String>>{
+            Headers.contentTypeHeader: <String>['text/event-stream'],
+          },
+        ),
+      );
+      final usages = <List<int>>[];
+
+      final future = _client(
+        adapter,
+        onReasoning: (_) {},
+        onUsage: (input, output) => usages.add(<int>[input, output]),
+      ).chat(const <LlmMessage>[LlmMessage(role: 'user', content: '你好')]);
+      await Future<void>.delayed(Duration.zero);
+      controller.addError(StateError('连接被重置'));
+      unawaited(controller.close());
+
+      await expectLater(future, throwsA(isA<LlmException>()));
+      expect(usages, <List<int>>[
+        <int>[7, 8],
       ]);
     });
   });
@@ -693,6 +867,352 @@ void main() {
       expect(error.kind, LlmErrorKind.parse);
       expect(error.message, contains('流式响应中断'));
       expect(error.message, contains('连接被重置'));
+    });
+  });
+
+  group('Anthropic 格式', () {
+    test('POST 到 /v1/messages，system 抽到顶层且不发 OpenAI 字段', () async {
+      final adapter = _FakeAdapter((_) async => _anthropicOk('你好'));
+      final client = _client(
+        adapter,
+        format: LlmApiFormat.anthropic,
+        baseUrl: 'https://api.anthropic.com',
+      );
+
+      final reply = await client.chat(
+        const <LlmMessage>[
+          LlmMessage(role: 'system', content: '你是助手'),
+          LlmMessage(role: 'user', content: '打个招呼'),
+        ],
+      );
+
+      expect(reply, '你好');
+      final request = adapter.requests.single;
+      expect(request.path, 'https://api.anthropic.com/v1/messages');
+      expect(_header(request, 'x-api-key'), 'sk-test-secret');
+      expect(_header(request, 'anthropic-version'), '2023-06-01');
+      expect(_header(request, 'Content-Type'), 'application/json');
+      expect(_header(request, 'Accept'), 'application/json');
+      expect(_header(request, 'Authorization'), isNull);
+
+      final body = _bodyOf(request);
+      expect(body['model'], 'test-model');
+      expect(body['max_tokens'], 32000);
+      expect(body['system'], '你是助手');
+      expect(body['stream'], isFalse);
+      final messages = body['messages'] as List<dynamic>;
+      expect(messages, hasLength(1));
+      expect((messages.single as Map<String, dynamic>)['role'], 'user');
+      for (final key in <String>[
+        'temperature',
+        'top_p',
+        'thinking',
+        'reasoning_effort',
+        'response_format',
+        'output_config',
+        'stream_options',
+      ]) {
+        expect(body.containsKey(key), isFalse, reason: key);
+      }
+    });
+
+    test('没有 system 消息时请求体不带 system', () async {
+      final adapter = _FakeAdapter((_) async => _anthropicOk('你好'));
+
+      await _client(
+        adapter,
+        format: LlmApiFormat.anthropic,
+        baseUrl: 'https://api.anthropic.com',
+      ).chat(const <LlmMessage>[LlmMessage(role: 'user', content: '你好')]);
+
+      expect(_bodyOf(adapter.requests.single).containsKey('system'), isFalse);
+    });
+
+    test('完整流解析文本、思考与两处 usage，地址以 /v1 结尾不重复', () async {
+      final lines = <String>[
+        _sseEvent('message_start', <String, dynamic>{
+          'type': 'message_start',
+          'message': <String, dynamic>{
+            'id': 'msg_test',
+            'usage': <String, dynamic>{'input_tokens': 25, 'output_tokens': 1},
+          },
+        }),
+        _sseEvent('ping', <String, dynamic>{'type': 'ping'}),
+        _sseEvent('content_block_delta', <String, dynamic>{
+          'type': 'content_block_delta',
+          'index': 0,
+          'delta': <String, dynamic>{
+            'type': 'thinking_delta',
+            'thinking': '先想',
+          },
+        }),
+        _sseEvent('content_block_delta', <String, dynamic>{
+          'type': 'content_block_delta',
+          'index': 1,
+          'delta': <String, dynamic>{'type': 'text_delta', 'text': '你'},
+        }),
+        _sseEvent('content_block_delta', <String, dynamic>{
+          'type': 'content_block_delta',
+          'index': 1,
+          'delta': <String, dynamic>{'type': 'text_delta', 'text': '好'},
+        }),
+        _sseEvent('message_delta', <String, dynamic>{
+          'type': 'message_delta',
+          'delta': <String, dynamic>{'stop_reason': 'end_turn'},
+          'usage': <String, dynamic>{'output_tokens': 17},
+        }),
+        _sseEvent('message_stop', <String, dynamic>{'type': 'message_stop'}),
+      ];
+      final bytes = utf8.encode(lines.join());
+      // 第一刀落在第二个事件中间，验证按换行缓冲
+      final cut = utf8.encode(lines[0]).length + 8;
+      final adapter = _FakeAdapter(
+        (_) async => _sseResponse(<Uint8List>[
+          Uint8List.fromList(bytes.sublist(0, cut)),
+          Uint8List.fromList(bytes.sublist(cut)),
+        ]),
+      );
+      final thinking = <String>[];
+      final usages = <List<int>>[];
+
+      final reply = await _client(
+        adapter,
+        format: LlmApiFormat.anthropic,
+        baseUrl: 'https://api.anthropic.com/v1',
+        onReasoning: thinking.add,
+        onUsage: (input, output) => usages.add(<int>[input, output]),
+      ).chat(
+        const <LlmMessage>[
+          LlmMessage(role: 'system', content: '你是助手'),
+          LlmMessage(role: 'user', content: '你好'),
+        ],
+      );
+
+      expect(reply, '你好');
+      expect(thinking, <String>['先想']);
+      expect(usages, <List<int>>[
+        <int>[25, 17],
+      ]);
+      final request = adapter.requests.single;
+      expect(request.path, 'https://api.anthropic.com/v1/messages');
+      expect(_header(request, 'Accept'), 'text/event-stream');
+      expect(_header(request, 'Authorization'), isNull);
+      final body = _bodyOf(request);
+      expect(body['stream'], isTrue);
+      expect(body['max_tokens'], 32000);
+      expect(body['system'], '你是助手');
+      expect(body.containsKey('stream_options'), isFalse);
+      expect(body.containsKey('response_format'), isFalse);
+    });
+
+    test('error 事件映射为现有错误类别且消息脱敏', () async {
+      final adapter = _FakeAdapter(
+        (_) async => _sseResponse(<Uint8List>[
+          Uint8List.fromList(
+            utf8.encode(
+              _sseEvent('error', <String, dynamic>{
+                'type': 'error',
+                'error': <String, dynamic>{
+                  'type': 'rate_limit_error',
+                  'message': '请求过于频繁 sk-test-secret',
+                },
+              }),
+            ),
+          ),
+        ]),
+      );
+
+      final error = await _capture(
+        _client(
+          adapter,
+          format: LlmApiFormat.anthropic,
+          baseUrl: 'https://api.anthropic.com',
+          onReasoning: (_) {},
+        ),
+      );
+
+      expect(error.kind, LlmErrorKind.rateLimit);
+      expect(error.message, contains('请求过于频繁'));
+      expect(error.message, isNot(contains('sk-test-secret')));
+      expect(error.toString(), isNot(contains('sk-test-secret')));
+    });
+
+    test('非流式响应拼接 text 块并上报 usage', () async {
+      final adapter = _FakeAdapter(
+        (_) async => _json(200, <String, dynamic>{
+          'type': 'message',
+          'content': <dynamic>[
+            <String, dynamic>{'type': 'thinking', 'thinking': '想'},
+            <String, dynamic>{'type': 'text', 'text': '第一段'},
+            <String, dynamic>{'type': 'text', 'text': '第二段'},
+          ],
+          'usage': <String, dynamic>{
+            'input_tokens': 12,
+            'output_tokens': 34,
+          },
+        }),
+      );
+      final usages = <List<int>>[];
+
+      final reply = await _client(
+        adapter,
+        format: LlmApiFormat.anthropic,
+        baseUrl: 'https://api.anthropic.com',
+        onUsage: (input, output) => usages.add(<int>[input, output]),
+      ).chat(const <LlmMessage>[LlmMessage(role: 'user', content: '你好')]);
+
+      expect(reply, '第一段第二段');
+      expect(usages, <List<int>>[
+        <int>[12, 34],
+      ]);
+    });
+
+    test('test() 对 Anthropic 也走非流式最小请求', () async {
+      final adapter = _FakeAdapter((_) async => _anthropicOk('ok'));
+
+      final elapsed = await _client(
+        adapter,
+        format: LlmApiFormat.anthropic,
+        baseUrl: 'https://api.anthropic.com',
+      ).test();
+
+      expect(elapsed, greaterThanOrEqualTo(Duration.zero));
+      final request = adapter.requests.single;
+      expect(_header(request, 'x-api-key'), 'sk-test-secret');
+      expect(_header(request, 'Authorization'), isNull);
+      final body = _bodyOf(request);
+      expect(body['max_tokens'], 16);
+      expect(body['stream'], isFalse);
+      expect(body.containsKey('response_format'), isFalse);
+    });
+
+    test('流式读到一半取消会立即结束读取并映射为 cancelled', () async {
+      final token = CancelToken();
+      final controller = StreamController<Uint8List>();
+      final gotThinking = Completer<void>();
+      final thinkingEvent = _sseEvent('content_block_delta', <String, dynamic>{
+        'type': 'content_block_delta',
+        'delta': <String, dynamic>{
+          'type': 'thinking_delta',
+          'thinking': '想',
+        },
+      });
+      final textEvent = _sseEvent('content_block_delta', <String, dynamic>{
+        'type': 'content_block_delta',
+        'delta': <String, dynamic>{'type': 'text_delta', 'text': '半截'},
+      });
+      controller.add(
+        Uint8List.fromList(utf8.encode('$thinkingEvent$textEvent')),
+      );
+      final adapter = _FakeAdapter(
+        (_) async => ResponseBody(
+          controller.stream,
+          200,
+          headers: <String, List<String>>{
+            Headers.contentTypeHeader: <String>['text/event-stream'],
+          },
+        ),
+      );
+      final usages = <List<int>>[];
+
+      final future = _client(
+        adapter,
+        format: LlmApiFormat.anthropic,
+        baseUrl: 'https://api.anthropic.com',
+        cancelToken: token,
+        onReasoning: (_) {
+          if (!gotThinking.isCompleted) {
+            gotThinking.complete();
+          }
+        },
+        onUsage: (input, output) => usages.add(<int>[input, output]),
+      ).chat(const <LlmMessage>[LlmMessage(role: 'user', content: '你好')]);
+      await gotThinking.future;
+      token.cancel();
+
+      final error = await _captureFuture(future);
+      expect(error.kind, LlmErrorKind.cancelled);
+      // 提示 2 个字符，已收到思考 1 + 正文 2 个字符
+      expect(usages, <List<int>>[
+        <int>[2, 3],
+      ]);
+      unawaited(controller.close());
+    });
+  });
+
+  group('取消', () {
+    test('普通请求取消映射为 cancelled', () async {
+      final adapter = _FakeAdapter((options) async {
+        throw DioException(
+          requestOptions: options,
+          type: DioExceptionType.cancel,
+        );
+      });
+
+      final error = await _capture(
+        _client(adapter, cancelToken: CancelToken()),
+      );
+      expect(error.kind, LlmErrorKind.cancelled);
+    });
+
+    test('流式建立连接时取消也映射为 cancelled', () async {
+      final adapter = _FakeAdapter((options) async {
+        throw DioException(
+          requestOptions: options,
+          type: DioExceptionType.cancel,
+        );
+      });
+
+      final error = await _capture(
+        _client(
+          adapter,
+          cancelToken: CancelToken(),
+          onReasoning: (_) {},
+        ),
+      );
+      expect(error.kind, LlmErrorKind.cancelled);
+    });
+
+    test('流式读到一半取消会立即结束读取，映射为 cancelled 并按已收字符估算', () async {
+      final token = CancelToken();
+      final controller = StreamController<Uint8List>();
+      final gotReasoning = Completer<void>();
+      controller.add(
+        Uint8List.fromList(
+          utf8.encode('${_sseReasoning('想')}${_sseContent('半截')}'),
+        ),
+      );
+      final adapter = _FakeAdapter(
+        (_) async => ResponseBody(
+          controller.stream,
+          200,
+          headers: <String, List<String>>{
+            Headers.contentTypeHeader: <String>['text/event-stream'],
+          },
+        ),
+      );
+      final usages = <List<int>>[];
+
+      final future = _client(
+        adapter,
+        cancelToken: token,
+        onReasoning: (_) {
+          if (!gotReasoning.isCompleted) {
+            gotReasoning.complete();
+          }
+        },
+        onUsage: (input, output) => usages.add(<int>[input, output]),
+      ).chat(const <LlmMessage>[LlmMessage(role: 'user', content: '你好')]);
+      await gotReasoning.future;
+      token.cancel();
+
+      final error = await _captureFuture(future);
+      expect(error.kind, LlmErrorKind.cancelled);
+      // 提示 2 个字符，已收到思考 1 + 正文 2 个字符
+      expect(usages, <List<int>>[
+        <int>[2, 3],
+      ]);
+      unawaited(controller.close());
     });
   });
 }

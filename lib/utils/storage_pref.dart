@@ -40,6 +40,7 @@ import 'package:PiliPlus/plugin/pl_player/models/fullscreen_mode.dart';
 import 'package:PiliPlus/plugin/pl_player/models/hwdec_type.dart';
 import 'package:PiliPlus/plugin/pl_player/models/play_repeat.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/ai_whitelist_core.dart';
+import 'package:PiliPlus/utils/cognitive_filter/ai/llm_provider.dart';
 import 'package:PiliPlus/utils/device_utils.dart';
 import 'package:PiliPlus/utils/extension/iterable_ext.dart';
 import 'package:PiliPlus/utils/extension/num_ext.dart';
@@ -1283,6 +1284,19 @@ abstract final class Pref {
   static set cfApiModel(String value) =>
       _setting.put(SettingBoxKey.cfApiModel, value);
 
+  /// 判定接口的提供商；没存过时按接口地址推断，老用户设置不变
+  static JudgeProvider get cfApiProvider {
+    final value = _setting.get(SettingBoxKey.cfApiProvider);
+    if (value is String) {
+      final provider = JudgeProvider.values.asNameMap()[value];
+      if (provider != null) return provider;
+    }
+    return judgeProviderForUrl(cfApiBaseUrl);
+  }
+
+  static set cfApiProvider(JudgeProvider value) =>
+      _setting.put(SettingBoxKey.cfApiProvider, value.name);
+
   static int get cfApiTimeout {
     final value = _setting.get(
       SettingBoxKey.cfApiTimeout,
@@ -1470,7 +1484,7 @@ abstract final class Pref {
   static set cfRuleMigrationDone(bool value) =>
       _setting.put(SettingBoxKey.cfRuleMigrationDone, value);
 
-  /// 校准向导用的整理接口，OpenAI 兼容格式，默认 DeepSeek 官方
+  /// 校准向导用的整理接口，默认 DeepSeek 官方
   static String get cfLlmBaseUrl {
     final value = _setting.get(SettingBoxKey.cfLlmBaseUrl);
     return value is String && value.trim().isNotEmpty
@@ -1498,6 +1512,32 @@ abstract final class Pref {
 
   static set cfLlmModel(String value) =>
       _setting.put(SettingBoxKey.cfLlmModel, value);
+
+  /// 整理接口的提供商；没存过时按接口地址推断，老用户设置不变
+  static OrganizeProvider get cfLlmProvider {
+    final value = _setting.get(SettingBoxKey.cfLlmProvider);
+    if (value is String) {
+      final provider = OrganizeProvider.values.asNameMap()[value];
+      if (provider != null) return provider;
+    }
+    return organizeProviderForUrl(cfLlmBaseUrl);
+  }
+
+  static set cfLlmProvider(OrganizeProvider value) =>
+      _setting.put(SettingBoxKey.cfLlmProvider, value.name);
+
+  /// 整理接口的 API 格式；没存过时按提供商推断，自定义回落 OpenAI 兼容
+  static LlmApiFormat get cfLlmApiFormat {
+    final value = _setting.get(SettingBoxKey.cfLlmApiFormat);
+    if (value is String) {
+      final format = LlmApiFormat.values.asNameMap()[value];
+      if (format != null) return format;
+    }
+    return cfLlmProvider.format ?? LlmApiFormat.openai;
+  }
+
+  static set cfLlmApiFormat(LlmApiFormat value) =>
+      _setting.put(SettingBoxKey.cfLlmApiFormat, value.name);
 
   /// 整理接口的代理类型：0 不用代理，1 HTTP，2 SOCKS5；坏数据回落为 0
   static int get cfLlmProxyType {

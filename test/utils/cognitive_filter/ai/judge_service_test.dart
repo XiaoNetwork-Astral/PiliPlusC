@@ -57,6 +57,7 @@ JudgeService _service(
   JudgeCache? cache,
   JudgeBudget? budget,
   int categoryBatch = 80,
+  int? Function()? questionLimit,
   int maxConcurrency = 3,
   int breakerFailures = 3,
   Duration breakerCooldown = const Duration(seconds: 60),
@@ -68,6 +69,7 @@ JudgeService _service(
     cache: cache ?? JudgeCache(store: MemoryJudgeCacheStore()),
     budget: budget ?? _TestBudget(),
     categoryBatch: categoryBatch,
+    questionLimit: questionLimit,
     maxConcurrency: maxConcurrency,
     breakerFailures: breakerFailures,
     breakerCooldown: breakerCooldown,
@@ -562,6 +564,27 @@ void main() {
       final counts = _questionCounts(fake.calls);
       counts.sort();
       expect(counts, <int>[1, 80]);
+    });
+
+    test('阿里百炼每次请求不超过 16 题，自定义题也计入', () async {
+      final fake = _FakeTransport(defaultOptions: <String, double>{'正常': 1.0});
+      final service = _service(fake, questionLimit: () => 16);
+      final texts = <String>[
+        for (var i = 0; i < 17; i++) '阿里百炼弹幕$i号',
+      ];
+      await service.judge(
+        surface: FilterSurface.danmaku,
+        items: _items(texts),
+        categories: <FilterCategory>[
+          _builtin('attack'),
+          _custom('c1'),
+        ],
+      );
+      // 每条 1 道选择题 + 1 道自定义是非题，每批最多 8 条
+      expect(fake.calls.length, 3);
+      final counts = _questionCounts(fake.calls);
+      counts.sort();
+      expect(counts, <int>[2, 16, 16]);
     });
 
     test('带自定义类别时按题目上限自动拆批', () async {

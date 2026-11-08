@@ -10,6 +10,7 @@ import 'package:PiliPlus/utils/cognitive_filter/ai/daily_budget.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/judge_cache.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/judge_history.dart';
 import 'package:PiliPlus/utils/cognitive_filter/ai/judge_service.dart';
+import 'package:PiliPlus/utils/cognitive_filter/ai/llm_provider.dart';
 import 'package:PiliPlus/utils/cognitive_filter/block_stats.dart';
 import 'package:PiliPlus/utils/cognitive_filter/jev_client.dart';
 import 'package:PiliPlus/utils/cognitive_filter/jev_proxy.dart';
@@ -166,6 +167,7 @@ class AiFilterRuntime {
         model: Pref.cfApiModel,
         cache: cache,
         budget: budget,
+        questionLimit: () => judgeQuestionLimitForUrl(Pref.cfApiBaseUrl),
       );
 
       _cache = cache;

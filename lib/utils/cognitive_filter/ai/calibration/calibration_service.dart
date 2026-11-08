@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:PiliPlus/models/cognitive_filter/config.dart';
 import 'package:PiliPlus/models/cognitive_filter/filter_category.dart';
@@ -18,6 +19,7 @@ import 'package:PiliPlus/utils/cognitive_filter/ai/calibration/upload_guard.dart
 import 'package:PiliPlus/utils/cognitive_filter/jev_proxy.dart';
 import 'package:PiliPlus/utils/path_utils.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
 
@@ -27,6 +29,7 @@ class RoundOutcome {
     required this.questions,
     required this.abortedBy,
     this.abortMessage,
+    this.cancelled = false,
   });
 
   /// 这一轮整理出的题目
@@ -37,6 +40,11 @@ class RoundOutcome {
 
   /// 中止时给用户看的说明，可能是异常原文，也可能是“未填写 API Key”这类合成文案
   final String? abortMessage;
+
+  /// 用户停手或后台开关关掉导致整轮作废
+  ///
+  /// 此时 [questions] 为空，[abortedBy] 也为空：不是错误，也不用提示
+  final bool cancelled;
 }
 
 /// 一个内置类别这次校准的调整结果
@@ -108,11 +116,21 @@ class CalibrationService {
   /// 当前正在跑的一轮，用来互斥并让后来的调用等它结束
   Future<RoundOutcome>? _activeRound;
 
+  /// 当前这一轮的取消令牌，用户停手时立即取消请求
+  CancelToken? _cancelToken;
+
+  /// 当前这一轮是不是后台整理发起的（手动整理为 false）
+  bool _backgroundRound = false;
+
+  /// 用户是否请求过停止，每停一次加一，用来判断 [prepareSession] 从开头
+  /// 到起新一轮之间是否被打断
+  int _stopCounter = 0;
+
+  /// 进入设置页时的软暂停：只停后台轮，不动已归出的题
+  bool _pauseRequested = false;
+
   /// 后台整理循环是否在跑，避免重复起循环
   bool _autoLoopRunning = false;
-
-  /// 用户是否请求停止当前一轮，等这一批做完再生效
-  bool _stopRequested = false;
 
   /// 上次没整理出至少 10 题或出错时的池条数，初始 0
   int _lastFailedPoolSize = 0;
@@ -214,8 +232,12 @@ class CalibrationService {
   /// ①若有一轮正在跑（后台或手动）先等它结束 ②题库已有至少
   /// [calibrationMinQuestions] 题就直接返回最早的至多
   /// [calibrationMaxQuestions] 题 ③否则整理一轮，够 10 题就返回至多 20 题，
-  /// 不够就返回空题目；出错或取消时按 [RoundOutcome] 的语义返回 abortedBy
+  /// 不够就返回空题目；出错、被费用上限中止或用户取消时按 [RoundOutcome]
+  /// 的语义返回 abortedBy 或 cancelled
   Future<RoundOutcome> prepareSession() async {
+    // 一开头就记下停止次数：init() 或等上一轮期间用户点了停止，
+    // 起来后看到次数变了就不再起新一轮
+    final stopCounter = _stopCounter;
     await init();
     // 题库够答时不等后台那一轮，直接用现成的题
     final ready = _bank;
@@ -232,6 +254,13 @@ class CalibrationService {
       } catch (_) {
         // 已有那一轮失败不影响重新检查题库
       }
+      if (_stopCounter != stopCounter) {
+        return const RoundOutcome(
+          questions: <CalibrationQuestion>[],
+          abortedBy: null,
+          cancelled: true,
+        );
+      }
     }
 
     final bank = _bank;
@@ -242,7 +271,25 @@ class CalibrationService {
       );
     }
 
+    // 起新一轮前再看一次停止次数：停止可能落在 init() 或等上一轮的时候，
+    // 这时直接按用户取消返回，不建令牌也不花接口的钱
+    if (_stopCounter != stopCounter) {
+      return const RoundOutcome(
+        questions: <CalibrationQuestion>[],
+        abortedBy: null,
+        cancelled: true,
+      );
+    }
+
     final outcome = await _organizeOnce();
+    // 这一轮被用户停手作废时题目全部丢弃，题库里之前攒的也不拿来答
+    if (outcome.cancelled) {
+      return const RoundOutcome(
+        questions: <CalibrationQuestion>[],
+        abortedBy: null,
+        cancelled: true,
+      );
+    }
     final after = _bank;
     final questions = after == null
         ? const <CalibrationQuestion>[]
@@ -257,12 +304,14 @@ class CalibrationService {
     );
   }
 
-  /// 请求停止当前一轮，当前批结束后停，已整理出且够 10 题的结果照常入库
+  /// 请求立刻停止当前一轮：取消进行中的请求，这一轮已整理出的题全部丢弃
+  ///
+  /// 不管此刻有没有登记中的一轮都记一次停止：手动整理可能还在 init() 或
+  /// 等上一轮的半路上，[prepareSession] 起来后看到次数变了就不再起新一轮，
+  /// 也不会在用户点过停止后再花接口的钱
   void stop() {
-    if (_activeRound == null) {
-      return;
-    }
-    _stopRequested = true;
+    _stopCounter++;
+    _cancelToken?.cancel('用户停止');
   }
 
   /// 把答过的题从题库删掉，然后看看要不要接着在后台整理
@@ -294,23 +343,41 @@ class CalibrationService {
   /// 认知滤网设置页打开的数量，大于 0 时不在后台整理
   int _settingsOpen = 0;
 
-  /// 用户进入认知滤网设置页：后台整理暂停，已在跑的一轮在当前批结束后停下，
-  /// 免得用户点"开始校准"时接上一轮跑到一半的整理
+  /// 用户进入认知滤网设置页：后台整理软暂停
+  ///
+  /// 进入设置页不代表用户不要已经付过钱的整理，所以只让后台轮在下一批
+  /// 之前停下，已归出的题照常入库，也不记失败；手动整理不受影响
   void enterSettings() {
     _settingsOpen++;
-    stop();
+    _requestSoftPause();
+  }
+
+  /// 请求后台轮在下一批之前软暂停，和 [stop] 的硬停是两条路
+  void _requestSoftPause() {
+    _pauseRequested = true;
   }
 
   /// 用户离开认知滤网设置页，全部离开后恢复后台整理
   void leaveSettings() {
     if (_settingsOpen > 0) _settingsOpen--;
     if (_settingsOpen == 0) {
+      _pauseRequested = false;
       unawaited(_maybeAutoOrganize());
     }
   }
 
   /// 设置变化后由页面调用，重新判断要不要在后台整理
+  ///
+  /// 后台开关刚被关掉时，正在跑的后台轮立即硬停，进行中的请求会被取消；
+  /// 手动整理不受这个开关影响
   void onSettingsChanged() {
+    if (shouldHardStopBackgroundRound(
+      autoEnabled: Pref.cfCalibAuto,
+      backgroundRound: _backgroundRound,
+      running: _activeRound != null,
+    )) {
+      stop();
+    }
     unawaited(_maybeAutoOrganize());
   }
 
@@ -329,23 +396,34 @@ class CalibrationService {
   }
 
   /// 内部整理一轮，同时只允许一轮在跑
+  ///
+  /// [background] 为真表示这是后台循环发起的一轮，受后台开关与设置页
+  /// 软暂停影响；手动整理两者都不管
   Future<RoundOutcome> _organizeOnce({
     void Function(int done, int total)? onProgress,
     void Function(String delta)? onThinking,
     bool Function()? shouldCancel,
+    bool background = false,
   }) {
     final active = _activeRound;
     if (active != null) {
       return active;
     }
+    final cancelToken = CancelToken();
+    _cancelToken = cancelToken;
+    _backgroundRound = background;
     late final Future<RoundOutcome> future;
     future = _organizeLocked(
+      cancelToken: cancelToken,
+      background: background,
       onProgress: onProgress,
       onThinking: onThinking,
       shouldCancel: shouldCancel,
     ).whenComplete(() {
       if (identical(_activeRound, future)) {
         _activeRound = null;
+        _backgroundRound = false;
+        _cancelToken = null;
       }
     });
     _activeRound = future;
@@ -353,16 +431,19 @@ class CalibrationService {
   }
 
   Future<RoundOutcome> _organizeLocked({
+    required CancelToken cancelToken,
+    required bool background,
     void Function(int done, int total)? onProgress,
     void Function(String delta)? onThinking,
     bool Function()? shouldCancel,
   }) async {
-    _stopRequested = false;
     _clearThinking();
     status.value = const OrganizeStatus(running: true);
     try {
       return await _runRoundBody(
-          onProgress: onProgress,
+        cancelToken: cancelToken,
+        background: background,
+        onProgress: onProgress,
         onThinking: onThinking,
         shouldCancel: shouldCancel,
       );
@@ -377,6 +458,8 @@ class CalibrationService {
   }
 
   Future<RoundOutcome> _runRoundBody({
+    required CancelToken cancelToken,
+    required bool background,
     void Function(int done, int total)? onProgress,
     void Function(String delta)? onThinking,
     bool Function()? shouldCancel,
@@ -408,14 +491,31 @@ class CalibrationService {
       );
     }
 
+    // 题库剩余空间决定这一轮最多出多少题、出多少道才算能用
+    final room = calibrationBankRoom(
+      bankCap: Pref.cfCalibBankCap,
+      bankSize: _bank?.length ?? 0,
+    );
+    if (room == 0) {
+      // 题库已经放不下新题，一条请求也不发
+      return const RoundOutcome(
+        questions: <CalibrationQuestion>[],
+        abortedBy: null,
+      );
+    }
+    final needed = calibrationNeededQuestions(room);
+    final maxQuestions = min(calibrationMaxQuestions, room);
+
     try {
       final client = LlmClient(
         baseUrl: Pref.cfLlmBaseUrl,
         apiKey: apiKey,
         model: Pref.cfLlmModel,
-        // 开着最高强度思考，一批可能要想一两分钟；超时由用户设置
+        format: Pref.cfLlmApiFormat,
+        // 开着高强度思考（high），一批可能要想一两分钟；超时由用户设置
         timeout: Duration(seconds: Pref.cfLlmTimeout),
         proxy: _currentProxy(),
+        cancelToken: cancelToken,
         onUsage: _recordLlmUsage,
         onReasoning: (delta) {
           _appendThinking(delta);
@@ -426,6 +526,7 @@ class CalibrationService {
         pool: pool.items,
         chat: client.chat,
         isBlockedForUpload: _isBlockedForUpload,
+        maxQuestions: maxQuestions,
         onProgress: (done, total) {
           // 新的一批开始，思考文字从头来
           _clearThinking();
@@ -436,16 +537,21 @@ class CalibrationService {
           );
           onProgress?.call(done, total);
         },
-        shouldStop: () =>
-            _stopRequested ||
-            llmBudgetReached ||
+        // 费用上限只负责停下并保留已得的题；用户停手与后台开关关掉
+        // 都走取消，整轮作废
+        shouldStop: () => llmBudgetReached,
+        isCancelled: () =>
+            cancelToken.isCancelled ||
+            (background && !Pref.cfCalibAuto) ||
             (shouldCancel?.call() ?? false),
+        shouldPause: background ? () => _pauseRequested : null,
         outputRetries: Pref.cfLlmOutputRetries,
         otherRetries: Pref.cfLlmOtherRetries,
       );
-      // 题数不够 10 道时不出题，已用掉的内容留在池里等下一轮；
-      // 够了就照常使用，即便中途是被用户停止或出错中断的
-      final usable = result.questions.length >= calibrationMinQuestions;
+      // 题数不够这一轮需要的数量时不出题，已用掉的内容留在池里等下一轮；
+      // 用户停手或后台开关关掉时整轮作废，之前归出的题也不再使用
+      final cancelled = result.cancelled;
+      final usable = !cancelled && result.questions.length >= needed;
       final removedIds = <String>{
         if (usable) ...result.usedIds,
         ...result.droppedIds,
@@ -456,6 +562,17 @@ class CalibrationService {
         _bumpRevision();
       }
 
+      if (cancelled) {
+        // 只删掉不外传规则拦下的条目，别的都留在池里；记下池条数，
+        // 免得后台循环马上又起一轮
+        _lastFailedPoolSize = pool.length;
+        return const RoundOutcome(
+          questions: <CalibrationQuestion>[],
+          abortedBy: null,
+          cancelled: true,
+        );
+      }
+
       if (usable) {
         final bank = _bank;
         if (bank != null) {
@@ -463,10 +580,11 @@ class CalibrationService {
           await bank.flush();
           _bumpRevision();
         }
-      } else {
+      } else if (!result.paused) {
+        // 软暂停不记失败，离开设置页后才能接着整理
         _lastFailedPoolSize = pool.length;
       }
-      // 中途出错或用户停止过，也算这次没跑顺，记下池条数免得马上重试
+      // 中途出错也算这次没跑顺，记下池条数免得马上重试
       if (usable && result.abortedBy != null) {
         _lastFailedPoolSize = pool.length;
       }
@@ -516,7 +634,7 @@ class CalibrationService {
         if (!shouldRun) {
           return;
         }
-        final outcome = await _organizeOnce();
+        final outcome = await _organizeOnce(background: true);
         if (outcome.abortedBy != null ||
             outcome.questions.length < calibrationMinQuestions) {
           return;
@@ -689,7 +807,6 @@ class CalibrationService {
   Future<void> reset() async {
     _flushTimer?.cancel();
     _flushTimer = null;
-    _stopRequested = false;
     _lastFailedPoolSize = 0;
     await init();
     try {

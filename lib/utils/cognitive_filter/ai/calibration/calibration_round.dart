@@ -27,6 +27,8 @@ class RoundResult {
     required this.droppedIds,
     this.abortedBy,
     this.abortMessage,
+    this.cancelled = false,
+    this.paused = false,
   });
 
   /// 这一轮归出来的题目
@@ -38,13 +40,24 @@ class RoundResult {
   /// 确定处理不了、应从池里删除的条目 id
   final Set<String> droppedIds;
 
-  /// 非空表示因网络/密钥/限流/服务端/超时/费用上限中止；用户点停止也会归入
-  /// [LlmErrorKind.budget] 且消息为合成文案。中止前已出题的条目仍算用掉，
-  /// 中止时当前批的条目留在池里
+  /// 非空表示因网络/密钥/限流/服务端/超时/费用上限中止
+  ///
+  /// 费用上限中止前已出题的条目仍算用掉，中止时当前批的条目留在池里
   final LlmErrorKind? abortedBy;
 
   /// 中止时给用户看的说明，可能是异常原文，也可能是“未填写 API Key”这类合成文案
   final String? abortMessage;
+
+  /// 用户取消或后台开关关掉导致整轮作废
+  ///
+  /// 此时 [questions] 与 [usedIds] 都是空的，[droppedIds] 只含不外传规则
+  /// 拦下的条目；中止前已经归出的题一并丢弃
+  final bool cancelled;
+
+  /// 进入设置页导致的软暂停：不是用户取消，也不是费用上限
+  ///
+  /// 已归出的题照常保留，当前批的条目留在池里，离开设置页后还能接着整理
+  final bool paused;
 }
 
 /// 从候选里取至多 [limit] 条，尽量来自不同来源
@@ -86,6 +99,10 @@ List<PoolItem> _pickSpread(List<PoolItem> candidates, int limit, Random rng) {
 /// [outputRetries] 是模型输出不合格（解析不了、被拒绝）时的重试次数，
 /// [otherRetries] 是网络/超时/服务端/限流这类与输出无关问题的重试次数；
 /// 总尝试次数均为 1 + 次数。
+///
+/// [shouldStop] 只表示今日费用到上限；[isCancelled] 表示用户停手或后台
+/// 开关关掉，整轮立即作废；[shouldPause] 是进入设置页的软暂停，只在批与批
+/// 之间停下，已归出的题照常保留。
 Future<RoundResult> runRound({
   required List<PoolItem> pool,
   required LlmChat chat,
@@ -97,19 +114,31 @@ Future<RoundResult> runRound({
   int maxQuestions = calibrationMaxQuestions,
   void Function(int done, int total)? onProgress,
   bool Function()? shouldStop,
+  bool Function()? isCancelled,
+  bool Function()? shouldPause,
   Duration retryDelay = const Duration(seconds: 2),
   int outputRetries = 1,
   int otherRetries = 2,
 }) async {
-  final droppedIds = <String>{};
+  final blockedIds = <String>{};
   final candidates = <PoolItem>[];
   for (final item in pool) {
     if (isBlockedForUpload(item.text)) {
-      droppedIds.add(item.id);
+      blockedIds.add(item.id);
     } else {
       candidates.add(item);
     }
   }
+  // 确定处理不了的条目；中途作废时只保留不外传规则拦下的这批
+  final droppedIds = <String>{...blockedIds};
+
+  // 作废整轮：题目与已用条目都不留，失败批次的条目也留在池里
+  RoundResult cancelledResult() => RoundResult(
+    questions: const <CalibrationQuestion>[],
+    usedIds: const <String>{},
+    droppedIds: blockedIds,
+    cancelled: true,
+  );
 
   final rng = random ?? Random();
   final itemLimit = maxItems <= 0 ? 0 : maxItems;
@@ -132,12 +161,22 @@ Future<RoundResult> runRound({
   final total = chunks.length;
   LlmErrorKind? abortedBy;
   String? abortMessage;
+  var paused = false;
   var processedChunks = 0;
+
+  // 开跑前就已经被停止：不必再分批，直接作废
+  if (isCancelled?.call() ?? false) {
+    return cancelledResult();
+  }
 
   // 分好批就先报一次总数，界面不用等第一批完成才知道总批数
   onProgress?.call(0, total);
 
   for (var index = 0; index < chunks.length; index++) {
+    // 用户停手或后台开关关掉：整轮作废，之前批次的题也不留
+    if (isCancelled?.call() ?? false) {
+      return cancelledResult();
+    }
     if (questions.length >= questionLimit) {
       break;
     }
@@ -146,6 +185,11 @@ Future<RoundResult> runRound({
       const budgetError = LlmException(LlmErrorKind.budget, '已达今日费用上限');
       abortedBy = budgetError.kind;
       abortMessage = budgetError.message;
+      break;
+    }
+    // 进入设置页只是软暂停：这一批不发，已归出的题照常留住
+    if (shouldPause?.call() ?? false) {
+      paused = true;
       break;
     }
     final chunk = chunks[index];
@@ -163,8 +207,13 @@ Future<RoundResult> runRound({
     var otherFailures = 0;
     while (true) {
       try {
+        final reply = await chat(messages);
+        // 停止请求可能在等回复时到达，晚到的回复直接丢掉
+        if (isCancelled?.call() ?? false) {
+          return cancelledResult();
+        }
         final parsed = _parseReply(
-          await chat(messages),
+          reply,
           chunk,
           minSize,
           questionLimit - questions.length,
@@ -172,7 +221,14 @@ Future<RoundResult> runRound({
         questions.addAll(parsed);
         break;
       } catch (error) {
+        if (isCancelled?.call() ?? false) {
+          return cancelledResult();
+        }
         final kind = error is LlmException ? error.kind : LlmErrorKind.network;
+        // 取消不是网络失败，不重试也不用错误文案
+        if (kind == LlmErrorKind.cancelled) {
+          return cancelledResult();
+        }
         if (kind == LlmErrorKind.auth || kind == LlmErrorKind.budget) {
           abortedBy = kind;
           abortMessage = llmErrorMessage(error);
@@ -194,8 +250,33 @@ Future<RoundResult> runRound({
             abort = true;
             break;
           }
-          if (retryDelay > Duration.zero) {
-            await Future<void>.delayed(retryDelay * otherFailures);
+        }
+        // 这一批还要再试，但费用已经到上限就不再发请求
+        if (shouldStop?.call() ?? false) {
+          const budgetError = LlmException(LlmErrorKind.budget, '已达今日费用上限');
+          abortedBy = budgetError.kind;
+          abortMessage = budgetError.message;
+          abort = true;
+          break;
+        }
+        if (!_isOutputProblem(kind) && retryDelay > Duration.zero) {
+          final cancelled = await _delayUnlessCancelled(
+            retryDelay * otherFailures,
+            isCancelled,
+          );
+          if (cancelled) {
+            return cancelledResult();
+          }
+          // 等待期间用户可能刚停手，费用也可能刚好到上限
+          if (shouldStop?.call() ?? false) {
+            const budgetError = LlmException(
+              LlmErrorKind.budget,
+              '已达今日费用上限',
+            );
+            abortedBy = budgetError.kind;
+            abortMessage = budgetError.message;
+            abort = true;
+            break;
           }
         }
       }
@@ -220,7 +301,31 @@ Future<RoundResult> runRound({
     droppedIds: droppedIds,
     abortedBy: abortedBy,
     abortMessage: abortMessage,
+    paused: paused,
   );
+}
+
+/// 可被取消打断的重试等待，[delay] 不长，按小片检查即可
+Future<bool> _delayUnlessCancelled(
+  Duration delay,
+  bool Function()? isCancelled,
+) async {
+  final cancel = isCancelled;
+  if (cancel == null) {
+    await Future<void>.delayed(delay);
+    return false;
+  }
+  const slice = Duration(milliseconds: 50);
+  var remaining = delay;
+  while (remaining > Duration.zero) {
+    final step = remaining > slice ? slice : remaining;
+    await Future<void>.delayed(step);
+    remaining -= step;
+    if (cancel()) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /// 是不是模型输出本身的问题（解析不了或被拒绝）
